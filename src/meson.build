@@ -94,6 +94,11 @@ if is_asm_enabled
         libdav2d_sources += files(
             'arm/cpu.c',
         )
+        if get_option('asm_debug')
+            libdav2d_sources += files(
+                'arm/asm_debug.c',
+            )
+        endif
         if (host_machine.cpu_family() == 'aarch64' or
             host_machine.cpu() == 'arm64')
             libdav2d_sources_asm = files(
