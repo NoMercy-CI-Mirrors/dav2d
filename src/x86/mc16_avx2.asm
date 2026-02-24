@@ -61,6 +61,7 @@ bidir_mul:        dw   2048,   2048,   8192,   8192
 %define pw_16 prep_mul
 %define pd_512 put_s_8tap_v_rnd
 
+pw_1:          times 2 dw 1
 pw_2:          times 2 dw 2
 pw_64:         times 2 dw 64
 pw_2048:       times 2 dw 2048
@@ -96,6 +97,7 @@ BIDIR_JMP_TABLE w_mask_420, avx2,    4, 8, 16, 32, 64
 BIDIR_JMP_TABLE w_mask_422, avx2,    4, 8, 16, 32, 64
 BIDIR_JMP_TABLE w_mask_444, avx2,    4, 8, 16, 32, 64
 BIDIR_JMP_TABLE blend,      avx2,    4, 8, 16, 32, 64
+BIDIR_JMP_TABLE morph,      avx2,    4, 8, 16, 32, 64
 
 %macro BASE_JMP_TABLE 3-*
     %xdefine %1_%2_table (%%table - %3)
@@ -6197,3 +6199,104 @@ cglobal emu_edge_16bpc, 10, 13, 1, bw, bh, iw, ih, x, y, dst, dstride, src, sstr
 
 .end:
     RET
+
+cglobal morph_16bpc, 4, 6, 8, dst, stride, a, b, w, h, clip
+    movd                xm0, ad
+    movd                xm1, bd
+    vpbroadcastw         m0, xm0
+    vpbroadcastd         m1, xm1
+    pxor                xm2, xm2
+    punpcklwd            m0, m2
+    vpbroadcastw         m3, clipm
+    lea                  r2, [morph_avx2_table]
+    DEFINE_ARGS dst, stride, _, stride3, w, h
+    tzcnt                wd, wm
+    movifnidn            hd, hm
+    movsxd               wq, dword [r2+wq*4]
+    add                  wq, r2
+    lea            stride3q, [strideq*3]
+    jmp                  wq
+.w4:
+    movq                xm4, [dstq+strideq*0]
+    vpbroadcastq         m6, [dstq+strideq*2]
+    movq                xm5, [dstq+strideq*1]
+    vpbroadcastq         m7, [dstq+stride3q ]
+    vpblendd             m4, m6, 0x30
+    vpblendd             m5, m7, 0x30
+    REPX  {punpcklwd x, m2}, m4, m5
+    REPX    {pmaddwd x, m0}, m4, m5
+    REPX    {paddd   x, m1}, m4, m5
+    REPX    {psrad   x, 8 }, m4, m5
+    packusdw             m4, m5
+    pminsw               m4, m3
+    vextracti128        xm5, m4, 1
+    movq   [dstq+strideq*0], xm4
+    movhps [dstq+strideq*1], xm4
+    movq   [dstq+strideq*2], xm5
+    movhps [dstq+stride3q ], xm5
+    lea                dstq, [dstq+strideq*4]
+    sub                  hd, 4
+    jg .w4
+    RET
+.w8:
+    movu                xm4, [dstq+strideq*0]
+    movu                xm5, [dstq+strideq*1]
+    vinserti128          m4, [dstq+strideq*2], 1
+    vinserti128          m5, [dstq+stride3q ], 1
+    call .main
+    movu         [dstq+strideq*0], xm4
+    movu         [dstq+strideq*1], xm5
+    vextracti128 [dstq+strideq*2], m4, 1
+    vextracti128 [dstq+stride3q ], m5, 1
+    lea                dstq, [dstq+strideq*4]
+    sub                  hd, 4
+    jg .w8
+    RET
+.w16:
+    movu                 m4, [dstq+strideq*0]
+    movu                 m5, [dstq+strideq*1]
+    call .main
+    movu         [dstq+strideq*0], m4
+    movu         [dstq+strideq*1], m5
+    lea                dstq, [dstq+strideq*2]
+    sub                  hd, 2
+    jg .w16
+    RET
+.w32:
+    movu                 m4, [dstq+strideq*0+ 0]
+    movu                 m5, [dstq+strideq*0+32]
+    call .main
+    movu [dstq+strideq*0+ 0], m4
+    movu [dstq+strideq*0+32], m5
+    add                dstq, strideq
+    dec                  hd
+    jg .w32
+    RET
+.w64:
+    mova                 m4, [dstq+strideq*0+32*0]
+    mova                 m5, [dstq+strideq*0+32*1]
+    call .main
+    mova [dstq+strideq*0+32*0], m4
+    mova [dstq+strideq*0+32*1], m5
+    mova                 m4, [dstq+strideq*0+32*2]
+    mova                 m5, [dstq+strideq*0+32*3]
+    call .main
+    mova [dstq+strideq*0+32*2], m4
+    mova [dstq+strideq*0+32*3], m5
+    add                dstq, strideq
+    dec                  hd
+    jg .w64
+    RET
+ALIGN function_align
+.main:
+    punpckhwd            m6, m4, m2
+    punpcklwd            m4, m2
+    punpckhwd            m7, m5, m2
+    punpcklwd            m5, m2
+    REPX    {pmaddwd x, m0}, m6, m4, m7, m5
+    REPX    {paddd   x, m1}, m6, m4, m7, m5
+    REPX    {psrad   x, 8 }, m6, m4, m7, m5
+    packusdw             m4, m6
+    packusdw             m5, m7
+    REPX     {pminsw x, m3}, m4, m5
+    ret
