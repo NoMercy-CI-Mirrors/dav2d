@@ -86,10 +86,10 @@ static ALWAYS_INLINE void mc_dsp_init_x86(Dav2dMCDSPContext *const c) {
     c->warp8x8t = BF(dav2d_warp_affine_8x8t, avx2);
     c->emu_edge = BF(dav2d_emu_edge, avx2);
     c->morph = BF(dav2d_morph, avx2);
+    c->sad8x8 = BF(dav2d_sad8x8, avx2);
 #if BITDEPTH == 8
     c->sad_refine_mv = BF(dav2d_sad_refine_mv, avx2);
     c->opfl_refine_mv = BF(dav2d_opfl_refine_mv, avx2);
-    c->sad8x8 = BF(dav2d_sad8x8, avx2);
     c->ext_warp4x4  = BF(dav2d_ext_warp4x4, avx2);
     c->ext_warp4x4t = BF(dav2d_ext_warp4x4t, avx2);
 #endif

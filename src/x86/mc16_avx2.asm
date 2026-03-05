@@ -6300,3 +6300,46 @@ ALIGN function_align
     packusdw             m5, m7
     REPX     {pminsw x, m3}, m4, m5
     ret
+
+INIT_XMM avx2
+cglobal sad8x8_16bpc, 5, 7, 6, p0, p0s, p1, p1s, bdmax, p0s3, p1s3
+    lea               p0s3q, [p0sq*3]
+    lea               p1s3q, [p1sq*3]
+    movu                 m0, [p0q]
+    psubw                m0, [p1q]
+    movu                 m1, [p0q+p0sq]
+    psubw                m1, [p1q+p1sq]
+    movu                 m2, [p0q+p0sq*2]
+    psubw                m2, [p1q+p1sq*2]
+    movu                 m3, [p0q+p0s3q]
+    psubw                m3, [p1q+p1s3q]
+    lea                 p0q, [p0q+p0sq*4]
+    lea                 p1q, [p1q+p1sq*4]
+    REPX       {pabsw x, x}, m0, m1, m2, m3
+    paddw                m0, m1
+    paddw                m2, m3
+    movu                 m1, [p0q]
+    psubw                m1, [p1q]
+    movu                 m3, [p0q+p0sq]
+    psubw                m3, [p1q+p1sq]
+    movu                 m4, [p0q+p0sq*2]
+    psubw                m4, [p1q+p1sq*2]
+    movu                 m5, [p0q+p0s3q]
+    psubw                m5, [p1q+p1s3q]
+    REPX       {pabsw x, x}, m1, m3, m4, m5
+    paddw                m1, m3
+    vpbroadcastd         m3, [pw_1]
+    paddw                m4, m5
+    paddw                m0, m2
+    paddw                m1, m4
+    paddw                m0, m1
+    pmaddwd              m0, m3
+    popcnt              ecx, bdmaxd
+    punpckhqdq           m1, m0, m0
+    paddd                m0, m1
+    sub                 ecx, 8
+    movq                rax, m0
+    rorx                rdx, rax, 32
+    add                 eax, edx
+    shrx                eax, eax, ecx
+    RET
