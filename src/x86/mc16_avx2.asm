@@ -29,6 +29,16 @@
 SECTION_RODATA 64
 
 deint_shuf:     dd 0,  4,  1,  5,  2,  6,  3,  7
+pw_8x2048_8x1024: times 8 dw 2048
+                  times 8 dw 1024
+pw_1x2048_7x1024: dw 2048
+                  times 7 dw 1024
+pw_7x1024_1x2048: times 7 dw 1024
+                  dw 2048
+pw_1x2048_6x1024_1x2048:
+                  dw 2048
+                  times 6 dw 1024
+                  dw 2048
 subpel_h_shufA: db 0,  1,  2,  3,  2,  3,  4,  5,  4,  5,  6,  7,  6,  7,  8,  9
 subpel_h_shufB: db 4,  5,  6,  7,  6,  7,  8,  9,  8,  9, 10, 11, 10, 11, 12, 13
 subpel_h_shuf2: db 0,  1,  2,  3,  4,  5,  6,  7,  2,  3,  4,  5,  6,  7,  8,  9
@@ -43,6 +53,7 @@ bdct_lb_q: times 8 db 0
            times 8 db 8
            times 8 db 12
 
+pq_16:            dq 16
 prep_mul:         dw 16, 16, 4, 4
 put_bilin_h_rnd:  dw 8, 8, 10, 10
 put_8tap_h_rnd:   dd 34, 40
@@ -58,11 +69,17 @@ warp8x8_rnd:      dw   4096,   4096,  16384,  16384
 bidir_rnd:        dw -16400, -16400, -16388, -16388
 bidir_mul:        dw   2048,   2048,   8192,   8192
 
+shuf_left_1w: db 0, 1, 0, 1
+shuf_right_1w: db 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 14, 15
+
 %define pw_16 prep_mul
 %define pd_512 put_s_8tap_v_rnd
 
+pb_1_m1:       times 2 db 1, -1
 pw_1:          times 2 dw 1
 pw_2:          times 2 dw 2
+pw_5:          times 2 dw 5
+pw_42:         times 2 dw 42
 pw_64:         times 2 dw 64
 pw_2048:       times 2 dw 2048
 pw_8192:       times 2 dw 8192
@@ -76,6 +93,7 @@ pd_32768:      dd 32768
 pd_65538:      dd 65538
 pd_m524256:    dd -524256 ; -8192 << 6 + 32
 pd_0x3ff:      dd 0x3ff
+pd_8M:         dd 8192*1024
 pq_0x40000000: dq 0x40000000
                dd 0
 
@@ -6300,6 +6318,567 @@ ALIGN function_align
     packusdw             m5, m7
     REPX     {pminsw x, m3}, m4, m5
     ret
+
+cglobal opfl_refine_mv_16bpc, 0, 0, 0, out, p0, p0s, p1, p1s, w, h, bs, reldist, clipmax
+    movifnidn            wd, wm
+    popcnt              r6d, clipmaxm
+    shrx                r6d, [pd_8M], r6d
+    imul                r6d, 0x10001
+    mov            clipmaxm, r6d
+    cmp                  wd, 16
+    jge .w16
+
+%macro opfl_loop 1 ; bs
+    mov                  hd, hm
+    pmovsxbq            xm6, reldistm
+    punpckhqdq         xm14, xm6, xm6
+    vpbroadcastw         m6, xm6
+    vpbroadcastw        m14, xm14
+    movd                r7m, xm6
+    movd                r8m, xm14
+    mova                m15, [pw_8x2048_8x1024]
+    vpbroadcastw        m13, clipmaxm
+
+    movu                xm0, [p0q]
+    movu                xm2, [p1q]
+    vinserti128          m0, [p0q+p0sq*1], 1
+    vinserti128          m2, [p1q+p1sq*1], 1
+    psubw                m1, m0, m2         ; tmp1[y=0|1]
+    pmullw               m0, m6
+    pmullw               m2, m14
+    paddw                m0, m2             ; tmp0[y=0|1]
+    psraw                m3, m1, 15
+    psraw                m2, m0, 15
+    paddw                m1, m3
+    paddw                m0, m2
+    REPX  {pmulhrsw x, m13}, m1, m0
+    vpermq               m2, m0, q1010      ; tmp0[y=0|0]=q1
+    mova                 m3, m2             ; q0
+    sub                  hd, 2
+
+    ; aggregators
+%if %1 == 4
+    vpbroadcastq        xm7, [pq_16]        ; bs * bs for u*u or v*v
+%else
+    movd                xm7, [pd_64]
+%endif
+    REPX        {pxor x, x}, xm8, xm10, xm11
+    mova                xm9, xm7
+    jmp %%loop_skipconst
+%%loop:
+    vpbroadcastd         m6, r7m
+    vpbroadcastd        m14, r8m
+    vpbroadcastd        m15, [pw_8x2048_8x1024+16]
+    vpbroadcastd        m13, clipmaxm
+%%loop_skipconst:
+
+    ; m0=tmp0[cur line]
+    ; m1=tmp1[cur line]
+    ; m2=q1
+    ; m3=q0
+    ; m6=pb_1_m1 [weights for tmp0]
+    ; m7-11: res
+    ; m4-5,12=free
+    ; m13=pmulhrsw constant based on clipmax
+    ; m14=reldistm [weights for tmp1]
+    ; m15=gy0 shifts (some permutation of [pw_8x2048_8x1024])
+
+    lea                 p0q, [p0q+p0sq*2]
+    lea                 p1q, [p1q+p1sq*2]
+    movu                xm4, [p0q]
+    movu               xm12, [p1q]
+    vinserti128          m4, [p0q+p0sq*1], 1
+    vinserti128         m12, [p1q+p1sq*1], 1
+    psubw                m5, m4, m12        ; tmp1[y=2|3]
+    pmullw               m4, m6
+    pmullw              m12, m14
+    paddw                m4, m12            ; tmp0[y=2|3]=q3
+    psraw                m6, m5, 15
+    psraw               m12, m4, 15
+    paddw                m5, m6
+    paddw                m4, m12
+    REPX  {pmulhrsw x, m13}, m5, m4
+    vperm2i128           m6, m0, m4, 0x21   ; tmp0[y=1|2]=q2
+
+    ; m0=tmp0[cur line]
+    ; m1=tmp1[cur line]
+    ; m2=q1
+    ; m3=q0
+    ; m4=tmp0[next line]=q3
+    ; m5=tmp1[next line]
+    ; m6=q2
+    ; m7-11=res [u*u, u*v, v*v, u*w, v*w]
+    ; m12-13=free
+    ; m14=reldistm [weights for tmp1]
+    ; m15=gy0 shifts (some permutation of [pw_8x2048_8x1024])
+
+%%loop_skipload:
+    ; gy0
+    vpbroadcastd        m14, [pw_5]
+    vpbroadcastd        m12, [pw_42]
+    psubw                m2, m6, m2         ; (q2 - q1)[y=0|1]
+    psubw                m3, m4, m3         ; (q3 - q0)[y=0|1]
+    pmullw               m2, m12
+    pmullw               m3, m14
+    ; compute 42 * (p2 - p1) - 5 * (p3 - p0) and shift+round, but avoid 32-bits
+    ; To do this: take the absolute diff then reapply the sign after shifting
+    ;             and rounding
+    ; Also, since rounding is done away from zero, it's convenient to do with
+    ; the abs diff.
+    psubsw              m12, m2, m3         ; sign
+    pminsw              m13, m2, m3
+    pmaxsw               m2, m3
+    psubw                m2, m13
+    pmulhuw              m2, m15            ; shift: No psrlvw in avx2
+    pxor                m13, m13
+    pavgw                m2, m13
+    psignw               m2, m12            ; gy0[y=0|1]=v
+
+    ; m0=tmp0[cur line]
+    ; m1=tmp1[cur line]
+    ; m2=gy0
+    ; m4=tmp0[next line]=q3
+    ; m5=tmp1[next line]
+    ; m6=q2
+    ; m7-11=res [u*u, u*v, v*v, u*w, v*w]
+    ; m3,12-13,15=free
+    ; m14=pw_5
+
+    ; gx0
+    vbroadcasti128       m3, [shuf_left_1w]
+    vbroadcasti128      m15, [shuf_right_1w]
+    pshufb              m12, m0, m3         ; p1
+    pshufb              m13, m0, m15        ; p2
+    pshufb               m3, m12, m3        ; p0
+    pshufb              m15, m13, m15       ; p3
+    psubw               m13, m12            ; (p2 - p1)[y=0|1]
+    psubw                m3, m15, m3        ; (p3 - p0)[y=0|1]
+
+    vpbroadcastd        m12, [pw_42]
+    pmullw              m13, m12
+    pmullw               m3, m14
+    psubsw              m15, m13, m3
+    pminsw              m12, m3, m13
+    pmaxsw               m3, m13
+    psubw                m3, m12
+    vbroadcasti128      m12, [pw_1x2048_6x1024_1x2048]
+    pmulhuw              m3, m12
+    pxor                m12, m12
+    pavgw                m3, m12
+    psignw               m3, m15            ; gx0[y=0|1]=u
+
+    ; m0=tmp0[cur line]
+    ; m1=tmp1[cur line] [w]
+    ; m2=gy0 [v]
+    ; m3=gx0 [u]
+    ; m4=tmp0[next line]=q3
+    ; m5=tmp1[next line]
+    ; m6=q2
+    ; m7-11=res [u*u, u*v, v*v, u*w, v*w]
+    ; m12-15=free
+
+    ; regression data
+    pmaddwd             m12, m1, m2         ; v*w
+    pmaddwd              m1, m3             ; u*w
+    pmaddwd             m15, m2, m3         ; u*v
+    REPX     {pmaddwd x, x}, m2, m3         ; v*v and u*u
+    paddd               m11, m12
+    paddd               m10, m1
+    paddd                m8, m15
+    paddd                m9, m2
+    paddd                m7, m3
+
+    test                 hd, %1-1
+    jz %%end
+    sub                  hd, 2
+%%noret:
+    mova                 m3, m0
+    mova                 m0, m4
+    mova                 m1, m5
+    mova                 m2, m6
+    jg %%loop
+    ; last line
+    vpermq               m4, m4, q3232      ; tmp0[y=3|3]=q2 & q3
+    vpermq              m15, [pw_8x2048_8x1024], q1032
+    mova                 m6, m4
+    jmp %%loop_skipload
+
+%%end:
+    ; m7-11=res [u*u, u*v, v*v, u*w, v*w]
+%if %1 == 8
+    phaddd               m7, m8
+    phaddd               m9, m10
+    vextracti128       xm12, m11, 1
+    phaddd               m7, m9
+    paddd              xm11, xm12
+    vextracti128        xm8, m7, 1
+    punpckhqdq         xm12, xm11, xm11
+    paddd               xm7, xm8
+    paddd              xm11, xm12
+    psrlq              xm12, xm11, 32
+    paddd              xm11, xm12
+    movu         [outq+0*4], xm7
+    movd         [outq+4*4], xm11
+%else
+    phaddd               m7, m9
+    phaddd               m8, m10
+    vextracti128       xm12, m11, 1
+    vextracti128        xm9, m7, 1
+    vextracti128       xm10, m8, 1
+    paddd              xm11, xm12
+    paddd               xm7, xm9
+    psrlq              xm12, xm11, 32
+    paddd               xm8, xm10
+    paddd              xm11, xm12
+    punpckhdq           xm9, xm7, xm8
+    punpckldq           xm7, xm8
+    punpcklqdq          xm8, xm7, xm9
+    punpckhqdq          xm7, xm9
+    movu         [outq+0*4], xm8
+    movd         [outq+4*4], xm11
+    movu         [outq+5*4], xm7
+    pextrd       [outq+9*4], xm11, 2
+%endif
+    sub                  hd, 2
+    jl %%ret
+    add                outq, 5*(32/%1)
+%if %1 == 4
+    vpbroadcastq        xm7, [pq_16]        ; bs * bs for u*u or v*v
+%else
+    movd                xm7, [pd_64]
+%endif
+    REPX        {pxor x, x}, xm8, xm10, xm11
+    mova                xm9, xm7
+    jmp %%noret
+%%ret:
+    RET
+%endmacro
+
+    PROLOGUE 5, 7, 16, out, p0, p0s, p1, p1s, w, h, bs, reldist, clipmax
+    cmp           dword bsm, 4
+    je .bs4
+    opfl_loop             8
+.bs4:
+    opfl_loop             4
+
+.w16:
+    PROLOGUE 5, 8, 16, 12 * mmsize + 4 * gprsize, out, p0, p0s, p1, p1s, w, h, bs, reldist, clipmax
+    lea                 r7d, [wd*5]
+    shr                 r7d, 1
+    mov [rsp+12*mmsize+0*gprsize], p0q
+    mov [rsp+12*mmsize+1*gprsize], p1q
+    mov [rsp+12*mmsize+2*gprsize], outq
+    mov [rsp+12*mmsize+3*gprsize], r7
+    pmovsxbq           xm13, reldistm
+    punpckhqdq         xm14, xm13, xm13
+    vpbroadcastw        m13, xm13
+    vpbroadcastw        m14, xm14
+    movd                r7m, xm13
+    movd                r8m, xm14
+.w16_loop:
+    mov                  hd, hm
+    vpbroadcastd        m12, clipmaxm
+    mova                m15, [pw_8x2048_8x1024]
+
+    movu                xm0, [p0q]
+    movu                xm1, [p0q+16]
+    movu                xm2, [p1q]
+    movu                xm3, [p1q+16]
+    vinserti128          m0, [p0q+p0sq*1], 1
+    vinserti128          m1, [p0q+p0sq*1+16], 1
+    vinserti128          m2, [p1q+p1sq*1], 1
+    vinserti128          m3, [p1q+p1sq*1+16], 1
+    psubw                m6, m0, m2
+    psubw                m7, m1, m3         ; tmp1[y=0|1]
+    REPX    {pmullw x, m13}, m0, m1
+    REPX    {pmullw x, m14}, m2, m3
+    paddw                m0, m2
+    paddw                m1, m3             ; tmp0[y=0|1]
+    psraw                m2, m0, 15
+    psraw                m3, m1, 15
+    psraw                m4, m6, 15
+    psraw                m5, m7, 15
+    paddw                m0, m2
+    paddw                m1, m3
+    paddw                m6, m4
+    paddw                m7, m5
+    REPX  {pmulhrsw x, m12}, m0, m1, m6, m7
+    mova     [rsp+0*mmsize], m6
+    mova     [rsp+1*mmsize], m7
+    vpermq               m2, m0, q1010
+    vpermq               m3, m1, q1010      ; tmp0[y=0|0]=q1
+    mova                 m4, m2
+    mova                 m5, m3             ; q0
+    sub                  hd, 2
+
+    ; aggregators
+    movd               xm10, [pd_64]
+    pxor               xm11, xm11
+    mova    [rsp+ 2*mmsize], m10
+    mova    [rsp+ 3*mmsize], m11
+    mova    [rsp+ 4*mmsize], m10
+    mova    [rsp+ 5*mmsize], m11
+    mova    [rsp+ 6*mmsize], m11
+    mova    [rsp+ 7*mmsize], m10
+    mova    [rsp+ 8*mmsize], m11
+    mova    [rsp+ 9*mmsize], m10
+    mova    [rsp+10*mmsize], m11
+    mova    [rsp+11*mmsize], m11
+    jmp .loop_skipconst
+.loop:
+    vpbroadcastd        m12, clipmaxm
+    vpbroadcastd        m13, r7m
+    vpbroadcastd        m14, r8m
+    vpbroadcastd        m15, [pw_8x2048_8x1024+16]
+.loop_skipconst:
+
+    ; m0-1=tmp0[cur line]
+    ; m2-3=q1
+    ; m4-5=q0
+    ; r0-1=tmp1[cur line]
+    ; m8-12=free
+    ; m13=[pb_1_m1]
+    ; m14=reldistm [weights for tmp1]
+    ; m15=gy0 shifts (some permutation of [pw_8x2048_8x1024])
+
+    lea                 p0q, [p0q+p0sq*2]
+    lea                 p1q, [p1q+p1sq*2]
+    movu                xm8, [p0q]
+    movu                xm9, [p0q+16]
+    movu                xm6, [p1q]
+    movu                xm7, [p1q+16]
+    vinserti128          m8, [p0q+p0sq*1], 1
+    vinserti128          m9, [p0q+p0sq*1+16], 1
+    vinserti128          m6, [p1q+p1sq*1], 1
+    vinserti128          m7, [p1q+p1sq*1+16], 1
+    psubw               m10, m8, m6
+    psubw               m11, m9, m7         ; tmp1[y=2|3]
+    REPX    {pmullw x, m13}, m8, m9
+    REPX    {pmullw x, m14}, m6, m7
+    paddw                m8, m6
+    paddw                m9, m7             ; tmp0[y=2|3]=q3
+    psraw                m6, m8, 15
+    psraw                m7, m9, 15
+    paddw                m8, m6
+    paddw                m9, m7
+    psraw                m6, m10, 15
+    psraw                m7, m11, 15
+    paddw               m10, m6
+    paddw               m11, m7
+    REPX  {pmulhrsw x, m12}, m8, m9, m10, m11
+    mova                 m6, [rsp+0*mmsize]
+    mova                 m7, [rsp+1*mmsize]
+    mova     [rsp+0*mmsize], m10
+    mova     [rsp+1*mmsize], m11
+    vperm2i128          m12, m0, m8, 0x21
+    vperm2i128          m13, m1, m9, 0x21   ; tmp0[y=1|2]=q2
+
+    ; m0-1=tmp0[cur line]
+    ; m2-3=q1
+    ; m4-5=q0
+    ; m6-7=tmp1[cur line]
+    ; m8-9=tmp0[next line]=q3
+    ; m10-11=free
+    ; m12-13=q2
+    ; m14=reldistm [weights for tmp1]
+    ; m15=gy0 shift (some permutation of [pw_8x2048_8x1024])
+    ; r0-1=tmp1[next line]
+    ; r2-11=res
+
+.loop_skipload:
+    ; gy0
+    psubw                m2, m12, m2
+    psubw                m3, m13, m3        ; (q2 - q1)[y=0|1]
+    psubw                m4, m8, m4
+    psubw                m5, m9, m5         ; (q3 - q0)[y=0|1]
+    vpbroadcastd        m10, [pw_42]
+    vpbroadcastd        m11, [pw_5]
+    pmullw               m2, m10
+    pmullw               m3, m10
+    pmullw               m4, m11
+    pmullw               m5, m11
+    ; compute 42 * (p2 - p1) - 5 * (p3 - p0) and shift+round, but avoid 32-bits
+    ; To do this: take the absolute diff then reapply the sign after shifting
+    ;             and rounding
+    ; Also, since rounding is done away from zero, it's convenient to do with
+    ; the abs diff.
+    psubsw              m10, m2, m4        ; sign
+    pminsw              m11, m2, m4
+    pmaxsw               m2, m4
+    psubw                m2, m11
+    ; shift and round
+    pmulhuw              m2, m15           ; shift: No psrlvw in avx2
+    pxor                 m4, m4
+    pavgw                m2, m4
+    psignw               m2, m10
+    psubsw              m10, m3, m5
+    pminsw              m11, m3, m5
+    pmaxsw               m3, m5
+    psubw                m3, m11
+    pmulhuw              m3, m15
+    pavgw                m3, m4
+    psignw               m3, m10
+
+    ; m0-1=tmp0[cur line]
+    ; m2-3=gy0
+    ; m5=pd_64
+    ; m6-7=tmp1[cur line]
+    ; m8-9=tmp0[next line]=q3
+    ; m12-13=q2
+    ; m4,10-11,14-15=free
+    ; r0-1=tmp1[next line]
+    ; r2-11=res
+
+    ; gx0
+    vbroadcasti128      m14, [shuf_left_1w]
+    vbroadcasti128      m15, [shuf_right_1w]
+    pshufb               m5, m0, m14        ; p1
+    palignr              m4, m1, m0, 2      ; p2
+    pshufb              m10, m5, m14        ; p0
+    palignr             m14, m1, m0, 4      ; p3
+    psubw                m4, m5             ; (p2 - p1)[y=0|1,x=0-7]
+    psubw               m14, m10            ; (p3 - p0)[y=0|1,x=0-7]
+    pshufb               m5, m1, m15        ; p2
+    palignr             m10, m1, m0, 14     ; p1
+    pshufb              m11, m5, m15        ; p3
+    palignr             m15, m1, m0, 12     ; p0
+    psubw                m5, m10            ; (p2 - p1)[y=0|1,x=8-15]
+    psubw               m11, m15            ; (p3 - p0)[y=0|1,x=8-15]
+    ; m10, m15
+    vpbroadcastd        m10, [pw_42]
+    vpbroadcastd        m15, [pw_5]
+    pmullw               m4, m10
+    pmullw               m5, m10
+    pmullw              m14, m15
+    pmullw              m11, m15
+    psubsw              m15, m4, m14
+    pminsw              m10, m4, m14
+    pmaxsw               m4, m14
+    psubw                m4, m10
+    vbroadcasti128      m10, [pw_1x2048_7x1024]
+    pmulhuw              m4, m10
+    pxor                m10, m10
+    pavgw                m4, m10
+    psignw               m4, m15
+    psubsw              m15, m5, m11
+    pminsw              m14, m5, m11
+    pmaxsw               m5, m11
+    psubw                m5, m14
+    vbroadcasti128      m14, [pw_7x1024_1x2048]
+    pmulhuw              m5, m14
+    pavgw                m5, m10
+    psignw               m5, m15
+
+    ; m0-1=tmp0[cur line]
+    ; m2-3=gy0
+    ; m4-5=gx0
+    ; m6-7=tmp1[cur line]
+    ; m8-9=tmp0[next line]=q3
+    ; m12-13=q2
+    ; m10-11,14-15=free
+    ; r0-1=tmp1[next line]
+    ; r2-11=res
+
+    ; regression data
+    pmaddwd             m14, m2, m6
+    pmaddwd             m15, m3, m7         ; v*w
+    pmaddwd              m6, m4
+    pmaddwd              m7, m5             ; u*w
+    pmaddwd             m10, m2, m4
+    pmaddwd             m11, m3, m5         ; u*v
+    REPX     {pmaddwd x, x}, m2, m3, m4, m5 ; v*v and u*u
+    paddd                m4, [rsp+ 2*mmsize]
+    paddd               m10, [rsp+ 3*mmsize]
+    paddd                m2, [rsp+ 4*mmsize]
+    paddd                m6, [rsp+ 5*mmsize]
+    paddd               m14, [rsp+ 6*mmsize]
+    paddd                m5, [rsp+ 7*mmsize]
+    paddd               m11, [rsp+ 8*mmsize]
+    paddd                m3, [rsp+ 9*mmsize]
+    paddd                m7, [rsp+10*mmsize]
+    paddd               m15, [rsp+11*mmsize]
+
+    test                 hd, 7
+    jz .end
+    sub                  hd, 2
+    mova    [rsp+ 2*mmsize], m4
+    mova    [rsp+ 3*mmsize], m10
+    mova    [rsp+ 4*mmsize], m2
+    mova    [rsp+ 5*mmsize], m6
+    mova    [rsp+ 6*mmsize], m14
+    mova    [rsp+ 7*mmsize], m5
+    mova    [rsp+ 8*mmsize], m11
+    mova    [rsp+ 9*mmsize], m3
+    mova    [rsp+10*mmsize], m7
+    mova    [rsp+11*mmsize], m15
+.noret:
+    mova                 m4, m0
+    mova                 m5, m1
+    mova                 m0, m8
+    mova                 m1, m9
+    mova                 m2, m12
+    mova                 m3, m13
+    jg .loop
+    ; last line
+    REPX {vpermq x, x, q3232}, m8, m9       ; tmp0[y=3|3]=q2 & q3
+    vpermq              m15, [pw_8x2048_8x1024], q1032
+    mova                m12, m8
+    mova                m13, m9
+    mova                 m6, [rsp+0*mmsize]
+    mova                 m7, [rsp+1*mmsize]
+    jmp .loop_skipload
+
+.end:
+    ; m4-5,10-11,2-3,6-7,14-15=res [u*u, u*v, v*v, u*w, v*w]
+    phaddd               m4, m10
+    phaddd               m2, m6
+    phaddd              m14, m5
+    phaddd              m11, m3
+    phaddd               m7, m15
+    phaddd               m4, m2
+    psrlq               m15, m7, 32
+    phaddd              m14, m11
+    paddd                m7, m15
+    vextracti128       xm15, m7, 1
+    vinserti128          m2, m4, xm14, 1
+    vperm2i128           m4, m14, 0x31
+    paddd               xm7, xm15
+    paddd                m4, m2
+    pshufd              xm7, xm7, q3120
+    movu         [outq+0*4], m4
+    movq         [outq+8*4], xm7
+    sub                  hd, 2
+    jl .next_block
+    add                outq, [rsp+12*mmsize+3*gprsize]
+    movd               xm10, [pd_64]
+    pxor               xm11, xm11
+    mova    [rsp+ 2*mmsize], m10
+    mova    [rsp+ 3*mmsize], m11
+    mova    [rsp+ 4*mmsize], m10
+    mova    [rsp+ 5*mmsize], m11
+    mova    [rsp+ 6*mmsize], m11
+    mova    [rsp+ 7*mmsize], m10
+    mova    [rsp+ 8*mmsize], m11
+    mova    [rsp+ 9*mmsize], m10
+    mova    [rsp+10*mmsize], m11
+    mova    [rsp+11*mmsize], m11
+    jmp .noret
+.next_block:
+    sub                  wd, 16
+    jz .ret
+    mov                 p0q, [rsp+12*mmsize+0*gprsize]
+    mov                 p1q, [rsp+12*mmsize+1*gprsize]
+    mov                outq, [rsp+12*mmsize+2*gprsize]
+    REPX        {add x, 32}, p0q, p1q
+    add                outq, 4*5*2
+    mov [rsp+12*mmsize+0*gprsize], p0q
+    mov [rsp+12*mmsize+1*gprsize], p1q
+    mov [rsp+12*mmsize+2*gprsize], outq
+    vpbroadcastd        m13, r7m
+    vpbroadcastd        m14, r8m
+    jmp .w16_loop
+.ret:
+    RET
 
 INIT_XMM avx2
 cglobal sad8x8_16bpc, 5, 7, 6, p0, p0s, p1, p1s, bdmax, p0s3, p1s3
