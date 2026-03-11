@@ -97,6 +97,12 @@ pd_8M:         dd 8192*1024
 pq_0x40000000: dq 0x40000000
                dd 0
 
+sadrefinemv_idx2off: db -2, -2, -2, -1, -2, +0, -2, +1, -2, +2
+                     db -1, -2, -1, -1, -1, +0, -1, +1, -1, +2
+                     db +0, -2, +0, -1,         +0, +1, +0, +2
+                     db +1, -2, +1, -1, +1, +0, +1, +1, +1, +2
+                     db +2, -2, +2, -1, +2, +0, +2, +1, +2, +2
+
 %macro BIDIR_JMP_TABLE 2-*
     %xdefine %1_%2_table (%%table - 2*%3)
     %xdefine %%base %1_%2_table
@@ -6318,6 +6324,830 @@ ALIGN function_align
     packusdw             m5, m7
     REPX     {pminsw x, m3}, m4, m5
     ret
+
+cglobal sad_refine_mv_16bpc, 4, 11, 16, 24 * mmsize, \
+                             p0, p0s, p1, p1s, w, h, p1s3, p0s5, p1s5, _, p0s3
+    movifnidn            wd, wm
+    movifnidn            hd, hm
+    lea               p1s3q, [p1sq*3]
+    lea               p0s5q, [p0sq*5]
+    lea               p1s5q, [p1sq*5]
+    lea               p0s3q, [p0sq*3]
+    lea                 r9d, [hq+4]
+    cmp                  wd, 8
+    je .w8
+
+    ; .w16
+    imul                r9d, 40
+    mov               [rsp], r9d
+
+    call .load2lines
+    mov                 r9d, 0xffff
+    cmp            byte r6m, 0
+    je .w16_skip_thr
+
+    vpbroadcastd        m15, [pw_1]
+    lea                  r4, [p0q+p0sq*4+4]
+    lea                  r9, [p1q+p1sq*4+4]
+    call .sad20x4
+    mova                m14, m6
+    cmp                  hd, 8
+    je .skip_16x16_thr_acc
+
+    lea                  r4, [p0q+p0s3q*4+4]
+    lea                  r9, [p1q+p1s3q*4+4]
+    call .sad20x4
+    paddw               m14, m6
+
+.skip_16x16_thr_acc:
+    ; first 2 lines
+    vpblendd             m6, m3, m0, 00010001b
+    vpblendd             m7, m5, m2, 10001000b
+    psubw                m6, m0
+    psubw                m7, m2
+    psubw                m8, m1, m4
+    REPX       {pabsw x, x}, m6, m7, m8
+    paddw                m6, m7
+    paddw               m14, m8
+    paddw               m14, m6
+
+    ; aggregate
+    pmaddwd             m15, m14
+    vextracti128       xm14, m15, 1
+    paddd              xm15, xm14
+    punpckhqdq         xm14, xm15, xm15
+    paddd              xm15, xm14
+    movq                 r9, xm15
+    rorx                 r4, r9, 32
+    add                 r9d, r4d
+    popcnt              r4d, r8m
+    sub                 r4d, 8
+    shrx                r9d, r9d, r4d
+    inc                 r9d
+    imul                r9d, 7
+    shr                 r9d, 3                  ; (sad*7+7)>>3
+    cmp                 r9d, [rsp]
+    jl .ret_origin
+    jmp .w16_main
+
+.w16_skip_thr:
+    popcnt              r4d, r8m
+    sub                 r4d, 8
+.w16_main:
+    mov                 r6m, r9w
+    pxor               xm15, xm15
+%assign offset 0
+%rep 24
+    mova [rsp+offset*mmsize], m15
+%assign offset (offset+1)
+%endrep
+.loop16:
+    ; dy=0
+    lea                  r9, [rsp-1*mmsize]
+    call .w16_line_x2
+
+    ; dy=-2
+    vpblendd            m13, m0, m3, 00001111b
+    vpblendd            m14, m1, m4, 00001111b
+    vpblendd            m15, m2, m5, 00001111b
+    vinserti128          m0, [p0q], 1
+    vinserti128          m1, [p0q+16], 1
+    vinserti128          m2, [p0q+32], 1
+    vinserti128          m3, [p1q+p1s3q*2], 0
+    vinserti128          m4, [p1q+p1s3q*2+16], 0
+    vinserti128          m5, [p1q+p1s3q*2+32], 0
+    lea                  r9, [rsp+4*mmsize]
+    call .w16_line_x2_w_origin
+
+    ; dy=+2
+    vinserti128          m0, m13, [p0q+p0s3q*2], 0
+    vinserti128          m1, m14, [p0q+p0s3q*2+16], 0
+    vinserti128          m2, m15, [p0q+p0s3q*2+32], 0
+    vinserti128          m3, m13, [p1q], 1
+    vinserti128          m4, m14, [p1q+16], 1
+    vinserti128          m5, m15, [p1q+32], 1
+    lea                  r9, [rsp+9*mmsize]
+    call .w16_line_x2_w_origin
+
+    ; dy=-1
+    sub                 p0q, p0sq
+    add                 p1q, p1sq
+    call .load2lines
+    lea                  r9, [rsp+14*mmsize]
+    call .w16_line_x2_w_origin
+
+    ; dy=+1
+    vinserti128          m0, [p0q+p0s3q*2], 0
+    vinserti128          m1, [p0q+p0s3q*2+16], 0
+    vinserti128          m2, [p0q+p0s3q*2+32], 0
+    vinserti128          m3, [p1q], 1
+    vinserti128          m4, [p1q+16], 1
+    vinserti128          m5, [p1q+32], 1
+    lea                  r9, [rsp+19*mmsize]
+    call .w16_line_x2_w_origin
+    sub                  hd, 4
+    jl .skip_8x16_main
+    add                 p0q, p0s5q
+    add                 p1q, p1s3q
+    call .load2lines
+    jmp .loop16
+
+.w16_line_x2_w_origin:
+    ; dx=0
+    vpblendd             m6, m3, m0, 00010001b
+    vpblendd             m7, m5, m2, 10001000b
+    psubw                m8, m1, m4
+    psubw                m6, m0
+    psubw                m7, m2
+    REPX       {pabsw x, x}, m6, m7, m8
+    paddw                m6, m7
+    paddw                m8, [r9+0*mmsize]
+    paddw                m6, m8
+    mova      [r9+0*mmsize], m6
+    ; fall-through
+.w16_line_x2:
+    ; dx=-2
+    palignr              m6, m4, m3, 8
+    palignr              m7, m5, m4, 8
+    punpckhqdq           m8, m5, m2
+    psubw                m6, m0
+    psubw                m7, m1
+    psubw                m8, m2
+    REPX       {pabsw x, x}, m6, m7, m8
+    paddw                m6, m7
+    paddw                m8, [r9+1*mmsize]
+    paddw                m6, m8
+    mova      [r9+1*mmsize], m6
+
+    ; dx=-1
+    palignr              m6, m4, m3, 4
+    palignr              m7, m5, m4, 4
+    psrldq               m8, m5, 4
+    pblendw              m6, m0, 00000001b
+    pblendw              m8, m2, 11100000b
+    psubw                m6, m0
+    psubw                m7, m1
+    psubw                m8, m2
+    REPX       {pabsw x, x}, m6, m7, m8
+    paddw                m6, m7
+    paddw                m8, [r9+2*mmsize]
+    paddw                m6, m8
+    mova      [r9+2*mmsize], m6
+
+    ; dx=+1
+    palignr              m6, m1, m0, 4
+    palignr              m7, m2, m1, 4
+    psrldq               m8, m2, 4
+    pblendw              m6, m3, 00000001b
+    pblendw              m8, m5, 11100000b
+    psubw                m6, m3
+    psubw                m7, m4
+    psubw                m8, m5
+    REPX       {pabsw x, x}, m6, m7, m8
+    paddw                m6, m7
+    paddw                m8, [r9+3*mmsize]
+    paddw                m6, m8
+    mova      [r9+3*mmsize], m6
+
+    ; dx=+2
+    palignr              m6, m1, m0, 8
+    palignr              m7, m2, m1, 8
+    punpckhqdq           m8, m2, m5
+    psubw                m6, m3
+    psubw                m7, m4
+    psubw                m8, m5
+    REPX       {pabsw x, x}, m6, m7, m8
+    paddw                m6, m7
+    paddw                m8, [r9+4*mmsize]
+    paddw               m12, m6, m8
+    mova      [r9+4*mmsize], m12
+    ret
+
+.sad20x4:
+    movu                 m6, [r4+p0sq*2]
+    movq               xm10, [r4+p0sq*2+32]
+    movu                 m7, [r4+p0sq*4]
+    movhps             xm10, [r4+p0sq*4+32]
+    movu                 m8, [r4+p0s3q*2]
+    vinserti128         m10, [r4+p0s3q*2+32], 1
+    movu                 m9, [r4+p0sq*8]
+    vpbroadcastq        m11, [r4+p0sq*8+32]
+    psubw                m6, [r9+p1sq*2]
+    vpblendd            m10, m11, 0xc0
+    movq               xm11, [r9+p1sq*2+32]
+    psubw                m7, [r9+p1sq*4]
+    movhps             xm11, [r9+p1sq*4+32]
+    psubw                m8, [r9+p1s3q*2]
+    vinserti128         m11, [r9+p1s3q*2+32], 1
+    psubw                m9, [r9+p1sq*8]
+    vpbroadcastq        m12, [r9+p1sq*8+32]
+    REPX       {pabsw x, x}, m6, m7, m8, m9
+    vpblendd            m11, m12, 0xc0
+    paddw                m6, m7
+    psubw               m10, m11
+    paddw                m8, m9
+    pabsw               m10, m10
+    paddw                m6, m8
+    paddw                m6, m10
+    ret
+.load2lines:
+    movu                xm0, [p0q+p0sq*2]
+    movu                xm1, [p0q+p0sq*2+16]
+    movu                xm2, [p0q+p0sq*2+32]
+    vinserti128          m0, [p0q+p0sq*4], 1
+    vinserti128          m1, [p0q+p0sq*4+16], 1
+    vinserti128          m2, [p0q+p0sq*4+32], 1
+    movu                xm3, [p1q+p1sq*2]
+    movu                xm4, [p1q+p1sq*2+16]
+    movu                xm5, [p1q+p1sq*2+32]
+    vinserti128          m3, [p1q+p1sq*4], 1
+    vinserti128          m4, [p1q+p1sq*4+16], 1
+    vinserti128          m5, [p1q+p1sq*4+32], 1
+    ret
+
+.w8:
+    imul                r9d, 24
+    mov               [rsp], r9d
+
+    ; load core data
+    pxor               xm15, xm15               ; h=16 bottom half aggregator
+    cmp                  hd, 8
+    je .skip_8x16_thr_acc
+
+    lea                  r9, [p0q+p0s3q*4]
+    movu                xm0, [r9+p0sq*2+4]
+    movq                xm2, [r9+p0sq*2+20]
+    movu                xm4, [r9+p0s3q*2+12]
+    movhps              xm2, [r9+p0s3q*2+4]
+    vinserti128          m0, [r9+p0sq*4+4], 1
+    vinserti128          m2, [r9+p0sq*4+20], 1
+    vpbroadcastq         m6, [r9+p0sq*8+4]
+    vinserti128          m4, [r9+p0sq*8+12], 1
+    lea                  r9, [p1q+p1s3q*4]
+    movu                xm1, [r9+p1sq*2+4]
+    movq                xm3, [r9+p1sq*2+20]
+    movu                xm5, [r9+p1s3q*2+12]
+    movhps              xm3, [r9+p1s3q*2+4]
+    vinserti128          m1, [r9+p1sq*4+4], 1
+    vinserti128          m3, [r9+p1sq*4+20], 1
+    vpbroadcastq         m7, [r9+p1sq*8+4]
+    vinserti128          m5, [r9+p1sq*8+12], 1
+    vpblendd             m2, m6, 0xc0
+    vpblendd             m3, m7, 0xc0
+    psubw                m0, m1
+    psubw                m2, m3
+    psubw                m4, m5
+    REPX       {pabsw x, x}, m0, m2, m4
+    paddw                m0, m2
+    paddw               m15, m0, m4
+
+.skip_8x16_thr_acc:
+    movu                xm0, [p0q+p0sq*2]
+    movu                xm2, [p0q+p0sq*2+16]
+    movu                xm1, [p1q+p1sq*2]
+    movu                xm3, [p1q+p1sq*2+16]
+    vinserti128          m0, [p0q+p0sq*4], 1
+    vinserti128          m2, [p0q+p0sq*4+16], 1
+    vinserti128          m1, [p1q+p1sq*4], 1
+    vinserti128          m3, [p1q+p1sq*4+16], 1
+    movu                xm4, [p0q+p0s3q*2]
+    movu                xm6, [p0q+p0s3q*2+16]
+    movu                xm5, [p1q+p1s3q*2]
+    movu                xm7, [p1q+p1s3q*2+16]
+    vinserti128          m4, [p0q+p0sq*8], 1
+    vinserti128          m6, [p0q+p0sq*8+16], 1
+    vinserti128          m5, [p1q+p1sq*8], 1
+    vinserti128          m7, [p1q+p1sq*8+16], 1
+    movu                xm8, [p0q+p0s5q*2]
+    movu               xm10, [p0q+p0s5q*2+16]
+    movu                xm9, [p1q+p1s5q*2]
+    movu               xm11, [p1q+p1s5q*2+16]
+    vinserti128          m8, [p0q+p0s3q*4], 1
+    vinserti128         m10, [p0q+p0s3q*4+16], 1
+    vinserti128          m9, [p1q+p1s3q*4], 1
+    vinserti128         m11, [p1q+p1s3q*4+16], 1
+    mov                 r9w, 0xffff
+    cmp            byte r6m, 0
+    je .w8_skip_thr
+    vpblendd            m12, m1, m0, 00010001b
+    vpblendd            m13, m3, m2, 10001000b
+    psubw               m12, m0
+    psubw               m13, m2
+    REPX       {pabsw x, x}, m12, m13
+    paddw               m12, m13
+    vpblendd            m13, m5, m4, 00010001b
+    vpblendd            m14, m7, m6, 10001000b
+    psubw               m13, m4
+    psubw               m14, m6
+    REPX       {pabsw x, x}, m13, m14
+    paddw               m12, m15
+    paddw               m13, m14
+    vpblendd            m14, m9, m8, 00010001b
+    vpblendd            m15, m11, m10, 10001000b
+    psubw               m14, m8
+    psubw               m15, m10
+    REPX       {pabsw x, x}, m14, m15
+    paddw               m12, m13
+    paddw               m14, m15
+    paddw               m12, m14
+
+    vpbroadcastd        m13, [pw_1]
+    pmaddwd             m12, m13
+    vextracti128       xm13, m12, 1
+    paddd              xm12, xm13
+    punpckhqdq         xm13, xm12, xm12
+    paddd              xm12, xm13
+    movq                 r9, xm12
+    rorx                 r4, r9, 32
+    add                 r9d, r4d
+    popcnt              r4d, r8m
+    sub                 r4d, 8
+    shrx                r9d, r9d, r4d
+    inc                 r9d
+    imul                r9d, 7
+    shr                 r9d, 3                  ; (sad*7+7)>>3
+    cmp                 r9d, [rsp]
+    jl .ret_origin
+    jmp .w8_main
+.w8_skip_thr:
+    popcnt              r4d, r8m
+    sub                 r4d, 8
+.w8_main:
+    ; dy=0
+    mov                 r6m, r9w
+    lea                  r9, [rsp-1*mmsize]
+    call .w8_line_top
+
+    ; dy=-2
+    lea                  r9, [p1q+p1s3q*4]      ; &p1[y=12]
+    mova    [rsp+ 9*mmsize], m8
+    mova    [rsp+10*mmsize], m10
+    mova    [rsp+11*mmsize], m1
+    mova    [rsp+12*mmsize], m3
+    vinserti128          m1, [r9+p1sq*2], 0     ; p1[y=14|4,x=8-15]
+    vinserti128          m3, [r9+p1sq*2+16], 0  ; p1[y=14|4,x=8-15]
+    vinserti128         m12, m8, [p0q], 1       ; p0[y=10|0,x=0-7]
+    vinserti128         m13, m10, [p0q+16], 1   ; p0[y=10|0,x=8-15]
+    mova                 m8, m4
+    mova                m10, m6
+    mova                 m4, m0
+    mova                 m6, m2
+    mova                 m0, m12
+    mova                 m2, m13
+    lea                  r9, [rsp+4*mmsize]
+    call .w8_line_top_w_origin
+
+    ; dy=+2
+    lea                  r9, [p0q+p0s3q*4]      ; &p0[y=12]
+    mova                 m1, [rsp+11*mmsize]
+    mova                 m3, [rsp+12*mmsize]
+    vinserti128          m9, [p1q], 1           ; p1[y=10|0,x=0-7]
+    vinserti128         m11, [p1q+16], 1        ; p1[y=10|0,x=8-15]
+    mova                 m0, m8
+    mova                 m2, m10
+    vinserti128          m8, m4, [r9+p0sq*2], 0 ; p0[y=14|4,x=8-15]
+    vinserti128         m10, m6, [r9+p0sq*2+16], 0 ; p0[y=14|4,x=8-15]
+    mova                 m4, [rsp+ 9*mmsize]
+    mova                 m6, [rsp+10*mmsize]
+    lea                  r9, [rsp+9*mmsize]
+    call .w8_line_top_w_origin
+
+    ; dy=-1
+    lea                  r9, [p0q+p0sq]         ; &p0[y=1]
+    movu                xm0, [r9]
+    movu                xm2, [r9+16]
+    movu                xm4, [r9+p0sq*4]
+    movu                xm6, [r9+p0sq*4+16]
+    movu                xm8, [r9+p0sq*8]
+    movu               xm10, [r9+p0sq*8+16]
+    vinserti128          m0, [r9+p0sq*2], 1
+    vinserti128          m2, [r9+p0sq*2+16], 1
+    vinserti128          m4, [r9+p0s3q*2], 1
+    vinserti128          m6, [r9+p0s3q*2+16], 1
+    vinserti128          m8, [r9+p0s5q*2], 1
+    vinserti128         m10, [r9+p0s5q*2+16], 1
+    lea                  r9, [p1q+p1sq]         ; &p1[y=1]
+    movu                xm1, [r9+p1sq*2]
+    movu                xm3, [r9+p1sq*2+16]
+    movu                xm5, [r9+p1s3q*2]
+    movu                xm7, [r9+p1s3q*2+16]
+    movu                xm9, [r9+p1s5q*2]
+    movu               xm11, [r9+p1s5q*2+16]
+    vinserti128          m1, [r9+p1sq*4], 1
+    vinserti128          m3, [r9+p1sq*4+16], 1
+    vinserti128          m5, [r9+p1sq*8], 1
+    vinserti128          m7, [r9+p1sq*8+16], 1
+    vinserti128          m9, [r9+p1s3q*4], 1
+    vinserti128         m11, [r9+p1s3q*4+16], 1
+    lea                  r9, [rsp+14*mmsize]
+    call .w8_line_top_w_origin
+
+    ; dy=+1
+    lea                  r9, [p0q+p0sq]         ; &p0[y=1]
+    vinserti128          m9, [p1q+p1sq], 1      ; p1[y=11|1,x=0-7]
+    vinserti128         m11, [p1q+p1sq+16], 1   ; p1[y=11|1,x=8-15]
+    vinserti128         m12, m0, [r9+p0s3q*4], 0 ; p0[y=13|3,x=0-7]
+    vinserti128         m13, m2, [r9+p0s3q*4+16], 0 ; p0[y=13|3,x=8-15]
+    mova                 m0, m4
+    mova                 m2, m6
+    mova                 m4, m8
+    mova                 m6, m10
+    mova                 m8, m12
+    mova                m10, m13
+    lea                  r9, [rsp+19*mmsize]
+    call .w8_line_top_w_origin
+    cmp                  hd, 8
+    je .skip_8x16_main
+
+    ; dy=-2
+    lea                 p0q, [p0q+p0s3q*4]      ; &p0[y=12]
+    lea                 p1q, [p1q+p1s3q*4]      ; &p1[y=12]
+    movu                xm1, [p1q+p1s5q*2]
+    movu                xm3, [p1q+p1s5q*2+16]
+    movu                xm5, [p1q+p1s3q*2]
+    movu                xm7, [p1q+p1s3q*2+16]
+    vinserti128          m1, [p1q+p1sq*4], 1
+    vinserti128          m3, [p1q+p1sq*4+16], 1
+    vinserti128          m5, [p1q+p1sq*8], 1
+    vinserti128          m7, [p1q+p1sq*8+16], 1
+    movu                xm0, [p0q+p0s3q*2]
+    movu                xm2, [p0q+p0s3q*2+16]
+    movu                xm4, [p0q+p0sq*2]
+    movu                xm6, [p0q+p0sq*2+16]
+    vinserti128          m0, [p0q], 1
+    vinserti128          m2, [p0q+16], 1
+    vinserti128          m4, [p0q+p0sq*4], 1
+    vinserti128          m6, [p0q+p0sq*4+16], 1
+    lea                  r9, [rsp+4*mmsize]
+    call .w8_line_bottom_w_origin
+
+    ; dy=0
+    vinserti128          m1, [p1q+p1sq*2], 0
+    vinserti128          m3, [p1q+p1sq*2+16], 0
+    vinserti128          m8, m0, [p0q+p0sq*8], 1
+    vinserti128          m9, m2, [p0q+p0sq*8+16], 1
+    mova                 m0, m4
+    mova                 m2, m6
+    mova                 m4, m8
+    mova                 m6, m9
+    lea                  r9, [rsp-1*mmsize]
+    call .w8_line_bottom
+
+    ; dy=+2
+    vinserti128          m5, [p1q], 1
+    vinserti128          m7, [p1q+16], 1
+    vinserti128          m8, m0, [p0q+p0s5q*2], 0
+    vinserti128          m9, m2, [p0q+p0s5q*2+16], 0
+    mova                 m0, m4
+    mova                 m2, m6
+    mova                 m4, m8
+    mova                 m6, m9
+    lea                  r9, [rsp+9*mmsize]
+    call .w8_line_bottom_w_origin
+
+    ; dy=-1
+    add                 p0q, p0sq
+    add                 p1q, p1sq
+    movu                xm1, [p1q+p1sq*2]
+    movu                xm3, [p1q+p1sq*2+16]
+    movu                xm5, [p1q+p1s3q*2]
+    movu                xm7, [p1q+p1s3q*2+16]
+    vinserti128          m1, [p1q+p1sq*4], 1
+    vinserti128          m3, [p1q+p1sq*4+16], 1
+    vinserti128          m5, [p1q+p1sq*8], 1
+    vinserti128          m7, [p1q+p1sq*8+16], 1
+    movu                xm0, [p0q]
+    movu                xm2, [p0q+16]
+    movu                xm4, [p0q+p0sq*4]
+    movu                xm6, [p0q+p0sq*4+16]
+    vinserti128          m0, [p0q+p0sq*2], 1
+    vinserti128          m2, [p0q+p0sq*2+16], 1
+    vinserti128          m4, [p0q+p0s3q*2], 1
+    vinserti128          m6, [p0q+p0s3q*2+16], 1
+    lea                  r9, [rsp+14*mmsize]
+    call .w8_line_bottom_w_origin
+
+    ; dy=+1
+    vinserti128          m5, [p1q], 1
+    vinserti128          m7, [p1q+16], 1
+    vinserti128          m8, m0, [p0q+p0sq*8], 0
+    vinserti128          m9, m2, [p0q+p0sq*8+16], 0
+    mova                 m0, m4
+    mova                 m2, m6
+    mova                 m4, m8
+    mova                 m6, m9
+    lea                  r9, [rsp+19*mmsize]
+    call .w8_line_bottom_w_origin
+
+.skip_8x16_main:
+    ; aggregate values and return
+    vpbroadcastd        m15, [pw_1]
+    pmaddwd              m0, m15, [rsp+ 5*mmsize]
+    pmaddwd              m6, m15, [rsp+ 6*mmsize]
+    pmaddwd              m7, m15, [rsp+ 4*mmsize]
+    pmaddwd              m8, m15, [rsp+ 7*mmsize]
+    pmaddwd              m3, m15, [rsp+ 8*mmsize]
+    pmaddwd              m9, m15, [rsp+15*mmsize]
+    pmaddwd             m10, m15, [rsp+16*mmsize]
+    pmaddwd             m11, m15, [rsp+14*mmsize]
+    phaddd               m0, m6
+    phaddd               m7, m8
+    phaddd               m3, m9
+    phaddd              m10, m11
+    phaddd               m0, m7
+    phaddd               m3, m10
+    pmaddwd              m1, m15, [rsp+17*mmsize]
+    pmaddwd              m6, m15, [rsp+18*mmsize]
+    pmaddwd              m7, m15, [rsp+ 0*mmsize]
+    pmaddwd              m8, m15, [rsp+ 1*mmsize]
+    pmaddwd              m4, m15, [rsp+ 2*mmsize]
+    pmaddwd              m9, m15, [rsp+ 3*mmsize]
+    pmaddwd             m10, m15, [rsp+20*mmsize]
+    pmaddwd             m11, m15, [rsp+21*mmsize]
+    phaddd               m1, m6
+    phaddd               m7, m8
+    phaddd               m4, m9
+    phaddd              m10, m11
+    phaddd               m1, m7
+    phaddd               m4, m10
+    pmaddwd              m2, m15, [rsp+19*mmsize]
+    pmaddwd              m6, m15, [rsp+22*mmsize]
+    pmaddwd              m7, m15, m12 ; [rsp+23*mmsize]
+    pmaddwd              m8, m15, [rsp+10*mmsize]
+    pmaddwd              m5, m15, [rsp+11*mmsize]
+    pmaddwd              m9, m15, [rsp+ 9*mmsize]
+    pmaddwd             m10, m15, [rsp+12*mmsize]
+    pmaddwd             m11, m15, [rsp+13*mmsize]
+    phaddd               m2, m6
+    phaddd               m7, m8
+    phaddd               m5, m9
+    phaddd              m10, m11
+    phaddd               m2, m7
+    phaddd               m5, m10
+
+    ; shift down, find the lowest
+    movd               xm12, r4d
+    vextracti128        xm6, m0, 1
+    vextracti128        xm7, m1, 1
+    vextracti128        xm8, m2, 1
+    vextracti128        xm9, m3, 1
+    vextracti128       xm10, m4, 1
+    vextracti128       xm11, m5, 1
+    paddd               xm0, xm6
+    paddd               xm1, xm7
+    paddd               xm2, xm8
+    paddd               xm3, xm9
+    paddd               xm4, xm10
+    paddd               xm5, xm11
+    REPX    {psrld x, xm12}, xm0, xm1, xm2, xm3, xm4, xm5
+    packusdw            xm0, xm3
+    packusdw            xm1, xm4
+    packusdw            xm2, xm5
+    REPX  {phminposuw x, x}, xm0, xm1, xm2
+    movd                r0d, xm0
+    movd                r1d, xm1
+    movd                r2d, xm2
+    or                  r1d, 0x80000
+    or                  r2d, 0x100000
+    cmp                 r1w, r0w
+    cmovb               r0d, r1d
+    cmp                 r2w, r0w
+    cmovb               r0d, r2d                ; best_sad, excluding origin
+
+    cmp                 r0w, word r6m
+    jnb .ret_origin
+    mov                  r1, r7m
+    shr                 r0d, 16
+    lea                  r2, [sadrefinemv_idx2off]
+    movzx                r0, word [r2+r0*2]
+    mov           word [r1], r0w
+    RET
+
+.w8_line_top_w_origin:
+    ; dy=0,dx=0
+    vpblendd            m12, m1, m0, 00010001b
+    vpblendd            m13, m3, m2, 10001000b
+    psubw               m12, m0
+    psubw               m13, m2
+    REPX       {pabsw x, x}, m12, m13
+    paddw               m12, m13
+    vpblendd            m13, m5, m4, 00010001b
+    vpblendd            m14, m7, m6, 10001000b
+    psubw               m13, m4
+    psubw               m14, m6
+    REPX       {pabsw x, x}, m13, m14
+    paddw               m13, m14
+    paddw               m12, m13
+    vpblendd            m14, m9, m8, 00010001b
+    vpblendd            m15, m11, m10, 10001000b
+    psubw               m14, m8
+    psubw               m15, m10
+    REPX       {pabsw x, x}, m14, m15
+    paddw               m14, m15
+    paddw               m12, m14
+    mova      [r9+0*mmsize], m12
+    ; fall-through
+.w8_line_top:
+    ; dy=0,dx=-2
+    palignr             m12, m3, m1, 8          ; p1[y=2|4,x=4-11]
+    palignr             m13, m7, m5, 8          ; p1[y=6|8,x=4-11]
+    psubw               m12, m0
+    psubw               m13, m4
+    REPX       {pabsw x, x}, m12, m13
+    paddw               m12, m13
+    palignr             m13, m11, m9, 8         ; p1[y=10|12,x=4-11]
+    punpcklqdq          m14, m2, m6             ; p0[y=2|4 & 6|8,x=8-11]
+    punpckhqdq          m15, m3, m7             ; p1[y=2|4 & 6|8,x=12-15]
+    psubw               m13, m8
+    psubw               m14, m15
+    punpckhqdq          m15, m11, m10           ; p1[y=10|12,x=12-15] &
+                                                ; p0[y=10|12,x=12-15]
+    pabsw               m13, m13
+    psubw               m15, m10
+    pabsw               m14, m14
+    pabsw               m15, m15
+    paddw               m13, m14
+    paddw               m12, m15
+    paddw               m12, m13                ; sad(p0,p1) @ dy=0,dx=-2
+    mova      [r9+1*mmsize], m12
+
+    ; dy=0,dx=-1
+    palignr             m12, m3, m1, 4          ; p1[y=2|4,x=2-13]
+    palignr             m13, m7, m5, 4          ; p1[y=6|8,x=2-13]
+    pblendw             m12, m0, 00000001b
+    pblendw             m13, m4, 00000001b
+    psubw               m12, m0
+    psubw               m13, m4
+    REPX       {pabsw x, x}, m12, m13
+    paddw               m12, m13
+    psrldq              m13, m3, 4
+    psrldq              m14, m7, 4
+    pblendw             m13, m2, 11100000b
+    pblendw             m14, m6, 11100000b
+    psubw               m13, m2
+    psubw               m14, m6
+    REPX       {pabsw x, x}, m13, m14
+    paddw               m13, m14
+    palignr             m14, m11, m9, 4
+    psrldq              m15, m11, 4
+    pblendw             m14, m8, 00000001b
+    pblendw             m15, m10, 11100000b
+    psubw               m14, m8
+    psubw               m15, m10
+    REPX       {pabsw x, x}, m14, m15
+    paddw               m12, m13
+    paddw               m14, m15
+    paddw               m12, m14                ; sad(p0,p1) @ dy=0,dx=-1
+    mova      [r9+2*mmsize], m12
+
+    ; dy=0,dx=+1
+    palignr             m12, m2, m0, 4          ; p0[y=2|4,x=2-13]
+    palignr             m13, m6, m4, 4          ; p0[y=6|8,x=2-13]
+    pblendw             m12, m1, 00000001b
+    pblendw             m13, m5, 00000001b
+    psubw               m12, m1
+    psubw               m13, m5
+    REPX       {pabsw x, x}, m12, m13
+    paddw               m12, m13
+    psrldq              m13, m2, 4
+    psrldq              m14, m6, 4
+    pblendw             m13, m3, 11100000b
+    pblendw             m14, m7, 11100000b
+    psubw               m13, m3
+    psubw               m14, m7
+    REPX       {pabsw x, x}, m13, m14
+    paddw               m13, m14
+    palignr             m14, m10, m8, 4
+    psrldq              m15, m10, 4
+    pblendw             m14, m9, 00000001b
+    pblendw             m15, m11, 11100000b
+    psubw               m14, m9
+    psubw               m15, m11
+    REPX       {pabsw x, x}, m14, m15
+    paddw               m12, m13
+    paddw               m14, m15
+    paddw               m12, m14                ; sad(p0,p1) @ dy=0,dx=+1
+    mova      [r9+3*mmsize], m12
+
+    ; dy=0,dx=+2
+    palignr             m12, m2, m0, 8          ; p0[y=2|4,x=4-11]
+    palignr             m13, m6, m4, 8          ; p0[y=6|8,x=4-11]
+    psubw               m12, m1
+    psubw               m13, m5
+    REPX       {pabsw x, x}, m12, m13
+    paddw               m12, m13
+    palignr             m13, m10, m8, 8         ; p0[y=10|12,x=4-11]
+    punpcklqdq          m14, m3, m7             ; p1[y=2|4 & 6|8,x=8-11]
+    punpckhqdq          m15, m2, m6             ; p0[y=2|4 & 6|8,x=12-15]
+    psubw               m13, m9
+    psubw               m14, m15
+    punpckhqdq          m15, m10, m11           ; p0[y=10|12,x=12-15] &
+                                                ; p1[y=10|12,x=12-15]
+    pabsw               m13, m13
+    psubw               m15, m11
+    pabsw               m14, m14
+    pabsw               m15, m15
+    paddw               m13, m14
+    paddw               m12, m15
+    paddw               m12, m13                ; sad(p0,p1) @ dy=0,dx=+2
+    mova      [r9+4*mmsize], m12
+    ret
+
+.w8_line_bottom_w_origin:
+    ; dy=0,dx=0
+    vpblendd            m12, m1, m0, 00010001b
+    vpblendd            m13, m3, m2, 10001000b
+    psubw               m12, m0
+    psubw               m13, m2
+    REPX       {pabsw x, x}, m12, m13
+    paddw               m12, m13
+    vpblendd            m13, m5, m4, 00010001b
+    vpblendd            m14, m7, m6, 10001000b
+    psubw               m13, m4
+    psubw               m14, m6
+    REPX       {pabsw x, x}, m13, m14
+    paddw               m12, [r9+0*mmsize]
+    paddw               m13, m14
+    paddw               m12, m13
+    mova      [r9+0*mmsize], m12
+    ; fall-through
+.w8_line_bottom:
+    ; dy=0,dx=-2
+    palignr             m12, m3, m1, 8          ; p1[y=2|4,x=4-11]
+    palignr             m13, m7, m5, 8          ; p1[y=6|8,x=4-11]
+    punpcklqdq          m14, m2, m6             ; p0[y=2|4 & 6|8,x=8-11]
+    punpckhqdq          m15, m3, m7             ; p1[y=2|4 & 6|8,x=12-15]
+    psubw               m12, m0
+    psubw               m13, m4
+    psubw               m14, m15
+    REPX       {pabsw x, x}, m12, m13, m14
+    paddw               m12, [r9+1*mmsize]
+    paddw               m13, m14
+    paddw               m12, m13                ; sad(p0,p1) @ dy=0,dx=-2
+    mova      [r9+1*mmsize], m12
+
+    ; dy=0,dx=-1
+    palignr             m12, m3, m1, 4          ; p1[y=2|4,x=2-13]
+    palignr             m13, m7, m5, 4          ; p1[y=6|8,x=2-13]
+    pblendw             m12, m0, 00000001b
+    pblendw             m13, m4, 00000001b
+    psubw               m12, m0
+    psubw               m13, m4
+    REPX       {pabsw x, x}, m12, m13
+    paddw               m12, m13
+    psrldq              m13, m3, 4
+    psrldq              m14, m7, 4
+    pblendw             m13, m2, 11100000b
+    pblendw             m14, m6, 11100000b
+    psubw               m13, m2
+    psubw               m14, m6
+    REPX       {pabsw x, x}, m13, m14
+    paddw               m12, [r9+2*mmsize]
+    paddw               m13, m14
+    paddw               m12, m13                ; sad(p0,p1) @ dy=0,dx=-1
+    mova      [r9+2*mmsize], m12
+
+    ; dy=0,dx=+1
+    palignr             m12, m2, m0, 4          ; p0[y=2|4,x=2-13]
+    palignr             m13, m6, m4, 4          ; p0[y=6|8,x=2-13]
+    pblendw             m12, m1, 00000001b
+    pblendw             m13, m5, 00000001b
+    psubw               m12, m1
+    psubw               m13, m5
+    REPX       {pabsw x, x}, m12, m13
+    paddw               m12, m13
+    psrldq              m13, m2, 4
+    psrldq              m14, m6, 4
+    pblendw             m13, m3, 11100000b
+    pblendw             m14, m7, 11100000b
+    psubw               m13, m3
+    psubw               m14, m7
+    REPX       {pabsw x, x}, m13, m14
+    paddw               m12, [r9+3*mmsize]
+    paddw               m13, m14
+    paddw               m12, m13                ; sad(p0,p1) @ dy=0,dx=+1
+    mova      [r9+3*mmsize], m12
+
+    ; dy=0,dx=+2
+    palignr             m12, m2, m0, 8          ; p0[y=2|4,x=4-11]
+    palignr             m13, m6, m4, 8          ; p0[y=6|8,x=4-11]
+    punpcklqdq          m14, m3, m7             ; p1[y=2|4 & 6|8,x=8-11]
+    punpckhqdq          m15, m2, m6             ; p0[y=2|4 & 6|8,x=12-15]
+    psubw               m12, m1
+    psubw               m13, m5
+    psubw               m14, m15
+    REPX       {pabsw x, x}, m12, m13, m14
+    paddw               m12, [r9+4*mmsize]
+    paddw               m13, m14
+    paddw               m12, m13                ; sad(p0,p1) @ dy=0,dx=+2
+    mova      [r9+4*mmsize], m12
+    ret
+
+.ret_origin:
+    mov                  r0, r7m
+    mov           word [r0], 0                  ; o->y = o->x = 0
+    RET
+
 
 cglobal opfl_refine_mv_16bpc, 0, 0, 0, out, p0, p0s, p1, p1s, w, h, bs, reldist, clipmax
     movifnidn            wd, wm
