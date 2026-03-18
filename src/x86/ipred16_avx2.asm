@@ -430,13 +430,25 @@ cglobal ipred_dc_128_16bpc, 2, 7, 6, dst, stride, tl, w, h, stride3
     lea            stride3q, [strideq*3]
     jmp                  wq
 
-%if 0
 cglobal ipred_v_16bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
+    movifnidn            wd, wm
     movifnidn            hd, hm
     movu                 m0, [tlq+ 2]
     movu                 m1, [tlq+34]
     movu                 m2, [tlq+66]
     movu                 m3, [tlq+98]
+%if UNIX64
+    test                r5w, 0x8000         ; multi-mrl
+%else
+    test           word r5m, 0x8000         ; multi-mrl
+%endif
+    jz .no_multi_mrl
+    lea                 r5d, [hq+wq]
+    pavgw                m0, [tlq+r5*4+  4]
+    pavgw                m1, [tlq+r5*4+ 36]
+    pavgw                m2, [tlq+r5*4+ 68]
+    pavgw                m3, [tlq+r5*4+100]
+.no_multi_mrl:
     lea                  r5, [ipred_dc_splat_16bpc_avx2_table]
     tzcnt                wd, wd
     movsxd               wq, [r5+wq*4]
@@ -444,6 +456,7 @@ cglobal ipred_v_16bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     lea            stride3q, [strideq*3]
     jmp                  wq
 
+%if 0
 %macro IPRED_H 2 ; w, store_type
     vpbroadcastw         m0, [tlq-2]
     vpbroadcastw         m1, [tlq-4]
