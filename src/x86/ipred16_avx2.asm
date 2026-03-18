@@ -110,8 +110,8 @@ JMP_TABLE ipred_dc_16bpc,         avx2, h4, h8, h16, h32, h64, w4, w8, w16, w32,
                                         s4-10*4, s8-10*4, s16-10*4, s32-10*4, s64-10*4
 %if 0
 JMP_TABLE ipred_dc_left_16bpc,    avx2, h4, h8, h16, h32, h64
-JMP_TABLE ipred_h_16bpc,          avx2, w4, w8, w16, w32, w64
 %endif
+JMP_TABLE ipred_h_16bpc,          avx2, w4, w8, w16, w32, w64, w4m, w8m, w16m, w32m, w64m
 JMP_TABLE ipred_paeth_16bpc,      avx2, w4, w8, w16, w32, w64
 %if 0
 JMP_TABLE ipred_smooth_16bpc,     avx2, w4, w8, w16, w32, w64
@@ -456,58 +456,68 @@ cglobal ipred_v_16bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     lea            stride3q, [strideq*3]
     jmp                  wq
 
-%if 0
-%macro IPRED_H 2 ; w, store_type
+%macro IPRED_H 2-3 ; w, store_type, multi-mrl-suffix
+.w%1%3:
+%ifidn %3, m
+    vpbroadcastq         m3, [tlq-8]
+    vpbroadcastq         m0, [tlq+r5*4-6]
+    pavgw                m3, m0
+    punpcklwd            m3, m3
+    pshufd               m0, m3, q3333
+    pshufd               m1, m3, q2222
+    pshufd               m2, m3, q1111
+    pshufd               m3, m3, q0000
+%else
     vpbroadcastw         m0, [tlq-2]
     vpbroadcastw         m1, [tlq-4]
     vpbroadcastw         m2, [tlq-6]
     vpbroadcastw         m3, [tlq-8]
+%endif
     sub                 tlq, 8
     mov%2  [dstq+strideq*0], m0
+%if %1 == 32
+    mov%2  [dstq+strideq*0+32], m0
+%endif
     mov%2  [dstq+strideq*1], m1
+%if %1 == 32
+    mov%2  [dstq+strideq*1+32], m1
+%endif
     mov%2  [dstq+strideq*2], m2
+%if %1 == 32
+    mov%2  [dstq+strideq*2+32], m2
+%endif
     mov%2  [dstq+stride3q ], m3
+%if %1 == 32
+    mov%2  [dstq+stride3q +32], m3
+%endif
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
-    jg .w%1
+    jg .w%1%3
     RET
 ALIGN function_align
 %endmacro
 
-cglobal ipred_h_16bpc, 3, 6, 4, dst, stride, tl, w, h, stride3
+cglobal ipred_h_16bpc, 3, 7, 4, dst, stride, tl, w, h, _, stride3
     movifnidn            hd, hm
-    lea                  r5, [ipred_h_16bpc_avx2_table]
+    movifnidn            wd, wm
+    lea                  r6, [ipred_h_16bpc_avx2_table]
+%if UNIX64
+    test                r5w, 0x8000         ; multi-mrl
+%else
+    test           word r5m, 0x8000         ; multi-mrl
+%endif
+    jnz .multi_mrl
     tzcnt                wd, wd
-    movsxd               wq, [r5+wq*4]
-    add                  wq, r5
+    movsxd               wq, [r6+wq*4]
+    add                  wq, r6
     lea            stride3q, [strideq*3]
     jmp                  wq
 INIT_XMM avx2
-.w4:
     IPRED_H               4, q
-.w8:
-    IPRED_H               8, a
+    IPRED_H               8, u
 INIT_YMM avx2
-.w16:
-    IPRED_H              16, a
-.w32:
-    vpbroadcastw         m0, [tlq-2]
-    vpbroadcastw         m1, [tlq-4]
-    vpbroadcastw         m2, [tlq-6]
-    vpbroadcastw         m3, [tlq-8]
-    sub                 tlq, 8
-    mova [dstq+strideq*0+32*0], m0
-    mova [dstq+strideq*0+32*1], m0
-    mova [dstq+strideq*1+32*0], m1
-    mova [dstq+strideq*1+32*1], m1
-    mova [dstq+strideq*2+32*0], m2
-    mova [dstq+strideq*2+32*1], m2
-    mova [dstq+stride3q +32*0], m3
-    mova [dstq+stride3q +32*1], m3
-    lea                dstq, [dstq+strideq*4]
-    sub                  hd, 4
-    jg .w32
-    RET
+    IPRED_H              16, u
+    IPRED_H              32, u
 .w64:
     vpbroadcastw         m0, [tlq-2]
     vpbroadcastw         m1, [tlq-4]
@@ -524,7 +534,49 @@ INIT_YMM avx2
     sub                  hd, 2
     jg .w64
     RET
-%endif
+.multi_mrl:
+    lea                 r5d, [wd+hd]
+    tzcnt                wd, wd
+    movsxd               wq, [r6+wq*4+5*4]
+    add                  wq, r6
+    lea            stride3q, [strideq*3]
+    jmp                  wq
+INIT_XMM avx2
+    IPRED_H               4, q, m
+    IPRED_H               8, u, m
+INIT_YMM avx2
+    IPRED_H              16, u, m
+    IPRED_H              32, u, m
+.w64m:
+    vpbroadcastq         m3, [tlq-8]
+    vpbroadcastq         m0, [tlq+r5*4-6]
+    pavgw                m3, m0
+    punpcklwd            m3, m3
+    pshufd               m0, m3, q3333
+    pshufd               m1, m3, q2222
+    pshufd               m2, m3, q1111
+    pshufd               m3, m3, q0000
+    sub                 tlq, 8
+    mova [dstq+strideq*0+32*0], m0
+    mova [dstq+strideq*0+32*1], m0
+    mova [dstq+strideq*0+32*2], m0
+    mova [dstq+strideq*0+32*3], m0
+    mova [dstq+strideq*1+32*0], m1
+    mova [dstq+strideq*1+32*1], m1
+    mova [dstq+strideq*1+32*2], m1
+    mova [dstq+strideq*1+32*3], m1
+    mova [dstq+strideq*2+32*0], m2
+    mova [dstq+strideq*2+32*1], m2
+    mova [dstq+strideq*2+32*2], m2
+    mova [dstq+strideq*2+32*3], m2
+    mova [dstq+stride3q +32*0], m3
+    mova [dstq+stride3q +32*1], m3
+    mova [dstq+stride3q +32*2], m3
+    mova [dstq+stride3q +32*3], m3
+    lea                dstq, [dstq+strideq*4]
+    sub                  hd, 4
+    jg .w64m
+    RET
 
 %macro PAETH 3 ; top, signed_ldiff, ldiff
     paddw               m0, m%2, m1
