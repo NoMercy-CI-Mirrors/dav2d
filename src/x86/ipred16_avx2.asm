@@ -137,9 +137,7 @@ ibp_weights: IBP_WEIGHT_TABLE \
 JMP_TABLE ipred_dc_16bpc,         avx2, h4, h8, h16, h32, h64, w4, w8, w16, w32, w64, \
                                         s4, s8, s16, s32, s64, \
                                         s4i, s8i, s16i, s32i, s64i WIN64_DC_ARGS
-%if 0
-JMP_TABLE ipred_dc_left_16bpc,    avx2, h4, h8, h16, h32, h64
-%endif
+JMP_TABLE ipred_dc_left_16bpc,    avx2, h4, h8, h16, h32, h64, w4i, w8i, w16i, w32i, w64i
 JMP_TABLE ipred_h_16bpc,          avx2, w4, w8, w16, w32, w64, w4m, w8m, w16m, w32m, w64m
 JMP_TABLE ipred_paeth_16bpc,      avx2, w4, w8, w16, w32, w64
 %if 0
@@ -173,6 +171,7 @@ cglobal ipred_dc_top_16bpc, 3, 7, 6, dst, stride, tl, w, h
     movsxd               wq, [r5+ipred_dc_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table+wq*4+10*4]
     lea                  wq, [wq+r5+ipred_dc_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table]
     jmp                  r6
+%endif
 
 cglobal ipred_dc_left_16bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     mov                  hd, hm
@@ -184,12 +183,26 @@ cglobal ipred_dc_left_16bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     tzcnt               r6d, hd
     movd                xm5, r6d
     movu                 m0, [tlq]
+%if UNIX64
+    test                r5w, 0x1000     ; ibp
+%else
+    test           word r5m, 0x1000     ; ibp
+%endif
+    jnz .ibp
     lea                  r5, [ipred_dc_left_16bpc_avx2_table]
     movsxd               r6, [r5+r6*4]
     add                  r6, r5
     tzcnt                wd, wd
-    movsxd               wq, [r5+wq*4+ipred_dc_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table+10*4]
+    movsxd               wq, [r5+wq*4+ipred_dc_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table+(10*4<<WIN64)]
     lea                  wq, [wq+r5+ipred_dc_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table]
+    jmp                  r6
+.ibp:
+    lea                  r5, [ipred_dc_left_16bpc_avx2_table]
+    movsxd               r6, [r5+r6*4]
+    add                  r6, r5
+    tzcnt                wd, wd
+    movsxd               wq, [r5+wq*4+5*4]
+    add                  wq, r5
     jmp                  r6
 .h64:
     paddw                m0, [tlq+96]
@@ -216,9 +229,33 @@ cglobal ipred_dc_left_16bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     mova                 m2, m0
     mova                 m3, m0
     jmp                  wq
+.w4i:
+    vpbroadcastw        xm2, [ibp_weights]
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s4i_leftonly_loop
+.w8i:
+    vpbroadcastd        xm3, [ibp_weights+2]
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s8i_leftonly_loop
+.w16i:
+    vpbroadcastq         m3, [ibp_weights+6]
+    mova                 m4, [pb_4x01_4x23_4x45_4x67]
+%if WIN64
+    movaps         [rsp+ 8], xmm6
 %endif
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s16i_leftonly_loop
+.w32i:
+    vbroadcasti128       m3, [ibp_weights+14]
+    mova                 m4, [pb_8x01_8x23]
+    mova                 m5, [pb_8x45_8x67]
+%if WIN64
+    movaps         [rsp+8], xmm6
+    movaps         [rsp+24], xmm7
+%endif
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s32i_leftonly_loop
+.w64i:
+    movu                 m3, [ibp_weights+30]
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s64i_leftonly_loop
 
-cglobal ipred_dc_16bpc, 3, 8, 8, dst, stride, tl, w, h, stride3
+cglobal ipred_dc_16bpc, 3, 8, 6, dst, stride, tl, w, h, stride3
     mov                  hd, hm
     tzcnt                wd, wd
     tzcnt               r6d, hd
@@ -253,6 +290,9 @@ cglobal ipred_dc_16bpc, 3, 8, 8, dst, stride, tl, w, h, stride3
     jnz .ibp
     setup                 0
 .ibp:
+%if WIN64
+    WIN64_PUSH_XMM        8, 6
+%endif
     setup                 1
 .h4:
     movq                xm0, [tlq-8]
@@ -313,6 +353,12 @@ cglobal ipred_dc_16bpc, 3, 8, 8, dst, stride, tl, w, h, stride3
     movhps [dstq+stride3q ], xm5
     lea                dstq, [dstq+strideq*4]
     sub                  hq, 4
+.s4i_leftonly:
+%if WIN64
+    movaps             xmm7, [rsp+32]
+    movaps             xmm6, [rsp+16]
+    pop                  r7
+%endif
 .s4i_leftonly_loop:
     movq                xm4, [tlq+hq*2-8]
     punpckldq           xm4, xm4
@@ -331,7 +377,8 @@ cglobal ipred_dc_16bpc, 3, 8, 8, dst, stride, tl, w, h, stride3
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s4i_leftonly_loop
-    RET
+    vzeroupper
+    ret
 .s4x16i:
     lea                  r7, [tlq+hq*2-8]
     mov                 r6d, hd
@@ -373,7 +420,7 @@ cglobal ipred_dc_16bpc, 3, 8, 8, dst, stride, tl, w, h, stride3
     sub                  r7, 8
     add                  r6, 4
     jl .s4x16i_topleft_loop
-    jmp .s4i_leftonly_loop
+    jmp .s4i_leftonly
 ALIGN function_align
 .h8:
     movu                xm0, [tlq-16]
@@ -434,6 +481,12 @@ ALIGN function_align
     movu   [dstq+stride3q ], xm1
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
+.s8i_leftonly:
+%if WIN64
+    movaps             xmm7, [rsp+32]
+    movaps             xmm6, [rsp+16]
+    pop                  r7
+%endif
 .s8i_leftonly_loop:
     movq                xm1, [tlq+hq*2-8]
     punpcklwd           xm1, xm1
@@ -451,7 +504,8 @@ ALIGN function_align
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s8i_leftonly_loop
-    RET
+    vzeroupper
+    ret
 
 .s8x16i:
     lea                  r7, [tlq+hq*2-8]
@@ -491,7 +545,7 @@ ALIGN function_align
     sub                  r7, 8
     add                  r6, 4
     jl .s8x16i_topleft_loop
-    jmp .s8i_leftonly_loop
+    jmp .s8i_leftonly
 
 ALIGN function_align
 .h16:
@@ -567,7 +621,11 @@ ALIGN function_align
     movu   [dstq+stride3q ], m5
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 2
-
+.s16i_leftonly:
+%if WIN64
+    movaps             xmm7, [rsp+32]
+    pop                  r7
+%endif
 .s16i_leftonly_loop:
     ; left filter
     vpbroadcastq         m1, [tlq+hq*2-8]
@@ -587,7 +645,11 @@ ALIGN function_align
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s16i_leftonly_loop
-    RET
+%if WIN64
+    movaps             xmm6, [rsp+8]
+%endif
+    vzeroupper
+    ret
 
 .s16x16i:
     ; top filter
@@ -602,7 +664,7 @@ ALIGN function_align
     movu   [dstq+strideq*2], m6
     movu   [dstq+stride3q ], m7
     lea                dstq, [dstq+strideq*4]
-    jmp .s16i_leftonly_loop
+    jmp .s16i_leftonly
 
 .s16x32i:
 %if WIN64
@@ -643,7 +705,7 @@ ALIGN function_align
     movaps             xmm8, r4m
     movaps             xmm9, r6m
 %endif
-    jmp .s16i_leftonly_loop
+    jmp .s16i_leftonly
 
 ALIGN function_align
 .h32:
@@ -688,7 +750,7 @@ ALIGN function_align
     jl .s32i_toponly_loop
 
     test                 hd, 3
-    jz .s32i_leftonly_loop
+    jz .s32i_leftonly
     vpbroadcastq         m1, [tlq+hq*2-6]
     pshufb               m2, m1, m4
     pshufb              xm1, xm5
@@ -707,12 +769,16 @@ ALIGN function_align
     lea                dstq, [dstq+strideq*2]
     sub                  hd, 2
     test                 hd, 1
-    jz .s32i_leftonly_loop
+    jz .s32i_leftonly
     ; 32x4
     vpblendd             m2, m0, 11110000b
     movu [dstq+strideq*0+ 0], m2
     movu [dstq+strideq*0+32], m0
     RET
+.s32i_leftonly:
+%if WIN64
+    pop                  r7
+%endif
 .s32i_leftonly_loop:
     vpbroadcastq         m1, [tlq+hq*2-8]
     pshufb               m2, m1, m4
@@ -737,7 +803,12 @@ ALIGN function_align
     lea                dstq, [dstq+strideq*4]
     sub                  hd, 4
     jg .s32i_leftonly_loop
-    RET
+%if WIN64
+    movaps             xmm7, [rsp+24]
+    movaps             xmm6, [rsp+ 8]
+%endif
+    vzeroupper
+    ret
 
 .s32x64i:
     vperm2i128           m1, m1, 0x11
@@ -775,7 +846,7 @@ ALIGN function_align
     movaps             xmm8, r4m
     movaps             xmm9, r6m
 %endif
-    jmp .s32i_leftonly_loop
+    jmp .s32i_leftonly
 
 ALIGN function_align
 .h64:
@@ -831,7 +902,7 @@ ALIGN function_align
 %endif
     movu                 m3, [ibp_weights+30]
     test                 hd, 1
-    jz .s64i_leftonly_loop
+    jz .s64i_leftonly
     vpbroadcastw         m1, [tlq+hq*2-2]
     psubw                m1, m0
     pmulhrsw             m1, m3
@@ -842,6 +913,12 @@ ALIGN function_align
     mova [dstq+strideq*0+96], m0
     add                dstq, strideq
     dec                  hd
+.s64i_leftonly:
+%if WIN64
+    movaps             xmm7, [rsp+32]
+    movaps             xmm6, [rsp+16]
+    pop                  r7
+%endif
 .s64i_leftonly_loop:
     vpbroadcastw         m1, [tlq+hq*2-2]
     vpbroadcastw         m2, [tlq+hq*2-4]
@@ -861,11 +938,11 @@ ALIGN function_align
     lea                dstq, [dstq+strideq*2]
     sub                  hd, 2
     jg .s64i_leftonly_loop
-    RET
+    vzeroupper
+    ret
 .s4:
 %if WIN64
-    WIN64_RESTORE_XMM
-    POP                  r7
+    pop                  r7
 %endif
 .s4w:
     movq   [dstq+strideq*0], xm0
@@ -879,8 +956,7 @@ ALIGN function_align
     ret
 .s8:
 %if WIN64
-    WIN64_RESTORE_XMM_INTERNAL
-    POP                  r7
+    pop                  r7
 %endif
 .s8w:
     movu   [dstq+strideq*0], xm0
@@ -894,8 +970,7 @@ ALIGN function_align
     ret
 .s16:
 %if WIN64
-    WIN64_RESTORE_XMM_INTERNAL
-    POP                  r7
+    pop                  r7
 %endif
 .s16w:
     movu   [dstq+strideq*0], m0
@@ -909,8 +984,7 @@ ALIGN function_align
     ret
 .s32:
 %if WIN64
-    WIN64_RESTORE_XMM_INTERNAL
-    POP                  r7
+    pop                  r7
 %endif
 .s32w:
     movu [dstq+strideq*0+32*0], m0
@@ -928,8 +1002,7 @@ ALIGN function_align
     ret
 .s64:
 %if WIN64
-    WIN64_RESTORE_XMM_INTERNAL
-    POP                  r7
+    pop                  r7
 %endif
 .s64w:
     mova [dstq+strideq*0+32*0], m0
