@@ -138,6 +138,7 @@ JMP_TABLE ipred_dc_16bpc,         avx2, h4, h8, h16, h32, h64, w4, w8, w16, w32,
                                         s4, s8, s16, s32, s64, \
                                         s4i, s8i, s16i, s32i, s64i WIN64_DC_ARGS
 JMP_TABLE ipred_dc_left_16bpc,    avx2, h4, h8, h16, h32, h64, w4i, w8i, w16i, w32i, w64i
+JMP_TABLE ipred_dc_top_16bpc,     avx2, w4i, w8i, w16i, w32i, w64i
 JMP_TABLE ipred_h_16bpc,          avx2, w4, w8, w16, w32, w64, w4m, w8m, w16m, w32m, w64m
 JMP_TABLE ipred_paeth_16bpc,      avx2, w4, w8, w16, w32, w64
 %if 0
@@ -155,7 +156,6 @@ cextern dr_intra_derivative
 SECTION .text
 
 INIT_YMM avx2
-%if 0
 cglobal ipred_dc_top_16bpc, 3, 7, 6, dst, stride, tl, w, h
     movifnidn            hd, hm
     add                 tlq, 2
@@ -165,12 +165,242 @@ cglobal ipred_dc_top_16bpc, 3, 7, 6, dst, stride, tl, w, h
     tzcnt                wd, wd
     movd                xm5, wd
     movu                 m0, [tlq]
+%if UNIX64
+    test                r5w, 0x1000     ; ibp
+%else
+    test           word r5m, 0x1000     ; ibp
+%endif
+    jnz .ibp
     lea                  r5, [ipred_dc_left_16bpc_avx2_table]
     movsxd               r6, [r5+wq*4]
     add                  r6, r5
-    movsxd               wq, [r5+ipred_dc_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table+wq*4+10*4]
+    movsxd               wq, [r5+ipred_dc_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table+wq*4+(10*4<<WIN64)]
     lea                  wq, [wq+r5+ipred_dc_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table]
     jmp                  r6
+
+    DEFINE_ARGS dst, stride, tl, w, h, stride3
+.ibp:
+    lea                  r5, [ipred_dc_left_16bpc_avx2_table]
+    movsxd               r6, [r5+wq*4]
+    add                  r6, r5
+    movsxd               wq, [r5+ipred_dc_top_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table+wq*4]
+    lea                  wq, [wq+r5+ipred_dc_top_16bpc_avx2_table-ipred_dc_left_16bpc_avx2_table]
+    jmp                  r6
+.w4i:
+    vpbroadcastq        xm1, [tlq]
+    ; 4x4 is not allowed
+    cmp                  hd, 8
+    jg .w4x16i
+    movd                xm2, [ibp_weights+2]
+    punpcklwd           xm2, xm2
+    psubw               xm1, xm0
+    punpckldq           xm2, xm2
+    pmulhrsw            xm1, xm2
+    paddw               xm1, xm0
+    movq   [dstq+strideq*0], xm1
+    movhps [dstq+strideq*1], xm1
+    movq   [dstq+strideq*2], xm0
+    movq   [dstq+stride3q ], xm0
+    lea                dstq, [dstq+strideq*4]
+    sub                  hd, 4
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s4w
+.w4x16i:
+    psubw               xm1, xm0
+    mov                 r6d, hd
+    lea                  r3, [ibp_weights]
+    shr                 r6d, 2
+    lea                  r3, [r3+r6*4-2]
+    sub                  hd, r6d
+    neg                  r6
+.w4x16i_loop:
+    movd                xm2, [r3+r6*2+0]
+    movd                xm3, [r3+r6*2+4]
+    REPX {punpcklwd x, x  }, xm2, xm3
+    REPX {punpckldq x, x  }, xm2, xm3
+    REPX {pmulhrsw  x, xm1}, xm2, xm3
+    REPX {paddw     x, xm0}, xm2, xm3
+    movq   [dstq+strideq*0], xm2
+    movhps [dstq+strideq*1], xm2
+    movq   [dstq+strideq*2], xm3
+    movhps [dstq+stride3q ], xm3
+    lea                dstq, [dstq+strideq*4]
+    add                  r6, 4
+    jl .w4x16i_loop
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s4w
+.w8i:
+    vbroadcasti128       m1, [tlq]
+    psubw                m1, m0
+    cmp                  hd, 8
+    je .w8x8i
+    jg .w8x16i
+    ; fall-through for w8x4i
+    vpbroadcastw        xm2, [ibp_weights]
+    pmulhrsw            xm1, xm2
+    paddw               xm1, xm0
+    movu   [dstq+strideq*0], xm1
+    movu   [dstq+strideq*1], xm0
+    movu   [dstq+strideq*2], xm0
+    movu   [dstq+stride3q ], xm0
+    RET
+.w8x8i:
+    vpbroadcastw        xm2, [ibp_weights+2]
+    vpbroadcastw        xm3, [ibp_weights+4]
+    REPX  {pmulhrsw x, xm1}, xm2, xm3
+    REPX  {paddw    x, xm0}, xm2, xm3
+    movu   [dstq+strideq*0], xm2
+    movu   [dstq+strideq*1], xm3
+    movu   [dstq+strideq*2], xm0
+    movu   [dstq+stride3q ], xm0
+    lea                dstq, [dstq+strideq*4]
+    sub                  hd, 4
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s8w
+.w8x16i:
+    mov                 r6d, hd
+    lea                  r3, [ibp_weights]
+    shr                 r6d, 2
+    lea                  r3, [r3+r6*4-2]
+    sub                  hd, r6d
+    neg                  r6
+.w8x16i_loop:
+    vpbroadcastw        xm2, [r3+r6*2+0]
+    vpbroadcastw         m3, [r3+r6*2+2]
+    vpblendd             m2, m3, 11110000b
+    vpbroadcastw        xm3, [r3+r6*2+4]
+    vpbroadcastw         m4, [r3+r6*2+6]
+    vpblendd             m3, m4, 11110000b
+    REPX   {pmulhrsw x, m1}, m2, m3
+    REPX   {paddw    x, m0}, m2, m3
+    movu         [dstq+strideq*0], xm2
+    vextracti128 [dstq+strideq*1], m2, 1
+    movu         [dstq+strideq*2], xm3
+    vextracti128 [dstq+stride3q ], m3, 1
+    lea                dstq, [dstq+strideq*4]
+    add                  r6, 4
+    jl .w8x16i_loop
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s8w
+.w16i:
+    movu                 m1, [tlq]
+    psubw                m1, m0
+    cmp                  hd, 4
+    jg .w16x8i
+    ; fall-through for w16x4i
+    vpbroadcastw         m2, [ibp_weights]
+    pmulhrsw             m1, m2
+    paddw                m1, m0
+    movu   [dstq+strideq*0], m1
+    movu   [dstq+strideq*1], m0
+    movu   [dstq+strideq*2], m0
+    movu   [dstq+stride3q ], m0
+    RET
+.w16x8i:
+    mov                 r6d, hd
+    lea                  r3, [ibp_weights]
+    shr                 r6d, 2
+    lea                  r3, [r3+r6*4-2]
+    sub                  hd, r6d
+    neg                  r6
+.w16x8i_loop:
+    vpbroadcastw         m2, [r3+r6*2+0]
+    vpbroadcastw         m3, [r3+r6*2+2]
+    REPX  {pmulhrsw  x, m1}, m2, m3
+    REPX  {paddw     x, m0}, m2, m3
+    movu   [dstq+strideq*0], m2
+    movu   [dstq+strideq*1], m3
+    lea                dstq, [dstq+strideq*2]
+    add                  r6, 2
+    jl .w16x8i_loop
+    test                 hd, 2
+    jz mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s16w
+    movu   [dstq+strideq*0], m0
+    movu   [dstq+strideq*1], m0
+    lea                dstq, [dstq+strideq*2]
+    sub                  hd, 2
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s16w
+.w32i:
+    movu                 m2, [tlq]
+    movu                 m3, [tlq+32]
+    psubw                m2, m0
+    psubw                m3, m1
+    mov                 r6d, hd
+    lea                  r3, [ibp_weights]
+    shr                 r6d, 2
+    lea                  r3, [r3+r6*4-2]
+    sub                  hd, r6d
+    neg                  r6
+.w32i_loop:
+    vpbroadcastw         m4, [r3+r6*2]
+    pmulhrsw             m5, m4, m2
+    pmulhrsw             m4, m3
+    paddw                m5, m0
+    paddw                m4, m1
+    movu          [dstq+ 0], m5
+    movu          [dstq+32], m4
+    add                dstq, strideq
+    inc                  r6
+    jl .w32i_loop
+.w32i_dcloop:
+    test                 hd, 3
+    jz mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s32w
+    movu          [dstq+ 0], m0
+    movu          [dstq+32], m0
+    add                dstq, strideq
+    dec                  hd
+    jnz .w32i_dcloop
+    RET
+.w64i:
+%if WIN64
+    WIN64_SPILL_XMM      16
+%endif
+    movu                 m4, [tlq]
+    movu                 m5, [tlq+32]
+    movu                 m6, [tlq+64]
+    movu                 m7, [tlq+96]
+    psubw                m4, m0
+    psubw                m5, m1
+    psubw                m6, m2
+    psubw                m7, m3
+    mov                 r6d, hd
+    lea                  r3, [ibp_weights]
+    shr                 r6d, 2
+    lea                  r3, [r3+r6*4-2]
+    sub                  hd, r6d
+    neg                  r6
+.w64i_loop:
+    vpbroadcastw        m11, [r3+r6*2]
+    pmulhrsw             m8, m11, m4
+    pmulhrsw             m9, m11, m5
+    pmulhrsw            m10, m11, m6
+    pmulhrsw            m11, m7
+    paddw                m8, m0
+    paddw                m9, m1
+    paddw               m10, m2
+    paddw               m11, m3
+    mova          [dstq+ 0], m8
+    mova          [dstq+32], m9
+    mova          [dstq+64], m10
+    mova          [dstq+96], m11
+    add                dstq, strideq
+    inc                  r6
+    jl .w64i_loop
+.w64i_dcloop:
+    test                 hd, 3
+%if WIN64
+    jz .w64i_dcloop4
+%else
+    jz mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s64w
+%endif
+    mova          [dstq+ 0], m0
+    mova          [dstq+32], m0
+    mova          [dstq+64], m0
+    mova          [dstq+96], m0
+    add                dstq, strideq
+    dec                  hd
+    jnz .w64i_dcloop
+    RET
+%if WIN64
+.w64i_dcloop4:
+    WIN64_RESTORE_XMM_INTERNAL
+    jmp mangle(private_prefix %+ _ipred_dc_16bpc_avx2).s64w
 %endif
 
 cglobal ipred_dc_left_16bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
