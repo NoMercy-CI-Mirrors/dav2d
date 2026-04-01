@@ -291,6 +291,8 @@ ITX_WRAP(64, 16, 4, 2,     6,    13,    0, 32, 16, RTX_64X16)
 ITX_WRAP(64, 32, 4, 3,     6,    12,    1, 32, 32, RTX_64X32)
 ITX_WRAP(64, 64, 4, 4,     6,    13,    0, 32, 32, TX_64X64)
 
+decl_cctx_fn(BF(dav2d_cctx, neon));
+
 static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c)
 {
     const unsigned flags = dav2d_get_cpu_flags();
@@ -322,6 +324,8 @@ static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c)
     assign_itx_fn(R, 64, 16, neon);
     assign_itx_fn(R, 64, 32, neon);
     assign_itx_fn( , 64, 64, neon);
+
+    c->cctx = BF(dav2d_cctx, neon);
 }
 
 #undef ITX_WRAP

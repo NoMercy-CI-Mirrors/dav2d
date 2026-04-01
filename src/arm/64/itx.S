@@ -1403,3 +1403,37 @@ const flipadst16_coeffs_s16, align=4
         .short           17,  -48,   73,  -87,   88,  -77,   55,  -25,   -8,   41,  -67,   84,  -89,   81,  -62,   33
         .short            8,  -25,   41,  -55,   67,  -77,   84,  -88,   89,  -87,   81,  -73,   62,  -48,   33,  -17
 endconst
+
+// void cctx_neon(coef *const u, coef *const v, const int16_t angle[3],
+//             const size_t sz HIGHBD_DECL_SUFFIX)
+function cctx_8bpc_neon, export=1
+        ldr             s6, [x2]
+1:
+        ldr             q0, [x0]
+        ldr             q1, [x1]
+        smull           v2.4s, v0.4h, v6.h[1]  // u[i] * cosa
+        smull2          v3.4s, v0.8h, v6.h[1]  // u[i] * cosa
+        smull           v4.4s, v0.4h, v6.h[0]  // u[i] * sina
+        smull2          v5.4s, v0.8h, v6.h[0]  // u[i] * sina
+        smlsl           v2.4s, v1.4h, v6.h[0]  // u[i] * cosa - v[i] * sina
+        smlsl2          v3.4s, v1.8h, v6.h[0]  // u[i] * cosa - v[i] * sina
+        smlal           v4.4s, v1.4h, v6.h[1]  // u[i] * sina + v[i] * cosa
+        smlal2          v5.4s, v1.8h, v6.h[1]  // u[i] * sina + v[i] * cosa
+
+        ssra            v2.4s, v2.4s, #31      // Adjust for sqrshrn rounding up
+        ssra            v3.4s, v3.4s, #31
+        ssra            v4.4s, v4.4s, #31
+        ssra            v5.4s, v5.4s, #31
+
+        sub             w3, w3, #8
+        sqrshrn         v2.4h, v2.4s, #8
+        sqrshrn         v3.4h, v3.4s, #8
+        sqrshrn         v4.4h, v4.4s, #8
+        sqrshrn         v5.4h, v5.4s, #8
+
+        stp             d2, d3, [x0], #16
+        stp             d4, d5, [x1], #16
+
+        cbnz            w3, 1b
+        ret
+endfunc
