@@ -27,6 +27,10 @@
 #include "src/arm/asm.S"
 #include "util.S"
 
+// For `is_rect2` cases, scale input by `256 / sqrt(2) = 181. Shift by 7 to
+// allow use of the SQRDMULH instruction.
+#define RECT2_SCALE (181 << 7)
+
 .macro dot1_4rows_s16 op, acc0, acc1, acc2, acc3, a, h, b0, b1, b2, b3, lane0, lane1
         \op             \acc0\().4s,  \a\h, \b0\().h[\lane0]
         \op             \acc1\().4s,  \a\h, \b1\().h[\lane1]
@@ -156,8 +160,8 @@ function inv_dst4_1d_transpose_8bpc_neon
 L(dst4_transpose_loop8):
         load_4_strided  q4,  q5,  q6,  q7,  x2,  x13, x16, 0
         cbz             w5,  1f
-        mov             w12, #0x5a80
-        dup             v31.8h,  w12  // 1/sqrt2
+        mov             w12, #RECT2_SCALE
+        dup             v31.8h,  w12
         sqrdmulh        v4.8h,   v4.8h,   v31.8h
         sqrdmulh        v5.8h,   v5.8h,   v31.8h
         sqrdmulh        v6.8h,   v6.8h,   v31.8h
@@ -192,8 +196,8 @@ L(dst4_transpose_loop8):
 L(dst4_transpose_tail):
         load_4_strided  d4,  d5,  d6,  d7,  x2,  x13, x16, 0
         cbz             w5,  1f
-        mov             w12, #0x5a80
-        dup             v31.4h,  w12  // 1/sqrt2
+        mov             w12, #RECT2_SCALE
+        dup             v31.4h,  w12
         sqrdmulh        v4.4h,   v4.4h,   v31.4h
         sqrdmulh        v5.4h,   v5.4h,   v31.4h
         sqrdmulh        v6.4h,   v6.4h,   v31.4h
@@ -281,9 +285,9 @@ endfunc
 
 .macro scale_inplace_s16_x4 do_scale, c, stride, rows
         cbz             \do_scale, 99f
-        mov             w14, #0x5a80
+        mov             w14, #RECT2_SCALE
         mov             x12, \c
-        dup             v31.4h,  w14  // 1/sqrt2
+        dup             v31.4h,  w14
         mov             x13, \c
   .rept \rows / 4
         load_4_strided  d0,  d1,  d2,  d3,  x12, x12, \stride, 1
@@ -298,9 +302,9 @@ endfunc
 
 .macro scale_inplace_s16_x8 do_scale, c, stride, rows
         cbz             \do_scale, 99f
-        mov             w14, #0x5a80
+        mov             w14, #RECT2_SCALE
         mov             x12, \c
-        dup             v31.8h,  w14  // 1/sqrt2
+        dup             v31.8h,  w14
         mov             x13, \c
   .rept \rows / 4
         load_4_strided  q0,  q1,  q2,  q3,  x12, x12, \stride, 1
@@ -732,122 +736,6 @@ L(dst16_done):
         ret
 endfunc
 
-// x13: input base, stride: byte stride, x14: row-0 coefficients, row_step:
-// byte distance between coefficient rows
-// returns 4 raw 32-point dot products in v16-v19
-.macro dot32_4rows_s16 stride, row_step
-        dot16_4rows_s16_x4 smull, \stride, \row_step
-        dot16_4rows_s16_x4 smlal, \stride, \row_step
-.endm
-
-.macro dot32_4rows_s16_x8 stride, row_step
-        dot16_4rows_s16_x8 smull, smull2, \stride, \row_step
-        dot16_4rows_s16_x8 smlal, smlal2, \stride, \row_step
-.endm
-
-// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: shift, x5: do_scale,
-// x6: howmany, x7: mat, x8: flip
-function dst32_1d_transpose_8bpc_neon
-        lsl             x16, x3,  #1
-        neg             w11, w4
-        lsl             x17, x1,  #1
-        dup             v30.4s,  w11  // -shift
-        mov             w15, w6
-
-        mov             x10, #64
-
-        cmp             w6,  #4
-        b.eq            L(dst32_transpose_tail)
-L(dst32_transpose_loop8):
-        scale_inplace_s16_x8 w5,  x2,  x16, 32
-        mov             x9,  #0
-L(dst32_row_loop8):
-        mov             x13, x2
-        add             x14, x7,  x9,  lsl #6
-        dot32_4rows_s16_x8 x16, x10
-
-        shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v30
-        shift_and_narrow_4x4s v20, v21, v22, v23, v20, v21, v22, v23, v30
-
-        transpose_4x4h  v16, v17, v18, v19, v24, v25, v26, v27
-
-        add             x13, x0,  x9,  lsl #1
-        store_4_strided d16, d17, d18, d19, x13, x13, x17
-
-        transpose_4x4h  v20, v21, v22, v23, v24, v25, v26, v27
-
-        add             x13, x0,  x1,  lsl #3
-        add             x13, x13, x9,  lsl #1
-        store_4_strided d20, d21, d22, d23, x13, x13, x17
-
-        add             x9,  x9,  #4
-        cmp             x9,  #32
-        b.lt            L(dst32_row_loop8)
-        add             x2,  x2,  #16
-        add             x0,  x0,  x1,  lsl #4
-        subs            w6,  w6,  #8
-        b.eq            L(dst32_transpose_done)
-        cmp             w6,  #4
-        b.ne            L(dst32_transpose_loop8)
-L(dst32_transpose_tail):
-        scale_inplace_s16_x4 w5,  x2,  x16, 32
-        mov             x9,  #0
-L(dst32_row_tail_loop):
-        mov             x13, x2
-        add             x14, x7,  x9,  lsl #6
-        dot32_4rows_s16 x16, x10
-
-        shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v30
-
-        transpose_4x4h  v16, v17, v18, v19, v24, v25, v26, v27
-
-        add             x13, x0,  x9,  lsl #1
-        store_4_strided d16, d17, d18, d19, x13, x13, x17
-
-        add             x9,  x9,  #4
-        cmp             x9,  #32
-        b.lt            L(dst32_row_tail_loop)
-        add             x2,  x2,  #8
-        add             x0,  x0,  x1,  lsl #3
-L(dst32_transpose_done):
-        sub             x11, x2,  x15, lsl #1
-        itx_row_zero_tail_s16 x0, x11, w3, w1, w15
-        ret
-endfunc
-
-// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: repx_shift, x5: repy_shift,
-// x6: howmany, x7: mat, x8: unused, x9: shift
-function inv_dst32_1d_8bpc_neon
-        neg             w9,  w9
-        lsl             x3,  x3,  #1
-        dup             v30.4s,  w9  // -shift
-        lsl             x10, x1,  x5
-        mov             w16, #4
-        mov             x15, #64
-        lsl             w16, w16, w4  // (4 << repx_shift)
-L(dst32_loop):
-        mov             x11, x0
-
-        mov             x9,  #0
-L(dst32_i_loop):
-        add             x14, x7,  x9,  lsl #6
-        mov             x13, x2
-        dot32_4rows_s16 x3,  x15
-
-        shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v30
-
-        iclip_sum4_8bpc_x4 x11, x1,  w4,  1, w5,  1, x10, x14, v16, v17, v18, v19
-
-        add             x9,  x9,  #4
-        cmp             x9,  #32
-        b.lt            L(dst32_i_loop)
-        add             x0,  x0,  x16
-        add             x2,  x2,  #8
-        subs            w6,  w6,  #4
-        b.ne            L(dst32_loop)
-        ret
-endfunc
-
 // x0: dst, x1: dst_stride, x2: c, x3: stride, x4: shift, x5: do_scale,
 // x6: howmany
 .macro inv_dst_row_wrapper_s16 name, coeffs, flip, target
@@ -858,6 +746,8 @@ function \name, export=1
 endfunc
 .endm
 
+// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: w, x5: h, x6: shift,
+// x7: howmany
 .macro inv_dst_col_wrapper_s16 name, size_shift, coeffs, flip, target
 function \name, export=1
         mov             w9,  w6
@@ -874,8 +764,6 @@ inv_dst_row_wrapper_s16 inv_adst4_1d_row_8bpc_neon, adst4_coeffs_s16, 0, inv_dst
 inv_dst_col_wrapper_s16 inv_adst4_1d_col_8bpc_neon, 2, adst4_coeffs_s16, 0, inv_dst4_1d_8bpc_neon
 inv_dst_row_wrapper_s16 inv_flipadst4_1d_row_8bpc_neon, flipadst4_coeffs_s16, 0, inv_dst4_1d_transpose_8bpc_neon
 inv_dst_col_wrapper_s16 inv_flipadst4_1d_col_8bpc_neon, 2, flipadst4_coeffs_s16, 0, inv_dst4_1d_8bpc_neon
-inv_dst_row_wrapper_s16 inv_dct4_1d_row_8bpc_neon, dct4_coeffs_s16, 0, inv_dst4_1d_transpose_8bpc_neon
-inv_dst_col_wrapper_s16 inv_dct4_1d_col_8bpc_neon, 2, dct4_coeffs_s16, 0, inv_dst4_1d_8bpc_neon
 inv_dst_row_wrapper_s16 inv_adst8_1d_row_8bpc_neon, adst8_coeffs_s16, 0, inv_dst8_1d_transpose_8bpc_neon
 inv_dst_col_wrapper_s16 inv_adst8_1d_col_8bpc_neon, 3, adst8_coeffs_s16, 0, inv_dst8_1d_8bpc_neon
 inv_dst_row_wrapper_s16 inv_flipadst8_1d_row_8bpc_neon, adst8_coeffs_s16, 7, inv_dst8_1d_transpose_8bpc_neon
@@ -884,8 +772,6 @@ inv_dst_row_wrapper_s16 inv_ddt8_1d_row_8bpc_neon, ddt8_coeffs_s16, 0, inv_dst8_
 inv_dst_col_wrapper_s16 inv_ddt8_1d_col_8bpc_neon, 3, ddt8_coeffs_s16, 0, inv_dst8_1d_8bpc_neon
 inv_dst_row_wrapper_s16 inv_flipddt8_1d_row_8bpc_neon, ddt8_coeffs_s16, 7, inv_dst8_1d_transpose_8bpc_neon
 inv_dst_col_wrapper_s16 inv_flipddt8_1d_col_8bpc_neon, 3, ddt8_coeffs_s16, 7, inv_dst8_1d_8bpc_neon
-inv_dst_row_wrapper_s16 inv_dct8_1d_row_8bpc_neon, dct8_coeffs_s16, 0, inv_dst8_1d_transpose_8bpc_neon
-inv_dst_col_wrapper_s16 inv_dct8_1d_col_8bpc_neon, 3, dct8_coeffs_s16, 0, inv_dst8_1d_8bpc_neon
 inv_dst_row_wrapper_s16 inv_adst16_1d_row_8bpc_neon, adst16_coeffs_s16, 0, inv_dst16_1d_transpose_8bpc_neon
 inv_dst_col_wrapper_s16 inv_adst16_1d_col_8bpc_neon, 4, adst16_coeffs_s16, 0, inv_dst16_1d_8bpc_neon
 inv_dst_row_wrapper_s16 inv_flipadst16_1d_row_8bpc_neon, flipadst16_coeffs_s16, 0, inv_dst16_1d_transpose_8bpc_neon
@@ -894,10 +780,1082 @@ inv_dst_row_wrapper_s16 inv_ddt16_1d_row_8bpc_neon, ddt16_coeffs_s16, 0, inv_dst
 inv_dst_col_wrapper_s16 inv_ddt16_1d_col_8bpc_neon, 4, ddt16_coeffs_s16, 0, inv_dst16_1d_8bpc_neon
 inv_dst_row_wrapper_s16 inv_flipddt16_1d_row_8bpc_neon, ddt16_coeffs_s16, 15, inv_dst16_1d_transpose_8bpc_neon
 inv_dst_col_wrapper_s16 inv_flipddt16_1d_col_8bpc_neon, 4, ddt16_coeffs_s16, 15, inv_dst16_1d_8bpc_neon
-inv_dst_row_wrapper_s16 inv_dct16_1d_row_8bpc_neon, dct16_coeffs_s16, 0, inv_dst16_1d_transpose_8bpc_neon
-inv_dst_col_wrapper_s16 inv_dct16_1d_col_8bpc_neon, 4, dct16_coeffs_s16, 0, inv_dst16_1d_8bpc_neon
-inv_dst_row_wrapper_s16 inv_dct32_1d_row_8bpc_neon, dct32_coeffs_s16, 0, dst32_1d_transpose_8bpc_neon
-inv_dst_col_wrapper_s16 inv_dct32_1d_col_8bpc_neon, 5, dct32_coeffs_s16, 0, inv_dst32_1d_8bpc_neon
+
+.macro scale_inplace_8x8h base, stride, ptr_tmp, scale
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  \base, \ptr_tmp, \stride
+        sqrdmulh        v0.4h,   v0.4h,   \scale\().4h
+        sqrdmulh        v1.4h,   v1.4h,   \scale\().4h
+        sqrdmulh        v2.4h,   v2.4h,   \scale\().4h
+        sqrdmulh        v3.4h,   v3.4h,   \scale\().4h
+        sqrdmulh        v4.4h,   v4.4h,   \scale\().4h
+        sqrdmulh        v5.4h,   v5.4h,   \scale\().4h
+        sqrdmulh        v6.4h,   v6.4h,   \scale\().4h
+        sqrdmulh        v7.4h,   v7.4h,   \scale\().4h
+        store_8_strided d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  \base, \ptr_tmp, \stride
+.endm
+
+// Apply (possibly conditionally scaled) DCT4 to v0.4h-v3.4h, return results in
+// v0.4s-v3.4s.
+.macro dct4_1d_body_s16 may_scale, scale_reg, scale, cos1, cos2
+  .if \may_scale
+        cbz             \scale_reg, 1f
+        sqrdmulh        v0.4h,   v0.4h,   \scale\().4h
+        sqrdmulh        v1.4h,   v1.4h,   \scale\().4h
+        sqrdmulh        v2.4h,   v2.4h,   \scale\().4h
+        sqrdmulh        v3.4h,   v3.4h,   \scale\().4h
+1:
+  .endif
+        smull           v6.4s,   v1.4h,   \cos1\().4h
+        smull           v7.4s,   v1.4h,   \cos2\().4h
+        smlal           v6.4s,   v3.4h,   \cos2\().4h
+        smlsl           v7.4s,   v3.4h,   \cos1\().4h
+        saddl           v16.4s,  v0.4h,   v2.4h
+        ssubl           v17.4s,  v0.4h,   v2.4h
+        shl             v16.4s,  v16.4s,  #6
+        shl             v17.4s,  v17.4s,  #6
+        add             v0.4s,   v16.4s,  v6.4s
+        add             v1.4s,   v17.4s,  v7.4s
+        sub             v2.4s,   v17.4s,  v7.4s
+        sub             v3.4s,   v16.4s,  v6.4s
+.endm
+
+// Apply (possibly conditionally scaled) DCT8 to v0.4h-v7.4h, return results in
+// v0.4s-v7.4s.
+.macro dct8_1d_body_s16 may_scale, scale_reg, scale, coeffs
+  .if \may_scale
+        cbz             \scale_reg, 1f
+        sqrdmulh        v0.4h,   v0.4h,   \scale\().4h
+        sqrdmulh        v1.4h,   v1.4h,   \scale\().4h
+        sqrdmulh        v2.4h,   v2.4h,   \scale\().4h
+        sqrdmulh        v3.4h,   v3.4h,   \scale\().4h
+        sqrdmulh        v4.4h,   v4.4h,   \scale\().4h
+        sqrdmulh        v5.4h,   v5.4h,   \scale\().4h
+        sqrdmulh        v6.4h,   v6.4h,   \scale\().4h
+        sqrdmulh        v7.4h,   v7.4h,   \scale\().4h
+1:
+  .endif
+
+        smull           v16.4s,  v1.4h,   \coeffs\().h[4]
+        smull           v17.4s,  v1.4h,   \coeffs\().h[5]
+        smull           v18.4s,  v1.4h,   \coeffs\().h[6]
+        smull           v19.4s,  v1.4h,   \coeffs\().h[7]
+
+        smlal           v16.4s,  v3.4h,   \coeffs\().h[5]
+        smlsl           v17.4s,  v3.4h,   \coeffs\().h[7]
+        smlsl           v18.4s,  v3.4h,   \coeffs\().h[4]
+        smlsl           v19.4s,  v3.4h,   \coeffs\().h[6]
+
+        smlal           v16.4s,  v5.4h,   \coeffs\().h[6]
+        smlsl           v17.4s,  v5.4h,   \coeffs\().h[4]
+        smlal           v18.4s,  v5.4h,   \coeffs\().h[7]
+        smlal           v19.4s,  v5.4h,   \coeffs\().h[5]
+
+        smlal           v16.4s,  v7.4h,   \coeffs\().h[7]
+        smlsl           v17.4s,  v7.4h,   \coeffs\().h[6]
+        smlal           v18.4s,  v7.4h,   \coeffs\().h[5]
+        smlsl           v19.4s,  v7.4h,   \coeffs\().h[4]
+
+        smull           v20.4s,  v2.4h,   \coeffs\().h[0]
+        smull           v21.4s,  v2.4h,   \coeffs\().h[1]
+
+        smlal           v20.4s,  v6.4h,   \coeffs\().h[1]
+        smlsl           v21.4s,  v6.4h,   \coeffs\().h[0]
+
+        saddl           v22.4s,  v0.4h,   v4.4h
+        ssubl           v23.4s,  v0.4h,   v4.4h
+        shl             v22.4s,  v22.4s,  #6
+        shl             v23.4s,  v23.4s,  #6
+
+        add             v24.4s,  v22.4s,  v20.4s
+        add             v25.4s,  v23.4s,  v21.4s
+        sub             v26.4s,  v23.4s,  v21.4s
+        sub             v27.4s,  v22.4s,  v20.4s
+
+        add             v0.4s,   v24.4s,  v16.4s
+        add             v1.4s,   v25.4s,  v17.4s
+        add             v2.4s,   v26.4s,  v18.4s
+        add             v3.4s,   v27.4s,  v19.4s
+        sub             v4.4s,   v27.4s,  v19.4s
+        sub             v5.4s,   v26.4s,  v18.4s
+        sub             v6.4s,   v25.4s,  v17.4s
+        sub             v7.4s,   v24.4s,  v16.4s
+.endm
+
+// Apply DCT16 even-half setup to v0.4h-v7.4h. Return half0-1 component results
+// in v8.4s-v9.4s, quarter0-3 component results in v16.4s-v19.4s, and eighth0-1
+// component results in v20.4s-v21.4s.
+.macro dct16_even_s16
+        saddl           v8.4s,   v0.4h,   v4.4h
+        ssubl           v9.4s,   v0.4h,   v4.4h
+        shl             v8.4s,   v8.4s,   #6
+        shl             v9.4s,   v9.4s,   #6
+
+        ldrel           q0,  x8,  dct_qtable_s16
+
+        smull           v16.4s,  v1.4h,   v0.h[4]
+        smull           v17.4s,  v1.4h,   v0.h[5]
+        smull           v18.4s,  v1.4h,   v0.h[6]
+        smull           v19.4s,  v1.4h,   v0.h[7]
+
+        smlal           v16.4s,  v3.4h,   v0.h[5]
+        smlsl           v17.4s,  v3.4h,   v0.h[7]
+        smlsl           v18.4s,  v3.4h,   v0.h[4]
+        smlsl           v19.4s,  v3.4h,   v0.h[6]
+
+        smlal           v16.4s,  v5.4h,   v0.h[6]
+        smlsl           v17.4s,  v5.4h,   v0.h[4]
+        smlal           v18.4s,  v5.4h,   v0.h[7]
+        smlal           v19.4s,  v5.4h,   v0.h[5]
+
+        smlal           v16.4s,  v7.4h,   v0.h[7]
+        smlsl           v17.4s,  v7.4h,   v0.h[6]
+        smlal           v18.4s,  v7.4h,   v0.h[5]
+        smlsl           v19.4s,  v7.4h,   v0.h[4]
+
+        smull           v20.4s,  v2.4h,   v0.h[0]
+        smull           v21.4s,  v2.4h,   v0.h[1]
+        smlal           v20.4s,  v6.4h,   v0.h[1]
+        smlsl           v21.4s,  v6.4h,   v0.h[0]
+.endm
+
+// Apply DCT16 odd-half setup to v0.4h-v7.4h. Return odd0-3 component results
+// in v22.4s-v25.4s, and odd4-7 component results in v12.4s-v15.4s.
+.macro dct16_odd_s16
+        ldrel           q10, x8,  dct16_odd_qtable_s16
+
+        smull           v22.4s,  v0.4h,   v10.h[0]
+        smull           v23.4s,  v0.4h,   v10.h[1]
+        smull           v24.4s,  v0.4h,   v10.h[2]
+        smull           v25.4s,  v0.4h,   v10.h[3]
+        smull           v12.4s,  v0.4h,   v10.h[4]
+        smull           v13.4s,  v0.4h,   v10.h[5]
+        smull           v14.4s,  v0.4h,   v10.h[6]
+        smull           v15.4s,  v0.4h,   v10.h[7]
+
+        smlal           v22.4s,  v1.4h,   v10.h[1]
+        smlal           v23.4s,  v1.4h,   v10.h[4]
+        smlal           v24.4s,  v1.4h,   v10.h[7]
+        smlsl           v25.4s,  v1.4h,   v10.h[5]
+        smlsl           v12.4s,  v1.4h,   v10.h[2]
+        smlsl           v13.4s,  v1.4h,   v10.h[0]
+        smlsl           v14.4s,  v1.4h,   v10.h[3]
+        smlsl           v15.4s,  v1.4h,   v10.h[6]
+
+        smlal           v22.4s,  v2.4h,   v10.h[2]
+        smlal           v23.4s,  v2.4h,   v10.h[7]
+        smlsl           v24.4s,  v2.4h,   v10.h[3]
+        smlsl           v25.4s,  v2.4h,   v10.h[1]
+        smlsl           v12.4s,  v2.4h,   v10.h[6]
+        smlal           v13.4s,  v2.4h,   v10.h[4]
+        smlal           v14.4s,  v2.4h,   v10.h[0]
+        smlal           v15.4s,  v2.4h,   v10.h[5]
+
+        smlal           v22.4s,  v3.4h,   v10.h[3]
+        smlsl           v23.4s,  v3.4h,   v10.h[5]
+        smlsl           v24.4s,  v3.4h,   v10.h[1]
+        smlal           v25.4s,  v3.4h,   v10.h[7]
+        smlal           v12.4s,  v3.4h,   v10.h[0]
+        smlal           v13.4s,  v3.4h,   v10.h[6]
+        smlsl           v14.4s,  v3.4h,   v10.h[2]
+        smlsl           v15.4s,  v3.4h,   v10.h[4]
+
+        smlal           v22.4s,  v4.4h,   v10.h[4]
+        smlsl           v23.4s,  v4.4h,   v10.h[2]
+        smlsl           v24.4s,  v4.4h,   v10.h[6]
+        smlal           v25.4s,  v4.4h,   v10.h[0]
+        smlsl           v12.4s,  v4.4h,   v10.h[7]
+        smlsl           v13.4s,  v4.4h,   v10.h[1]
+        smlal           v14.4s,  v4.4h,   v10.h[5]
+        smlal           v15.4s,  v4.4h,   v10.h[3]
+
+        smlal           v22.4s,  v5.4h,   v10.h[5]
+        smlsl           v23.4s,  v5.4h,   v10.h[0]
+        smlal           v24.4s,  v5.4h,   v10.h[4]
+        smlal           v25.4s,  v5.4h,   v10.h[6]
+        smlsl           v12.4s,  v5.4h,   v10.h[1]
+        smlal           v13.4s,  v5.4h,   v10.h[3]
+        smlal           v14.4s,  v5.4h,   v10.h[7]
+        smlsl           v15.4s,  v5.4h,   v10.h[2]
+
+        smlal           v22.4s,  v6.4h,   v10.h[6]
+        smlsl           v23.4s,  v6.4h,   v10.h[3]
+        smlal           v24.4s,  v6.4h,   v10.h[0]
+        smlsl           v25.4s,  v6.4h,   v10.h[2]
+        smlal           v12.4s,  v6.4h,   v10.h[5]
+        smlal           v13.4s,  v6.4h,   v10.h[7]
+        smlsl           v14.4s,  v6.4h,   v10.h[4]
+        smlal           v15.4s,  v6.4h,   v10.h[1]
+
+        smlal           v22.4s,  v7.4h,   v10.h[7]
+        smlsl           v23.4s,  v7.4h,   v10.h[6]
+        smlal           v24.4s,  v7.4h,   v10.h[5]
+        smlsl           v25.4s,  v7.4h,   v10.h[4]
+        smlal           v12.4s,  v7.4h,   v10.h[3]
+        smlsl           v13.4s,  v7.4h,   v10.h[2]
+        smlal           v14.4s,  v7.4h,   v10.h[1]
+        smlsl           v15.4s,  v7.4h,   v10.h[0]
+.endm
+
+// Combine one DCT16 even/odd block, narrow and store the results.
+.macro dct16_odd_add_s16 dst0, dst1, dst_stride, repx_shift, have_repx, repy_shift, have_repy, step, vshift, even0, even1, even2, even3, odd0, odd1, odd2, odd3
+        sub             v26.4s,  \even3\().4s,  \odd3\().4s
+        sub             v27.4s,  \even2\().4s,  \odd2\().4s
+        sub             v28.4s,  \even1\().4s,  \odd1\().4s
+        sub             v29.4s,  \even0\().4s,  \odd0\().4s
+        add             \even0\().4s,  \even0\().4s,  \odd0\().4s
+        add             \even1\().4s,  \even1\().4s,  \odd1\().4s
+        add             \even2\().4s,  \even2\().4s,  \odd2\().4s
+        add             \even3\().4s,  \even3\().4s,  \odd3\().4s
+
+        shift_and_narrow_4x4s v16, v17, v18, v19, \even0, \even1, \even2, \even3, \vshift
+        iclip_sum4_8bpc_x4 \dst0, \dst_stride, \repx_shift, \have_repx, \repy_shift, \have_repy, \step, x8,  v16, v17, v18, v19
+
+        shift_and_narrow_4x4s v16, v17, v18, v19, v26, v27, v28, v29, \vshift
+        iclip_sum4_8bpc_x4 \dst1, \dst_stride, \repx_shift, \have_repx, \repy_shift, \have_repy, \step, x8,  v16, v17, v18, v19
+.endm
+
+
+// Load one row of coefficients and multiply even/odd inputs r0-r15.4h,
+// returning even results in dst0.4s and odd results in dst1.4s. The exact
+// accumulation here doesn't matter, just use a pair of accumulators to reduce
+// latency.
+.macro dct32_odd_dot16_s16 dst0, dst1, r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, coeff, t0, t1
+        ld1             {\t0\().8h,  \t1\().8h}, [\coeff], #32
+        smull           \dst0\().4s,  \r0\().4h,  \t0\().h[0]
+        smull           \dst1\().4s,  \r1\().4h,  \t0\().h[1]
+        smlal           \dst0\().4s,  \r2\().4h,  \t0\().h[2]
+        smlal           \dst1\().4s,  \r3\().4h,  \t0\().h[3]
+        smlal           \dst0\().4s,  \r4\().4h,  \t0\().h[4]
+        smlal           \dst1\().4s,  \r5\().4h,  \t0\().h[5]
+        smlal           \dst0\().4s,  \r6\().4h,  \t0\().h[6]
+        smlal           \dst1\().4s,  \r7\().4h,  \t0\().h[7]
+
+        smlal           \dst0\().4s,  \r8\().4h,   \t1\().h[0]
+        smlal           \dst1\().4s,  \r9\().4h,   \t1\().h[1]
+        smlal           \dst0\().4s,  \r10\().4h,  \t1\().h[2]
+        smlal           \dst1\().4s,  \r11\().4h,  \t1\().h[3]
+        smlal           \dst0\().4s,  \r12\().4h,  \t1\().h[4]
+        smlal           \dst1\().4s,  \r13\().4h,  \t1\().h[5]
+        smlal           \dst0\().4s,  \r14\().4h,  \t1\().h[6]
+        smlal           \dst1\().4s,  \r15\().4h,  \t1\().h[7]
+.endm
+
+// Load and apply four rows of coefficients. Even elements are loaded as
+// v0.4h-v7.4h, odd elements are loaded as v8-v15.4h. Sum results are returned
+// through dst0-dst3.4s. acc0/acc1 are temporaries.
+.macro dct32_odd_dot_block_s16 c, stride, coeffs, dst0, dst1, dst2, dst3, acc0, acc1
+        mov             x7,  \c
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  x7,  x7,  \stride
+        add             x7,  x7,  \stride, lsl #1
+        load_8_strided  d8,  d9,  d10, d11, d12, d13, d22, d23, x7,  x7,  \stride
+
+        dct32_odd_dot16_s16 \acc0, \acc1, v0,  v1,  v2,  v3,  v4,  v5,  v6,  v7,  v8,  v9,  v10, v11, v12, v13, v22, v23, \coeffs, v14, v15
+        add             \dst0\().4s,  \acc0\().4s,  \acc1\().4s
+
+        dct32_odd_dot16_s16 \acc0, \acc1, v0,  v1,  v2,  v3,  v4,  v5,  v6,  v7,  v8,  v9,  v10, v11, v12, v13, v22, v23, \coeffs, v14, v15
+        add             \dst1\().4s,  \acc0\().4s,  \acc1\().4s
+
+        dct32_odd_dot16_s16 \acc0, \acc1, v0,  v1,  v2,  v3,  v4,  v5,  v6,  v7,  v8,  v9,  v10, v11, v12, v13, v22, v23, \coeffs, v14, v15
+        add             \dst2\().4s,  \acc0\().4s,  \acc1\().4s
+
+        dct32_odd_dot16_s16 \acc0, \acc1, v0,  v1,  v2,  v3,  v4,  v5,  v6,  v7,  v8,  v9,  v10, v11, v12, v13, v22, v23, \coeffs, v14, v15
+        add             \dst3\().4s,  \acc0\().4s,  \acc1\().4s
+.endm
+
+.macro dct32_combine_even0_s16 dst0, dst1, dst2, dst3
+        add             \dst0\().4s,  v30.4s,  v28.4s
+        add             \dst1\().4s,  v31.4s,  v29.4s
+        sub             \dst2\().4s,  v31.4s,  v29.4s
+        sub             \dst3\().4s,  v30.4s,  v28.4s
+        add             \dst0\().4s,  \dst0\().4s,  v24.4s
+        add             \dst1\().4s,  \dst1\().4s,  v25.4s
+        add             \dst2\().4s,  \dst2\().4s,  v26.4s
+        add             \dst3\().4s,  \dst3\().4s,  v27.4s
+.endm
+
+.macro dct32_combine_even1_s16 dst0, dst1, dst2, dst3
+        sub             \dst0\().4s,  v30.4s,  v28.4s
+        sub             \dst1\().4s,  v31.4s,  v29.4s
+        add             \dst2\().4s,  v31.4s,  v29.4s
+        add             \dst3\().4s,  v30.4s,  v28.4s
+        sub             \dst0\().4s,  \dst0\().4s,  v27.4s
+        sub             \dst1\().4s,  \dst1\().4s,  v26.4s
+        sub             \dst2\().4s,  \dst2\().4s,  v25.4s
+        sub             \dst3\().4s,  \dst3\().4s,  v24.4s
+.endm
+
+.macro dct32_odd_store_s16 dst0, dst1, step, neg_shift, even0, even1, even2, even3
+        sub             v0.4s,   \even0\().4s,  v16.4s
+        sub             v1.4s,   \even1\().4s,  v17.4s
+        sub             v2.4s,   \even2\().4s,  v18.4s
+        sub             v3.4s,   \even3\().4s,  v19.4s
+        add             v16.4s,  \even0\().4s,  v16.4s
+        add             v17.4s,  \even1\().4s,  v17.4s
+        add             v18.4s,  \even2\().4s,  v18.4s
+        add             v19.4s,  \even3\().4s,  v19.4s
+
+        dup             v31.4s,  \neg_shift
+
+        shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v31
+        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        store_4_strided d16, d17, d18, d19, \dst0, \dst0, \step
+
+        shift_and_narrow_4x4s v3,  v2,  v1,  v0,  v3,  v2,  v1,  v0,  v31
+        transpose_4x4h  v3,  v2,  v1,  v0,  v20, v21, v22, v23
+        store_4_strided d3,  d2,  d1,  d0,  \dst1, \dst1, \step
+.endm
+
+// Compute DCT32 eighth components. Inputs are in v0.4h-v3.4h. Return
+// eighth0-eighth3 in v24.4s-v27.4s.
+.macro dct32_eighth_s16
+        ldrel           d4,  x8,  dct_qtable_s16, 8
+
+        smull           v24.4s,  v0.4h,   v4.h[0]
+        smull           v25.4s,  v0.4h,   v4.h[1]
+        smull           v26.4s,  v0.4h,   v4.h[2]
+        smull           v27.4s,  v0.4h,   v4.h[3]
+
+        smlal           v24.4s,  v1.4h,   v4.h[1]
+        smlsl           v25.4s,  v1.4h,   v4.h[3]
+        smlsl           v26.4s,  v1.4h,   v4.h[0]
+        smlsl           v27.4s,  v1.4h,   v4.h[2]
+
+        smlal           v24.4s,  v2.4h,   v4.h[2]
+        smlsl           v25.4s,  v2.4h,   v4.h[0]
+        smlal           v26.4s,  v2.4h,   v4.h[3]
+        smlal           v27.4s,  v2.4h,   v4.h[1]
+
+        smlal           v24.4s,  v3.4h,   v4.h[3]
+        smlsl           v25.4s,  v3.4h,   v4.h[2]
+        smlal           v26.4s,  v3.4h,   v4.h[1]
+        smlsl           v27.4s,  v3.4h,   v4.h[0]
+.endm
+
+// Compute DCT32 sixteenth components. Inputs are in v0.4h/v1.4h. Return
+// sixteenth0/sixteenth1 in v28.4s-v29.4s.
+.macro dct32_sixteenth_s16
+        ldrel           d4,  x8,  dct_qtable_s16
+
+        smull           v28.4s,  v0.4h,   v4.h[0]
+        smull           v29.4s,  v0.4h,   v4.h[1]
+        smlal           v28.4s,  v1.4h,   v4.h[1]
+        smlsl           v29.4s,  v1.4h,   v4.h[0]
+.endm
+
+
+// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: shift, x5: do_scale,
+// x6: howmany
+function inv_dct4_1d_row_8bpc_neon, export=1
+        lsl             x12, x3,  #1
+
+        cbz             w6,  99f
+        cbz             w5,  1f
+        mov             w15, #RECT2_SCALE
+        dup             v30.4h,  w15
+1:
+        movi            v4.4h,   #83  // dct_qtable_s16[0]
+        movi            v5.4h,   #35  // dct_qtable_s16[1]
+        lsl             x15, x1,  #1
+        neg             w14, w4
+        dup             v31.4s,  w14
+
+        mov             x9,  x2
+        mov             x11, x0
+        mov             w4,  #0
+L(dct4_row_s16_loop):
+        load_4_strided  d0,  d1,  d2,  d3,  x9,  x13, x12
+        dct4_1d_body_s16 1, w5,  v30, v4,  v5
+
+        shift_and_narrow_4x4s v16, v17, v18, v19, v0,  v1,  v2,  v3,  v31
+        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        store_4_strided d16, d17, d18, d19, x11, x11, x15
+
+        add             x9,  x9,  #8
+        add             x11, x11, x15, lsl #1
+        add             w4,  w4,  #4
+        cmp             w4,  w6
+        b.lt            L(dct4_row_s16_loop)
+99:
+        mul             x16, x1,  x6
+        add             x16, x0,  x16, lsl #1
+        itx_row_zero_tail_s16 x16, x2,  w3,  w1,  w6
+        ret
+endfunc
+
+// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: w, x5: h, x6: shift,
+// x7: howmany
+function inv_dct4_1d_col_8bpc_neon, export=1
+        lsr             w4,  w4,  #6
+        lsr             w5,  w5,  #3
+        mov             w16, #0
+
+        cbz             w7,  99f
+        movi            v4.4h,   #83  // dct_qtable_s16[0]
+        movi            v5.4h,   #35  // dct_qtable_s16[1]
+        neg             w8,  w6
+        dup             v31.4s,  w8
+        lsl             x10, x3,  #1
+L(dct4_col_s16_loop):
+        add             x9,  x2,  x16, lsl #1
+        load_4_strided  d0,  d1,  d2,  d3,  x9,  x11, x10
+
+        dct4_1d_body_s16 0, wzr, v30, v4,  v5
+
+        lsl             x12, x16, x4
+        add             x13, x0,  x12
+        shift_and_narrow_4x4s v16, v17, v18, v19, v0,  v1,  v2,  v3,  v31
+        iclip_sum4_8bpc_x4 x13, x1,  x4,  1, x5,  0, x1,  x8,  v16, v17, v18, v19
+
+        add             w16, w16, #4
+        cmp             w16, w7
+        b.lt            L(dct4_col_s16_loop)
+99:
+        ret
+endfunc
+
+// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: shift, x5: do_scale,
+// x6: howmany
+function inv_dct8_1d_row_8bpc_neon, export=1
+        stp             d8,  d9,  [sp, #-16]!
+        lsl             x13, x3,  #1
+
+        cbz             w6,  99f
+        cbz             w5,  1f
+        mov             w15, #RECT2_SCALE
+        dup             v30.4h,  w15
+1:
+        ldrel           q8,  x8,  dct_qtable_s16
+        lsl             x15, x1,  #1
+        neg             w14, w4
+        dup             v31.4s,  w14
+
+        mov             x10, x2
+        mov             x12, x0
+        mov             w4,  #0
+L(dct8_row_s16_loop):
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  x10, x14, x13
+        dct8_1d_body_s16 1, w5,  v30, v8
+
+        add             x14, x12, #8
+        shift_and_narrow_4x4s v16, v17, v18, v19, v0,  v1,  v2,  v3,  v31
+        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        store_4_strided d16, d17, d18, d19, x12, x12, x15
+        shift_and_narrow_4x4s v16, v17, v18, v19, v4,  v5,  v6,  v7,  v31
+        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        store_4_strided d16, d17, d18, d19, x14, x14, x15
+
+        add             x10, x10, #8
+        add             x12, x12, x15, lsl #1
+        add             w4,  w4,  #4
+        cmp             w4,  w6
+        b.lt            L(dct8_row_s16_loop)
+99:
+        mul             x16, x1,  x6
+        add             x16, x0,  x16, lsl #1
+        itx_row_zero_tail_s16 x16, x2,  w3,  w1,  w6
+        ldp             d8,  d9,  [sp], #16
+        ret
+endfunc
+
+// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: w, x5: h, x6: shift,
+// x7: howmany
+function inv_dct8_1d_col_8bpc_neon, export=1
+        stp             d8,  d9,  [sp, #-16]!
+        lsr             w4,  w4,  #6
+        lsr             w5,  w5,  #4
+        lsl             x15, x1,  x5
+        lsl             x15, x15, #2
+        mov             w17, #0
+
+        cbz             w7,  99f
+        ldrel           q8,  x8,  dct_qtable_s16
+        neg             w8,  w6
+        dup             v31.4s,  w8
+        lsl             x11, x3,  #1
+L(dct8_col_s16_loop):
+        add             x10, x2,  x17, lsl #1
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  x10, x12, x11
+
+        dct8_1d_body_s16 0, wzr, v30, v8
+
+        lsl             x13, x17, x4
+        add             x14, x0,  x13
+
+        add             x16, x14, x15
+        shift_and_narrow_4x4s v16, v17, v18, v19, v0,  v1,  v2,  v3,  v31
+        iclip_sum4_8bpc_x4 x14, x1,  x4,  1, x5,  0, x1,  x8,  v16, v17, v18, v19
+        shift_and_narrow_4x4s v16, v17, v18, v19, v4,  v5,  v6,  v7,  v31
+        iclip_sum4_8bpc_x4 x16, x1,  x4,  1, x5,  0, x1,  x8,  v16, v17, v18, v19
+
+        add             w17, w17, #4
+        cmp             w17, w7
+        b.lt            L(dct8_col_s16_loop)
+99:
+        ldp             d8,  d9,  [sp], #16
+        ret
+endfunc
+
+// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: shift, x5: do_scale,
+// x6: howmany
+function inv_dct16_1d_row_8bpc_neon, export=1
+        stp             d8,  d9,  [sp, #-64]!
+        stp             d10, d11, [sp, #16]
+        stp             d12, d13, [sp, #32]
+        stp             d14, d15, [sp, #48]
+
+        cbz             w6,  99f
+        cbz             w5,  1f
+        mov             w15, #RECT2_SCALE
+        dup             v30.4h,  w15
+1:
+        neg             w14, w4
+        dup             v31.4s,  w14
+
+        mov             x9,  x2
+        mov             x17, x0
+        mov             w4,  #0
+        lsl             x16, x1, #1
+        lsl             x11, x3, #1
+        lsl             x12, x11, #1
+L(dct16_row_s16_loop):
+        // Load even elements into v0.4h-v7.4h and optionally scale them.
+        mov             x10, x9
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  x10, x10, x12
+
+        cbz             w5,  1f
+        sqrdmulh        v0.4h,   v0.4h,   v30.4h
+        sqrdmulh        v1.4h,   v1.4h,   v30.4h
+        sqrdmulh        v2.4h,   v2.4h,   v30.4h
+        sqrdmulh        v3.4h,   v3.4h,   v30.4h
+        sqrdmulh        v4.4h,   v4.4h,   v30.4h
+        sqrdmulh        v5.4h,   v5.4h,   v30.4h
+        sqrdmulh        v6.4h,   v6.4h,   v30.4h
+        sqrdmulh        v7.4h,   v7.4h,   v30.4h
+1:
+        // dct16_even_s16 returns half0/1 in v8.4s/v9.4s, quarter0-3 in
+        // v16.4s-v19.4s, and eighth0/1 in v20.4s/v21.4s.
+        dct16_even_s16
+
+        // Load odd elements into v0.4h-v7.4h and optionally scale them.
+        add             x10, x9, x11
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  x10, x10, x12
+
+        cbz             w5,  1f
+        sqrdmulh        v0.4h,   v0.4h,   v30.4h
+        sqrdmulh        v1.4h,   v1.4h,   v30.4h
+        sqrdmulh        v2.4h,   v2.4h,   v30.4h
+        sqrdmulh        v3.4h,   v3.4h,   v30.4h
+        sqrdmulh        v4.4h,   v4.4h,   v30.4h
+        sqrdmulh        v5.4h,   v5.4h,   v30.4h
+        sqrdmulh        v6.4h,   v6.4h,   v30.4h
+        sqrdmulh        v7.4h,   v7.4h,   v30.4h
+1:
+        // dct16_odd_s16 returns odd0-3 in v22.4s-v25.4s and odd4-7 in
+        // v12.4s-v15.4s.
+        dct16_odd_s16
+
+        add             v0.4s,   v8.4s,   v20.4s
+        add             v1.4s,   v9.4s,   v21.4s
+        sub             v2.4s,   v9.4s,   v21.4s
+        sub             v3.4s,   v8.4s,   v20.4s
+        sub             v8.4s,   v3.4s,   v19.4s
+        sub             v9.4s,   v2.4s,   v18.4s
+        sub             v10.4s,  v1.4s,   v17.4s
+        sub             v11.4s,  v0.4s,   v16.4s
+        add             v0.4s,   v0.4s,   v16.4s
+        add             v1.4s,   v1.4s,   v17.4s
+        add             v2.4s,   v2.4s,   v18.4s
+        add             v3.4s,   v3.4s,   v19.4s
+
+        add             v16.4s,  v0.4s,    v22.4s
+        add             v17.4s,  v1.4s,    v23.4s
+        add             v18.4s,  v2.4s,    v24.4s
+        add             v19.4s,  v3.4s,    v25.4s
+        sub             v20.4s,  v0.4s,    v22.4s
+        sub             v21.4s,  v1.4s,    v23.4s
+        sub             v22.4s,  v2.4s,    v24.4s
+        sub             v23.4s,  v3.4s,    v25.4s
+
+        add             x13, x17, #8
+        add             x14, x17, #16
+        add             x15, x17, #24
+
+        shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v31
+        transpose_4x4h  v16, v17, v18, v19, v0,  v1,  v2,  v3
+        store_4_strided d16, d17, d18, d19, x17, x17, x16
+
+        shift_and_narrow_4x4s v23, v22, v21, v20, v23, v22, v21, v20, v31
+        transpose_4x4h  v23, v22, v21, v20, v0,  v1,  v2,  v3
+        store_4_strided d23, d22, d21, d20, x15, x15, x16
+
+        add             v16.4s,  v8.4s,    v12.4s
+        add             v17.4s,  v9.4s,    v13.4s
+        add             v18.4s,  v10.4s,   v14.4s
+        add             v19.4s,  v11.4s,   v15.4s
+        sub             v20.4s,  v8.4s,    v12.4s
+        sub             v21.4s,  v9.4s,    v13.4s
+        sub             v22.4s,  v10.4s,   v14.4s
+        sub             v23.4s,  v11.4s,   v15.4s
+
+        shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v31
+        transpose_4x4h  v16, v17, v18, v19, v0,  v1,  v2,  v3
+        store_4_strided d16, d17, d18, d19, x13, x13, x16
+
+        shift_and_narrow_4x4s v23, v22, v21, v20, v23, v22, v21, v20, v31
+        transpose_4x4h  v23, v22, v21, v20, v0,  v1,  v2,  v3
+        store_4_strided d23, d22, d21, d20, x14, x14, x16
+        add             x9,  x9,  #8
+        add             x17, x17, x16, lsl #1
+        add             w4,  w4,  #4
+        cmp             w4,  w6
+        b.lt            L(dct16_row_s16_loop)
+
+99:
+        mul             x16, x1,  x6
+        add             x16, x0,  x16, lsl #1
+        itx_row_zero_tail_s16 x16, x2,  w3,  w1,  w6
+        ldp             d14, d15, [sp, #48]
+        ldp             d12, d13, [sp, #32]
+        ldp             d10, d11, [sp, #16]
+        ldp             d8,  d9,  [sp], #64
+        ret
+endfunc
+
+// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: w, x5: h, x6: shift,
+// x7: howmany
+function inv_dct16_1d_col_8bpc_neon, export=1
+        stp             x19, x20, [sp, #-80]!
+        stp             d8,  d9,  [sp, #16]
+        stp             d10, d11, [sp, #32]
+        stp             d12, d13, [sp, #48]
+        stp             d14, d15, [sp, #64]
+        mov             x19, x2
+        mov             x20, x0
+        lsr             w4,  w4,  #6
+        lsr             w5,  w5,  #5
+        mov             w9,  #0
+
+        cbz             w7,  99f
+        neg             w6,  w6
+        dup             v31.4s,  w6
+L(dct16_col_s16_loop):
+        add             x2,  x19, x9,  lsl #1
+        lsl             x10, x9,  x4
+        add             x0,  x20, x10
+
+        // Load even elements into v0.4h-v7.4h, no scaling.
+        mov             x10, x2
+        lsl             x12, x3, #2
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  x10, x10, x12
+
+        // dct16_even_s16 returns half0/1 in v8.4s/v9.4s, quarter0-3 in
+        // v16.4s-v19.4s, and eighth0/1 in v20.4s/v21.4s.
+        dct16_even_s16
+
+        // Load odd elements into v0.4h-v7.4h, no scaling.
+        add             x10, x2, x3, lsl #1
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  x10, x10, x12
+
+        // dct16_odd_s16 returns odd0-3 in v22.4s-v25.4s and odd4-7 in
+        // v12.4s-v15.4s.
+        dct16_odd_s16
+
+        add             v0.4s,   v8.4s,   v20.4s
+        add             v1.4s,   v9.4s,   v21.4s
+        sub             v2.4s,   v9.4s,   v21.4s
+        sub             v3.4s,   v8.4s,   v20.4s
+        sub             v8.4s,   v3.4s,   v19.4s
+        sub             v9.4s,   v2.4s,   v18.4s
+        sub             v10.4s,  v1.4s,   v17.4s
+        sub             v11.4s,  v0.4s,   v16.4s
+        add             v0.4s,   v0.4s,   v16.4s
+        add             v1.4s,   v1.4s,   v17.4s
+        add             v2.4s,   v2.4s,   v18.4s
+        add             v3.4s,   v3.4s,   v19.4s
+
+        add             x16, x0, x1, lsl #2
+        add             x17, x0, x1, lsl #3
+        add             x10, x17,  x1, lsl #2
+        dct16_odd_add_s16 x0, x10, x1, x4, 1, x5, 0, x1, v31, v0,  v1,  v2,  v3,  v22, v23, v24, v25
+        dct16_odd_add_s16 x16,  x17, x1, x4, 1, x5, 0, x1, v31, v8,  v9,  v10, v11, v12, v13, v14, v15
+
+        add             w9,  w9,  #4
+        cmp             w9,  w7
+        b.lt            L(dct16_col_s16_loop)
+
+99:
+        ldp             d14, d15, [sp, #64]
+        ldp             d12, d13, [sp, #48]
+        ldp             d10, d11, [sp, #32]
+        ldp             d8,  d9,  [sp, #16]
+        ldp             x19, x20, [sp], #80
+        ret
+endfunc
+
+// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: shift, x5: do_scale,
+// x6: howmany
+function inv_dct32_1d_row_8bpc_neon, export=1
+        sub             sp, sp, #400
+        str             x29, [sp]
+        mov             x29, sp
+        stp             x19, x20, [x29, #16]
+        stp             d8,  d9,  [x29, #336]
+        stp             d10, d11, [x29, #352]
+        stp             d12, d13, [x29, #368]
+        stp             d14, d15, [x29, #384]
+
+        cbz             w6,  99f
+        neg             w17, w4
+        mov             x9,  x2
+        mov             x19, x0
+        mov             w20, #0
+        lsl             x16, x1, #1
+
+L(dct32_row_s16_loop):
+        // Load odd elements into v0.4h-v7.4h, optionally scale them.
+        add             x10, x9, x3, lsl #2
+        lsl             x12, x3, #3
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  x10, x10, x12
+
+        cbz             w5,  1f
+        mov             w13, #RECT2_SCALE
+        dup             v16.4h,  w13
+        sqrdmulh        v0.4h,   v0.4h,   v16.4h
+        sqrdmulh        v1.4h,   v1.4h,   v16.4h
+        sqrdmulh        v2.4h,   v2.4h,   v16.4h
+        sqrdmulh        v3.4h,   v3.4h,   v16.4h
+        sqrdmulh        v4.4h,   v4.4h,   v16.4h
+        sqrdmulh        v5.4h,   v5.4h,   v16.4h
+        sqrdmulh        v6.4h,   v6.4h,   v16.4h
+        sqrdmulh        v7.4h,   v7.4h,   v16.4h
+1:
+        // dct16_odd_s16 returns odd0-3 in v22.4s-v25.4s and odd4-7 in
+        // v12.4s-v15.4s.
+        dct16_odd_s16
+        stp             q22, q23, [x29, #80]
+        stp             q24, q25, [x29, #112]
+        stp             q12, q13, [x29, #144]
+        stp             q14, q15, [x29, #176]
+
+        // Load eighth elements into v0.4h-v3.4h, optionally scale them.
+        add             x10, x9, x3, lsl #3
+        lsl             x12, x3, #4
+        load_4_strided  d0,  d1,  d2,  d3,  x10, x10, x12
+
+        cbz             w5,  1f
+        mov             w13, #RECT2_SCALE
+        dup             v16.4h,  w13
+        sqrdmulh        v0.4h,   v0.4h,   v16.4h
+        sqrdmulh        v1.4h,   v1.4h,   v16.4h
+        sqrdmulh        v2.4h,   v2.4h,   v16.4h
+        sqrdmulh        v3.4h,   v3.4h,   v16.4h
+1:
+        // dct32_eighth_s16 returns eighth0-eighth3 in v24.4s-v27.4s.
+        dct32_eighth_s16
+        stp             q24, q25, [x29, #208]
+        stp             q26, q27, [x29, #240]
+
+        // Load sixteenth elements into v0.4h/v1.4h, optionally scale them.
+        add             x10, x9, x3, lsl #4
+        lsl             x12, x3, #5
+        load_2_strided  d0,  d1,  x10, x10, x12
+
+        cbz             w5,  1f
+        mov             w13, #RECT2_SCALE
+        dup             v16.4h,  w13
+        sqrdmulh        v0.4h,   v0.4h,   v16.4h
+        sqrdmulh        v1.4h,   v1.4h,   v16.4h
+1:
+        // dct32_sixteenth_s16 returns sixteenth0/sixteenth1 in v28.4s/v29.4s.
+        dct32_sixteenth_s16
+        stp             q28, q29, [x29, #272]
+
+        // Load 32nd elements into v0.4h/v1.4h, optionally scale them.
+        lsl             x12, x3, #5
+        load_2_strided  d0,  d1,  x9, x9, x12
+
+        cbz             w5,  1f
+        mov             w13, #RECT2_SCALE
+        dup             v16.4h,  w13
+        sqrdmulh        v0.4h,   v0.4h,   v16.4h
+        sqrdmulh        v1.4h,   v1.4h,   v16.4h
+1:
+        saddl           v30.4s,  v0.4h,   v1.4h
+        ssubl           v31.4s,  v0.4h,   v1.4h
+        shl             v30.4s,  v30.4s,  #6
+        shl             v31.4s,  v31.4s,  #6
+        stp             q30, q31, [x29, #304]
+
+        // Even elements will be loaded multiple times so optionally scale them
+        // in-place first.
+        cbz             w5,  1f
+        add             x10, x9, x3, lsl #1
+        lsl             x12, x3, #2
+        mov             w14, #RECT2_SCALE
+        dup             v16.4h,  w14
+        scale_inplace_8x8h x10, x12, x13, v16
+        add             x10, x10, x12, lsl #3
+        scale_inplace_8x8h x10, x12, x13, v16
+1:
+        add             x11, x9, x3, lsl #1
+        lsl             x12, x3, #2
+        movrel          x15, dct32_odd_coeffs_s16
+
+        // block 0
+        ldp             q24, q25, [x29, #208]
+        ldp             q26, q27, [x29, #240]
+        ldp             q28, q29, [x29, #272]
+        ldp             q30, q31, [x29, #304]
+        dct32_odd_dot_block_s16 x11, x12, x15, v16, v17, v18, v19, v20, v21
+        ldp             q0,  q1,  [x29, #80]
+        ldp             q2,  q3,  [x29, #112]
+        dct32_combine_even0_s16 v20, v21, v22, v23
+        add             v20.4s,  v20.4s,  v0.4s
+        add             v21.4s,  v21.4s,  v1.4s
+        add             v22.4s,  v22.4s,  v2.4s
+        add             v23.4s,  v23.4s,  v3.4s
+        mov             x13, x19
+        add             x14, x19, #56
+        dct32_odd_store_s16 x13, x14, x16, w17, v20, v21, v22, v23
+
+        // block 1
+        ldp             q24, q25, [x29, #208]
+        ldp             q26, q27, [x29, #240]
+        ldp             q28, q29, [x29, #272]
+        ldp             q30, q31, [x29, #304]
+        dct32_odd_dot_block_s16 x11, x12, x15, v16, v17, v18, v19, v20, v21
+        ldp             q0,  q1,  [x29, #144]
+        ldp             q2,  q3,  [x29, #176]
+        dct32_combine_even1_s16 v20, v21, v22, v23
+        add             v20.4s,  v20.4s,  v0.4s
+        add             v21.4s,  v21.4s,  v1.4s
+        add             v22.4s,  v22.4s,  v2.4s
+        add             v23.4s,  v23.4s,  v3.4s
+        add             x13,     x19,    #8
+        add             x14,     x19,    #48
+        dct32_odd_store_s16 x13, x14, x16, w17, v20, v21, v22, v23
+
+        // block 2
+        ldp             q24, q25, [x29, #208]
+        ldp             q26, q27, [x29, #240]
+        ldp             q28, q29, [x29, #272]
+        ldp             q30, q31, [x29, #304]
+        dct32_odd_dot_block_s16 x11, x12, x15, v16, v17, v18, v19, v20, v21
+        ldp             q0,  q1,  [x29, #144]
+        ldp             q2,  q3,  [x29, #176]
+        dct32_combine_even1_s16 v20, v21, v22, v23
+        sub             v4.4s,   v23.4s,  v3.4s
+        sub             v5.4s,   v22.4s,  v2.4s
+        sub             v6.4s,   v21.4s,  v1.4s
+        sub             v7.4s,   v20.4s,  v0.4s
+        add             x13, x19, #16
+        add             x14, x19, #40
+        dct32_odd_store_s16 x13, x14, x16, w17, v4,  v5,  v6,  v7
+
+        // block 3
+        ldp             q24, q25, [x29, #208]
+        ldp             q26, q27, [x29, #240]
+        ldp             q28, q29, [x29, #272]
+        ldp             q30, q31, [x29, #304]
+        dct32_odd_dot_block_s16 x11, x12, x15, v16, v17, v18, v19, v20, v21
+        ldp             q0,  q1,  [x29, #80]
+        ldp             q2,  q3,  [x29, #112]
+        dct32_combine_even0_s16 v20, v21, v22, v23
+        sub             v4.4s,   v23.4s,  v3.4s
+        sub             v5.4s,   v22.4s,  v2.4s
+        sub             v6.4s,   v21.4s,  v1.4s
+        sub             v7.4s,   v20.4s,  v0.4s
+        add             x13, x19, #24
+        add             x14, x19, #32
+        dct32_odd_store_s16 x13, x14, x16, w17, v4,  v5,  v6,  v7
+        add             x9,  x9,  #8
+        add             x19, x19, x16, lsl #2
+        add             w20, w20, #4
+        cmp             w20, w6
+        b.lt            L(dct32_row_s16_loop)
+99:
+        mul             x16, x1,  x6
+        add             x16, x0,  x16, lsl #1
+        itx_row_zero_tail_s16 x16, x2,  w3,  w1,  w6
+        ldp             d14, d15, [x29, #384]
+        ldp             d12, d13, [x29, #368]
+        ldp             d10, d11, [x29, #352]
+        ldp             d8,  d9,  [x29, #336]
+        ldp             x19, x20, [x29, #16]
+        ldr             x29, [sp]
+        add             sp, sp, #400
+        ret
+endfunc
+
+// x0: dst, x1: dst_stride, x2: c, x3: stride, x4: w, x5: h, x6: shift,
+// x7: howmany
+function inv_dct32_1d_col_8bpc_neon, export=1
+        sub             sp, sp, #432
+        str             x29, [sp]
+        mov             x29, sp
+        stp             x27, x28, [x29, #16]
+        stp             x19, x20, [x29, #32]
+        stp             x23, x24, [x29, #48]
+        stp             d8,  d9,  [x29, #368]
+        stp             d10, d11, [x29, #384]
+        stp             d12, d13, [x29, #400]
+        stp             d14, d15, [x29, #416]
+        mov             x19, x2
+        mov             x20, x0
+        mov             x23, x3
+        mov             w24, w7
+        lsr             w4,  w4,  #6
+        lsr             w5,  w5,  #6
+        mov             w27, w6
+        mov             w28, #0
+
+        cbz             w24, 99f
+L(dct32_col_s16_loop):
+        add             x2,  x19, x28, lsl #1
+        lsl             x10, x28, x4
+        add             x0,  x20, x10
+
+        // Load odd elements into v0.4h-v7.4h, no scaling.
+        lsl             x12, x23, #3
+        add             x10, x2, x23, lsl #2
+        load_8_strided  d0,  d1,  d2,  d3,  d4,  d5,  d6,  d7,  x10, x10, x12
+
+        // dct16_odd_s16 returns odd0-3 in v22.4s-v25.4s and odd4-7 in
+        // v12.4s-v15.4s.
+        dct16_odd_s16
+        stp             q22, q23, [x29, #112]
+        stp             q24, q25, [x29, #144]
+        stp             q12, q13, [x29, #176]
+        stp             q14, q15, [x29, #208]
+
+        // Load eighth elements into v0.4h-v3.4h, no scaling.
+        add             x10, x2, x23, lsl #3
+        lsl             x12, x23, #4
+        load_4_strided  d0,  d1,  d2,  d3,  x10, x10, x12
+
+        // dct32_eighth_s16 returns eighth0-eighth3 in v24.4s-v27.4s.
+        dct32_eighth_s16
+        stp             q24, q25, [x29, #240]
+        stp             q26, q27, [x29, #272]
+
+        // Load sixteenth elements into v0.4h/v1.4h, no scaling.
+        add             x10, x2, x23, lsl #4
+        lsl             x12, x23, #5
+        load_2_strided  d0,  d1,  x10, x10, x12
+
+        // dct32_sixteenth_s16 returns sixteenth0/sixteenth1 in v28.4s/v29.4s.
+        dct32_sixteenth_s16
+        stp             q28, q29, [x29, #304]
+
+        // Load 32nd elements into v0.4h/v1.4h, no scaling.
+        lsl             x12, x23, #5
+        load_2_strided  d0,  d1,  x2, x2, x12
+
+        saddl           v30.4s,  v0.4h,   v1.4h
+        ssubl           v31.4s,  v0.4h,   v1.4h
+        shl             v30.4s,  v30.4s,  #6
+        shl             v31.4s,  v31.4s,  #6
+        stp             q30, q31, [x29, #336]
+
+        add             x11, x2, x23, lsl #1
+        lsl             x12, x23, #2
+        movrel          x15, dct32_odd_coeffs_s16
+        lsl             x6,  x1, x5
+        lsl             x10, x6,  #2
+        neg             w9,  w27
+
+        // block 0
+        ldp             q24, q25, [x29, #240]
+        ldp             q26, q27, [x29, #272]
+        ldp             q28, q29, [x29, #304]
+        ldp             q30, q31, [x29, #336]
+        dct32_odd_dot_block_s16 x11, x12, x15, v16, v17, v18, v19, v20, v21
+        ldp             q0,  q1,  [x29, #112]
+        ldp             q2,  q3,  [x29, #144]
+        dct32_combine_even0_s16 v20, v21, v22, v23
+        add             v20.4s,  v20.4s,  v0.4s
+        add             v21.4s,  v21.4s,  v1.4s
+        add             v22.4s,  v22.4s,  v2.4s
+        add             v23.4s,  v23.4s,  v3.4s
+        mov             x13, x0
+        add             x14, x0, x10, lsl #2
+        add             x14, x14,  x10, lsl #1
+        add             x14, x14, x10
+        dup             v31.4s,  w9
+        dct16_odd_add_s16 x13, x14, x1, x4, 1, x5, 1, x6,  v31, v20, v21, v22, v23, v16, v17, v18, v19
+
+        // block 1
+        ldp             q24, q25, [x29, #240]
+        ldp             q26, q27, [x29, #272]
+        ldp             q28, q29, [x29, #304]
+        ldp             q30, q31, [x29, #336]
+        dct32_odd_dot_block_s16 x11, x12, x15, v16, v17, v18, v19, v20, v21
+        ldp             q0,  q1,  [x29, #176]
+        ldp             q2,  q3,  [x29, #208]
+        dct32_combine_even1_s16 v20, v21, v22, v23
+        add             v20.4s,  v20.4s,  v0.4s
+        add             v21.4s,  v21.4s,  v1.4s
+        add             v22.4s,  v22.4s,  v2.4s
+        add             v23.4s,  v23.4s,  v3.4s
+        add             x13,     x0,    x10
+        add             x14, x0, x10, lsl #2
+        add             x14, x14,  x10, lsl #1
+        dup             v31.4s,  w9
+        dct16_odd_add_s16 x13, x14, x1, x4, 1, x5, 1, x6,  v31, v20, v21, v22, v23, v16, v17, v18, v19
+
+        // block 2
+        ldp             q24, q25, [x29, #240]
+        ldp             q26, q27, [x29, #272]
+        ldp             q28, q29, [x29, #304]
+        ldp             q30, q31, [x29, #336]
+        dct32_odd_dot_block_s16 x11, x12, x15, v16, v17, v18, v19, v20, v21
+        ldp             q0,  q1,  [x29, #176]
+        ldp             q2,  q3,  [x29, #208]
+        dct32_combine_even1_s16 v20, v21, v22, v23
+        sub             v4.4s,   v23.4s,  v3.4s
+        sub             v5.4s,   v22.4s,  v2.4s
+        sub             v6.4s,   v21.4s,  v1.4s
+        sub             v7.4s,   v20.4s,  v0.4s
+        add             x13, x0, x10, lsl #1
+        add             x14, x13,  x10, lsl #1
+        add             x14, x14, x10
+        dup             v31.4s,  w9
+        dct16_odd_add_s16 x13, x14, x1, x4, 1, x5, 1, x6,  v31, v4,  v5,  v6,  v7,  v16, v17, v18, v19
+
+        // block 3
+        ldp             q24, q25, [x29, #240]
+        ldp             q26, q27, [x29, #272]
+        ldp             q28, q29, [x29, #304]
+        ldp             q30, q31, [x29, #336]
+        dct32_odd_dot_block_s16 x11, x12, x15, v16, v17, v18, v19, v20, v21
+        ldp             q0,  q1,  [x29, #112]
+        ldp             q2,  q3,  [x29, #144]
+        dct32_combine_even0_s16 v20, v21, v22, v23
+        sub             v4.4s,   v23.4s,  v3.4s
+        sub             v5.4s,   v22.4s,  v2.4s
+        sub             v6.4s,   v21.4s,  v1.4s
+        sub             v7.4s,   v20.4s,  v0.4s
+        add             x13, x0, x10, lsl #1
+        add             x13, x13, x10
+        add             x14, x13, x10
+        dup             v31.4s,  w9
+        dct16_odd_add_s16 x13, x14, x1, x4, 1, x5, 1, x6,  v31, v4,  v5,  v6,  v7,  v16, v17, v18, v19
+
+        add             w28, w28, #4
+        cmp             w28, w24
+        b.lt            L(dct32_col_s16_loop)
+99:
+        ldp             d14, d15, [x29, #416]
+        ldp             d12, d13, [x29, #400]
+        ldp             d10, d11, [x29, #384]
+        ldp             d8,  d9,  [x29, #368]
+        ldp             x23, x24, [x29, #48]
+        ldp             x19, x20, [x29, #32]
+        ldp             x27, x28, [x29, #16]
+        ldr             x29, [sp]
+        add             sp, sp, #432
+        ret
+endfunc
 
 // The identity row/col families only differ in block size and the
 // widen/multiply step, so generate them from common macros to keep the scale
@@ -933,9 +1891,9 @@ function inv_identity4_1d_row_8bpc_neon, export=1
         lsl             x9,  x1,  #1
         dup             v31.4s,  w10  // -shift
         movi            v0.4h,   #128  // amount
-        mov             w11, #0x5a80
+        mov             w11, #RECT2_SCALE
         mov             x16, x0
-        dup             v30.4h,  w11  // 1/sqrt2
+        dup             v30.4h,  w11
         mov             x12, #0
 L(id4_row_s16_loop):
         add             x14, x2,  x12, lsl #1
@@ -957,9 +1915,9 @@ function \name, export=1
         dup             v31.4s,  w10  // -shift
         mov             w11, #\amount
         dup             v0.4h,   w11  // amount
-        mov             w11, #0x5a80
+        mov             w11, #RECT2_SCALE
         mov             x12, #0
-        dup             v30.4h,  w11  // 1/sqrt2
+        dup             v30.4h,  w11
         mov             x16, x0
 2:
         add             x14, x2,  x12, lsl #1
@@ -1371,108 +2329,33 @@ L(itx_dc_only_w4):
         ret
 endfunc
 
-const dct4_coeffs_s16, align=4
-        .short           64,   83,   64,   35
-        .short           64,   35,  -64,  -83
-        .short           64,  -35,  -64,   83
-        .short           64,  -83,   64,  -35
+const dct_qtable_s16, align=4
+        .short             83,   35,    0,    0
+        .short             89,   75,   50,   18
 endconst
 
-const dct8_coeffs_s16, align=4
-        .short           64,   89,   83,   75,   64,   50,   35,   18
-        .short           64,   75,   35,  -18,  -64,  -89,  -83,  -50
-        .short           64,   50,  -35,  -89,  -64,   18,   83,   75
-        .short           64,   18,  -83,  -50,   64,   75,  -35,  -89
-        .short           64,  -18,  -83,   50,   64,  -75,  -35,   89
-        .short           64,  -50,  -35,   89,  -64,  -18,   83,  -75
-        .short           64,  -75,   35,   18,  -64,   89,  -83,   50
-        .short           64,  -89,   83,  -75,   64,  -50,   35,  -18
+const dct16_odd_qtable_s16, align=4
+        .short             90,   87,   80,   70
+        .short             57,   43,   26,    9
 endconst
 
-const dct16_coeffs_s16, align=4
-        .short           64,   90,   89,   87,   83,   80,   75,   70,   64,   57,   50,   43,   35,   26,   18,    9
-        .short           64,   87,   75,   57,   35,    9,  -18,  -43,  -64,  -80,  -89,  -90,  -83,  -70,  -50,  -26
-        .short           64,   80,   50,    9,  -35,  -70,  -89,  -87,  -64,  -26,   18,   57,   83,   90,   75,   43
-        .short           64,   70,   18,  -43,  -83,  -87,  -50,    9,   64,   90,   75,   26,  -35,  -80,  -89,  -57
-        .short           64,   57,  -18,  -80,  -83,  -26,   50,   90,   64,   -9,  -75,  -87,  -35,   43,   89,   70
-        .short           64,   43,  -50,  -90,  -35,   57,   89,   26,  -64,  -87,  -18,   70,   83,    9,  -75,  -80
-        .short           64,   26,  -75,  -70,   35,   90,   18,  -80,  -64,   43,   89,    9,  -83,  -57,   50,   87
-        .short           64,    9,  -89,  -26,   83,   43,  -75,  -57,   64,   70,  -50,  -80,   35,   87,  -18,  -90
-        .short           64,   -9,  -89,   26,   83,  -43,  -75,   57,   64,  -70,  -50,   80,   35,  -87,  -18,   90
-        .short           64,  -26,  -75,   70,   35,  -90,   18,   80,  -64,  -43,   89,   -9,  -83,   57,   50,  -87
-        .short           64,  -43,  -50,   90,  -35,  -57,   89,  -26,  -64,   87,  -18,  -70,   83,   -9,  -75,   80
-        .short           64,  -57,  -18,   80,  -83,   26,   50,  -90,   64,    9,  -75,   87,  -35,  -43,   89,  -70
-        .short           64,  -70,   18,   43,  -83,   87,  -50,   -9,   64,  -90,   75,  -26,  -35,   80,  -89,   57
-        .short           64,  -80,   50,   -9,  -35,   70,  -89,   87,  -64,   26,   18,  -57,   83,  -90,   75,  -43
-        .short           64,  -87,   75,  -57,   35,   -9,  -18,   43,  -64,   80,  -89,   90,  -83,   70,  -50,   26
-        .short           64,  -90,   89,  -87,   83,  -80,   75,  -70,   64,  -57,   50,  -43,   35,  -26,   18,   -9
-endconst
-
-const dct32_coeffs_s16, align=4
-        .short           64,   90,   90,   90,   89,   88,   87,   85,   83,   82,   80,   78,   75,   73,   70,   67
-        .short           64,   61,   57,   54,   50,   47,   43,   39,   35,   30,   26,   22,   18,   13,    9,    4
-        .short           64,   90,   87,   82,   75,   67,   57,   47,   35,   22,    9,   -4,  -18,  -30,  -43,  -54
-        .short          -64,  -73,  -80,  -85,  -89,  -90,  -90,  -88,  -83,  -78,  -70,  -61,  -50,  -39,  -26,  -13
-        .short           64,   88,   80,   67,   50,   30,    9,  -13,  -35,  -54,  -70,  -82,  -89,  -90,  -87,  -78
-        .short          -64,  -47,  -26,   -4,   18,   39,   57,   73,   83,   90,   90,   85,   75,   61,   43,   22
-        .short           64,   85,   70,   47,   18,  -13,  -43,  -67,  -83,  -90,  -87,  -73,  -50,  -22,    9,   39
-        .short           64,   82,   90,   88,   75,   54,   26,   -4,  -35,  -61,  -80,  -90,  -89,  -78,  -57,  -30
-        .short           64,   82,   57,   22,  -18,  -54,  -80,  -90,  -83,  -61,  -26,   13,   50,   78,   90,   85
-        .short           64,   30,   -9,  -47,  -75,  -90,  -87,  -67,  -35,    4,   43,   73,   89,   88,   70,   39
-        .short           64,   78,   43,   -4,  -50,  -82,  -90,  -73,  -35,   13,   57,   85,   89,   67,   26,  -22
-        .short          -64,  -88,  -87,  -61,  -18,   30,   70,   90,   83,   54,    9,  -39,  -75,  -90,  -80,  -47
-        .short           64,   73,   26,  -30,  -75,  -90,  -70,  -22,   35,   78,   90,   67,   18,  -39,  -80,  -90
-        .short          -64,  -13,   43,   82,   89,   61,    9,  -47,  -83,  -88,  -57,   -4,   50,   85,   87,   54
-        .short           64,   67,    9,  -54,  -89,  -78,  -26,   39,   83,   85,   43,  -22,  -75,  -90,  -57,    4
-        .short           64,   90,   70,   13,  -50,  -88,  -80,  -30,   35,   82,   87,   47,  -18,  -73,  -90,  -61
-        .short           64,   61,   -9,  -73,  -89,  -47,   26,   82,   83,   30,  -43,  -88,  -75,  -13,   57,   90
-        .short           64,   -4,  -70,  -90,  -50,   22,   80,   85,   35,  -39,  -87,  -78,  -18,   54,   90,   67
-        .short           64,   54,  -26,  -85,  -75,   -4,   70,   88,   35,  -47,  -90,  -61,   18,   82,   80,   13
-        .short          -64,  -90,  -43,   39,   89,   67,   -9,  -78,  -83,  -22,   57,   90,   50,  -30,  -87,  -73
-        .short           64,   47,  -43,  -90,  -50,   39,   90,   54,  -35,  -90,  -57,   30,   89,   61,  -26,  -88
-        .short          -64,   22,   87,   67,  -18,  -85,  -70,   13,   83,   73,   -9,  -82,  -75,    4,   80,   78
-        .short           64,   39,  -57,  -88,  -18,   73,   80,   -4,  -83,  -67,   26,   90,   50,  -47,  -90,  -30
-        .short           64,   85,    9,  -78,  -75,   13,   87,   61,  -35,  -90,  -43,   54,   89,   22,  -70,  -82
-        .short           64,   30,  -70,  -78,   18,   90,   43,  -61,  -83,    4,   87,   54,  -50,  -88,   -9,   82
-        .short           64,  -39,  -90,  -22,   75,   73,  -26,  -90,  -35,   67,   80,  -13,  -89,  -47,   57,   85
-        .short           64,   22,  -80,  -61,   50,   85,   -9,  -90,  -35,   73,   70,  -39,  -89,   -4,   87,   47
-        .short          -64,  -78,   26,   90,   18,  -82,  -57,   54,   83,  -13,  -90,  -30,   75,   67,  -43,  -88
-        .short           64,   13,  -87,  -39,   75,   61,  -57,  -78,   35,   88,   -9,  -90,  -18,   85,   43,  -73
-        .short          -64,   54,   80,  -30,  -89,    4,   90,   22,  -83,  -47,   70,   67,  -50,  -82,   26,   90
-        .short           64,    4,  -90,  -13,   89,   22,  -87,  -30,   83,   39,  -80,  -47,   75,   54,  -70,  -61
-        .short           64,   67,  -57,  -73,   50,   78,  -43,  -82,   35,   85,  -26,  -88,   18,   90,   -9,  -90
-        .short           64,   -4,  -90,   13,   89,  -22,  -87,   30,   83,  -39,  -80,   47,   75,  -54,  -70,   61
-        .short           64,  -67,  -57,   73,   50,  -78,  -43,   82,   35,  -85,  -26,   88,   18,  -90,   -9,   90
-        .short           64,  -13,  -87,   39,   75,  -61,  -57,   78,   35,  -88,   -9,   90,  -18,  -85,   43,   73
-        .short          -64,  -54,   80,   30,  -89,   -4,   90,  -22,  -83,   47,   70,  -67,  -50,   82,   26,  -90
-        .short           64,  -22,  -80,   61,   50,  -85,   -9,   90,  -35,  -73,   70,   39,  -89,    4,   87,  -47
-        .short          -64,   78,   26,  -90,   18,   82,  -57,  -54,   83,   13,  -90,   30,   75,  -67,  -43,   88
-        .short           64,  -30,  -70,   78,   18,  -90,   43,   61,  -83,   -4,   87,  -54,  -50,   88,   -9,  -82
-        .short           64,   39,  -90,   22,   75,  -73,  -26,   90,  -35,  -67,   80,   13,  -89,   47,   57,  -85
-        .short           64,  -39,  -57,   88,  -18,  -73,   80,    4,  -83,   67,   26,  -90,   50,   47,  -90,   30
-        .short           64,  -85,    9,   78,  -75,  -13,   87,  -61,  -35,   90,  -43,  -54,   89,  -22,  -70,   82
-        .short           64,  -47,  -43,   90,  -50,  -39,   90,  -54,  -35,   90,  -57,  -30,   89,  -61,  -26,   88
-        .short          -64,  -22,   87,  -67,  -18,   85,  -70,  -13,   83,  -73,   -9,   82,  -75,   -4,   80,  -78
-        .short           64,  -54,  -26,   85,  -75,    4,   70,  -88,   35,   47,  -90,   61,   18,  -82,   80,  -13
-        .short          -64,   90,  -43,  -39,   89,  -67,   -9,   78,  -83,   22,   57,  -90,   50,   30,  -87,   73
-        .short           64,  -61,   -9,   73,  -89,   47,   26,  -82,   83,  -30,  -43,   88,  -75,   13,   57,  -90
-        .short           64,    4,  -70,   90,  -50,  -22,   80,  -85,   35,   39,  -87,   78,  -18,  -54,   90,  -67
-        .short           64,  -67,    9,   54,  -89,   78,  -26,  -39,   83,  -85,   43,   22,  -75,   90,  -57,   -4
-        .short           64,  -90,   70,  -13,  -50,   88,  -80,   30,   35,  -82,   87,  -47,  -18,   73,  -90,   61
-        .short           64,  -73,   26,   30,  -75,   90,  -70,   22,   35,  -78,   90,  -67,   18,   39,  -80,   90
-        .short          -64,   13,   43,  -82,   89,  -61,    9,   47,  -83,   88,  -57,    4,   50,  -85,   87,  -54
-        .short           64,  -78,   43,    4,  -50,   82,  -90,   73,  -35,  -13,   57,  -85,   89,  -67,   26,   22
-        .short          -64,   88,  -87,   61,  -18,  -30,   70,  -90,   83,  -54,    9,   39,  -75,   90,  -80,   47
-        .short           64,  -82,   57,  -22,  -18,   54,  -80,   90,  -83,   61,  -26,  -13,   50,  -78,   90,  -85
-        .short           64,  -30,   -9,   47,  -75,   90,  -87,   67,  -35,   -4,   43,  -73,   89,  -88,   70,  -39
-        .short           64,  -85,   70,  -47,   18,   13,  -43,   67,  -83,   90,  -87,   73,  -50,   22,    9,  -39
-        .short           64,  -82,   90,  -88,   75,  -54,   26,    4,  -35,   61,  -80,   90,  -89,   78,  -57,   30
-        .short           64,  -88,   80,  -67,   50,  -30,    9,   13,  -35,   54,  -70,   82,  -89,   90,  -87,   78
-        .short          -64,   47,  -26,    4,   18,  -39,   57,  -73,   83,  -90,   90,  -85,   75,  -61,   43,  -22
-        .short           64,  -90,   87,  -82,   75,  -67,   57,  -47,   35,  -22,    9,    4,  -18,   30,  -43,   54
-        .short          -64,   73,  -80,   85,  -89,   90,  -90,   88,  -83,   78,  -70,   61,  -50,   39,  -26,   13
-        .short           64,  -90,   90,  -90,   89,  -88,   87,  -85,   83,  -82,   80,  -78,   75,  -73,   70,  -67
-        .short           64,  -61,   57,  -54,   50,  -47,   43,  -39,   35,  -30,   26,  -22,   18,  -13,    9,   -4
+const dct32_odd_coeffs_s16, align=4
+        .short             90,   90,   88,   85,   82,   78,   73,   67,   61,   54,   47,   39,   30,   22,   13,    4
+        .short             90,   82,   67,   47,   22,   -4,  -30,  -54,  -73,  -85,  -90,  -88,  -78,  -61,  -39,  -13
+        .short             88,   67,   30,  -13,  -54,  -82,  -90,  -78,  -47,   -4,   39,   73,   90,   85,   61,   22
+        .short             85,   47,  -13,  -67,  -90,  -73,  -22,   39,   82,   88,   54,   -4,  -61,  -90,  -78,  -30
+        .short             82,   22,  -54,  -90,  -61,   13,   78,   85,   30,  -47,  -90,  -67,    4,   73,   88,   39
+        .short             78,   -4,  -82,  -73,   13,   85,   67,  -22,  -88,  -61,   30,   90,   54,  -39,  -90,  -47
+        .short             73,  -30,  -90,  -22,   78,   67,  -39,  -90,  -13,   82,   61,  -47,  -88,   -4,   85,   54
+        .short             67,  -54,  -78,   39,   85,  -22,  -90,    4,   90,   13,  -88,  -30,   82,   47,  -73,  -61
+        .short             61,  -73,  -47,   82,   30,  -88,  -13,   90,   -4,  -90,   22,   85,  -39,  -78,   54,   67
+        .short             54,  -85,   -4,   88,  -47,  -61,   82,   13,  -90,   39,   67,  -78,  -22,   90,  -30,  -73
+        .short             47,  -90,   39,   54,  -90,   30,   61,  -88,   22,   67,  -85,   13,   73,  -82,    4,   78
+        .short             39,  -88,   73,   -4,  -67,   90,  -47,  -30,   85,  -78,   13,   61,  -90,   54,   22,  -82
+        .short             30,  -78,   90,  -61,    4,   54,  -88,   82,  -39,  -22,   73,  -90,   67,  -13,  -47,   85
+        .short             22,  -61,   85,  -90,   73,  -39,   -4,   47,  -78,   90,  -82,   54,  -13,  -30,   67,  -88
+        .short             13,  -39,   61,  -78,   88,  -90,   85,  -73,   54,  -30,    4,   22,  -47,   67,  -82,   90
+        .short              4,  -13,   22,  -30,   39,  -47,   54,  -61,   67,  -73,   78,  -82,   85,  -88,   90,  -90
 endconst
 
 const adst4_coeffs_s16, align=4
