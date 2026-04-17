@@ -3437,3 +3437,93 @@ function sad8x8_8bpc_neon, export=1
         fmov            w0, s5
         ret
 endfunc
+
+// LUT to combine shifting a 32-bit value by 8 and narrowing it to 16 bits.
+const narrow_shift_tbl
+        .byte 1, 2, 5, 6, 9, 10, 13, 14, 17, 18, 21, 22, 25, 26, 29, 30
+endconst
+
+// void morph_neon(pixel *dst, const ptrdiff_t dst_stride,
+//                 const int alpha, const int beta,
+//                 const int w, const int h HIGHBD_DECL_SUFFIX)
+function morph_8bpc_neon, export=1
+        dup             v18.4s, w3
+        dup             v0.8h,  w2                        // alpha
+        cmp             w4,  #8
+        b.lt            L(morph_4xh)
+        movrel          x8, narrow_shift_tbl
+        ldr             q17, [x8]
+        b.eq            L(morph_8xh)
+
+1:      // w >= 16
+        mov             w6,  w4                           // width
+        mov             x7,  x0                           // dst
+2:
+        ldr             q3,  [x7]
+        mov             v4.16b, v18.16b
+        mov             v6.16b, v18.16b
+        uxtl            v2.8h,  v3.8b
+        uxtl2           v3.8h,  v3.16b
+        mov             v5.16b, v18.16b
+        mov             v7.16b, v18.16b
+        smlal           v4.4s,  v2.4h,  v0.4h             // alpha * dst[x] + beta
+        smlal           v6.4s,  v3.4h,  v0.4h
+        smlal2          v5.4s,  v2.8h,  v0.8h
+        smlal2          v7.4s,  v3.8h,  v0.8h
+        sub             w6,  w6,  #16
+        tbl             v4.16b, {v4.16b, v5.16b}, v17.16b // narrow and >> 8
+        tbl             v6.16b, {v6.16b, v7.16b}, v17.16b
+        sqxtun          v4.8b,  v4.8h
+        sqxtun          v5.8b,  v6.8h
+        stp             d4,  d5,  [x7], #16
+        cbnz            w6,  2b
+
+        sub             w5,  w5,  #1                      // height--
+        add             x0,  x0,  x1                      // dst += dst_stride
+        cbnz            w5,  1b
+        ret
+
+L(morph_8xh):
+        ldr             d2,  [x0]
+        ldr             d3,  [x0, x1]
+        mov             v4.16b, v18.16b
+        mov             v6.16b, v18.16b
+        uxtl            v2.8h,  v2.8b
+        uxtl            v3.8h,  v3.8b
+        mov             v5.16b, v18.16b
+        mov             v7.16b, v18.16b
+        smlal           v4.4s,  v2.4h,  v0.4h             // alpha * dst[x] + beta
+        smlal           v6.4s,  v3.4h,  v0.4h
+        smlal2          v5.4s,  v2.8h,  v0.8h
+        smlal2          v7.4s,  v3.8h,  v0.8h
+        sub             w5,  w5,  #2
+        tbl             v4.16b, {v4.16b, v5.16b}, v17.16b // narrow and >> 8
+        tbl             v6.16b, {v6.16b, v7.16b}, v17.16b
+        sqxtun          v4.8b,  v4.8h
+        sqxtun          v6.8b,  v6.8h
+        str             d4,  [x0]
+        str             d6,  [x0, x1]
+        add             x0,  x0,  x1,  lsl #1
+        cbnz            w5,  L(morph_8xh)
+        ret
+
+L(morph_4xh):
+        ldr             s2,  [x0]
+        ldr             s3,  [x0, x1]
+        mov             v4.16b, v18.16b
+        mov             v5.16b, v18.16b
+        uxtl            v2.8h,  v2.8b
+        uxtl            v3.8h,  v3.8b
+        smlal           v4.4s,  v2.4h, v0.4h              // alpha * dst[x] + beta
+        smlal           v5.4s,  v3.4h, v0.4h
+        sub             w5,  w5,  #2
+        shrn            v4.4h,  v4.4s, #8
+        shrn            v5.4h,  v5.4s, #8
+        sqxtun          v4.8b,  v4.8h
+        sqxtun          v5.8b,  v5.8h
+        str             s4,  [x0]
+        str             s5,  [x0, x1]
+        add             x0,  x0,  x1,  lsl #1
+        cbnz            w5,  L(morph_4xh)
+        ret
+endfunc
