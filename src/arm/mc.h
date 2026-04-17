@@ -57,6 +57,7 @@ decl_sad_refine_mv_fn(BF(dav2d_sad_refine_mv, neon));
 decl_sad8x8_fn(BF(dav2d_sad8x8, neon));
 
 decl_morph_fn(BF(dav2d_morph, neon));
+decl_morph_fn(BF(dav2d_morph, sve2));
 
 static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
 #define init_mc_fn(type, name, suffix) \
@@ -101,6 +102,12 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
         init_8tap_fns(neon_i8mm);
     }
 #endif  // HAVE_I8MM
+
+#if HAVE_SVE2
+    if (flags & DAV2D_ARM_CPU_FLAG_SVE2) {
+        c->morph = BF(dav2d_morph, sve2);
+    }
+#endif  // HAVE_SVE2
 #endif  // BITDEPTH == 8
 
 #if BITDEPTH == 16
