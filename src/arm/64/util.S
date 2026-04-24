@@ -62,6 +62,8 @@
 #elif defined(PIC)
         adrp            \rd, \val+(\offset)
         add             \rd, \rd, :lo12:\val+(\offset)
+#elif defined(__AARCH64_CMODEL_TINY__)
+        adr             \rd, \val+(\offset)
 #else
         ldr             \rd, =\val+\offset
 #endif
