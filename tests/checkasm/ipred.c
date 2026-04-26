@@ -164,7 +164,8 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(a_y, 128, 128);
     PIXEL_RECT(a_u, 128, 128);
     PIXEL_RECT(a_v, 128, 128);
-    pixel c_top_sb[3 * 128], a_top_sb[3 * 128];
+    ALIGN_STK_64(pixel, c_top_sb, 3 * 128,);
+    ALIGN_STK_64(pixel, a_top_sb, 3 * 128,);
 
     declare_func(void, pixel *const *ptrs, const ptrdiff_t *stride,
                  int wpad, int hpad, int w, int h, int flags HIGHBD_DECL_SUFFIX);
@@ -183,7 +184,7 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                             if (check_func(c->cfl_pred[type][layout - 1],
                                 "%s_%s_w%d_pad%d_%s_%s_%dbpc",
                                 cfl_pred_type_names[type], layout_names[layout - 1],
-                                w, padding, rng0 ? "uv" : "u|v",
+                                w, padding, rng0 ? "uv" : "u_or_v",
                                 cfl_luma_filter_names[flt_type], BITDEPTH))
                             {
                                 const int h0 = padding && w < 16 ? 16 : 4;
@@ -203,15 +204,11 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                         (rnd() & (CFL_HAS_TOP | CFL_HAS_LEFT |
                                                   CFL_IS_TOP_SB_EDGE));
                                     if (type == CFL_EXPLICIT) {
-                                        const int sign_u = 1 - (rnd() & 2);
-                                        const int sign_v = 1 - (rnd() & 2);
-                                        int alpha_u = rng0 + (rnd() % (9 - rng0));
-                                        rng0 |= !alpha_u;
-                                        int alpha_v = rng0 + (rnd() % (9 - rng0));
-                                        if (rng0 == 0 && alpha_u)
-                                            alpha_v = 0;
-                                        alpha_u *= sign_u;
-                                        alpha_v *= sign_v;
+                                        int alpha_u = 1 - (rnd() & 2); // sign
+                                        int alpha_v = 1 - (rnd() & 2);
+                                        alpha_u *= rng0 + (rnd() % (9 - rng0));
+                                        alpha_v *= rng0 == 0 && alpha_u ? 0 :
+                                            1 + (rnd() % 8);
                                         flags |= (alpha_u * (1 << CFL_ALPHA_U_SHIFT)) & CFL_ALPHA_U_MASK;
                                         flags |= (alpha_v * (1 << CFL_ALPHA_V_SHIFT)) & CFL_ALPHA_V_MASK;
                                     }
