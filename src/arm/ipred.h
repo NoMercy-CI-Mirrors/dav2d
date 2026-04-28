@@ -299,9 +299,9 @@ static ALWAYS_INLINE void intra_pred_dsp_init_arm(Dav2dIntraPredDSPContext *cons
 #endif
 #if ARCH_AARCH64 && 0
     c->intra_pred[PAETH_PRED]    = BF(dav2d_ipred_paeth, neon);
-    c->intra_pred[SMOOTH_PRED]   = BF(dav2d_ipred_smooth, neon);
 #endif
 #if ARCH_AARCH64 && BITDEPTH == 8
+    c->intra_pred[SMOOTH_PRED]   = BF(dav2d_ipred_smooth, neon);
     c->intra_pred[SMOOTH_H_PRED] = BF(dav2d_ipred_smooth_h, neon);
     c->intra_pred[SMOOTH_V_PRED] = BF(dav2d_ipred_smooth_v, neon);
 #endif
