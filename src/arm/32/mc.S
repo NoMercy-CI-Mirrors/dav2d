@@ -103,20 +103,22 @@ L(\type\()_tbl):
 4:
         add             r6,  r0,  r1
         lsl             r1,  r1,  #1
-        cmp             r5,  #4
+        subs            r5,  r5,  #4
         vst1.32         {d16[0]},  [r0], r1
         vst1.32         {d16[1]},  [r6], r1
         vst1.32         {d17[0]},  [r0], r1
         vst1.32         {d17[1]},  [r6], r1
-        beq             0f
+        ble             0f
         \type           d18, d19,  q0,  q1,  q2,  q3
-        cmp             r5,  #8
+        subs            r5,  #4
         vst1.32         {d18[0]},  [r0], r1
         vst1.32         {d18[1]},  [r6], r1
         vst1.32         {d19[0]},  [r0], r1
         vst1.32         {d19[1]},  [r6], r1
-        beq             0f
+        ble             0f
         \type           d16, d17, q0,  q1,  q2,  q3
+41:
+        subs            r5,  r5,  #8
         vst1.32         {d16[0]},  [r0], r1
         vst1.32         {d16[1]},  [r6], r1
         \type           d18, d19,  q0,  q1,  q2,  q3
@@ -126,7 +128,9 @@ L(\type\()_tbl):
         vst1.32         {d18[1]},  [r6], r1
         vst1.32         {d19[0]},  [r0], r1
         vst1.32         {d19[1]},  [r6], r1
-        pop             {r4-r6,pc}
+        ble             0f
+        \type           d16, d17, q0,  q1,  q2,  q3
+        b               41b
 80:
         add             r6,  r0,  r1
         lsl             r1,  r1,  #1
