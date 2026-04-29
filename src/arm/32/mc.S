@@ -1124,7 +1124,7 @@ function \type\()_8tap_neon
         add             \mx,  \mx, r8 // mx, 8tap_h, 4tap_h
         add             \my,  \my, r9 // my, 8tap_v, 4tap_v
 .ifc \type, prep
-        lsl             \d_strd, \w, #1
+        lsl             \d_strd, \d_strd, #1
 .endif
 
         clz             r8,  \w
@@ -1295,9 +1295,11 @@ L(\type\()_8tap_h_tbl):
 
         sub             \s_strd,  \s_strd,  \w
         sub             \s_strd,  \s_strd,  #8
-.ifc \type, put
         lsl             \d_strd,  \d_strd,  #1
+.ifc \type, put
         sub             \d_strd,  \d_strd,  \w
+.else
+        sub             \d_strd,  \d_strd,  \w, lsl #1
 .endif
 161:
         vld1.8          {d16, d17, d18},  [\src]!
@@ -2271,7 +2273,7 @@ function \type\()_bilin_8bpc_neon, export=1
         vdup.8          d0,  r8
         vdup.8          d2,  r9
 .ifc \type, prep
-        lsl             \d_strd, \w, #1
+        lsl             \d_strd, \d_strd, #1
 .endif
         clz             r8,  \w
         cmp             \mx, #0
@@ -2383,9 +2385,11 @@ L(\type\()_bilin_h_tbl):
 
         sub             \s_strd,  \s_strd,  \w
         sub             \s_strd,  \s_strd,  #8
-.ifc \type, put
         lsl             \d_strd,  \d_strd,  #1
+.ifc \type, put
         sub             \d_strd,  \d_strd,  \w
+.else
+        sub             \d_strd,  \d_strd,  \w, lsl #1
 .endif
 161:
         vld1.8          {d16},  [\src]!

@@ -1241,7 +1241,7 @@ function \type\()_8tap_neon
         add             \my, \my, r10 // my, 8tap_v, 4tap_v
 
 .ifc \type, prep
-        lsl             \d_strd, \w, #1
+        lsl             \d_strd, \d_strd, #1
 .endif
 
         vdup.16         q15, \bdmax            // bitdepth_max
@@ -1386,10 +1386,8 @@ L(\type\()_8tap_h_tbl):
 
         sub             \s_strd,  \s_strd,  \w, lsl #1
         sub             \s_strd,  \s_strd,  #16
-.ifc \type, put
         lsl             \d_strd,  \d_strd,  #1
         sub             \d_strd,  \d_strd,  \w, lsl #1
-.endif
 81:
         vld1.16         {q8,  q9},  [\src]!
         vld1.16         {q10, q11}, [\sr2]!
@@ -2373,7 +2371,7 @@ function \type\()_bilin_16bpc_neon, export=1
         vdup.16         q0,  r9
         vdup.16         q2,  r10
 .ifc \type, prep
-        lsl             \d_strd, \w, #1
+        lsl             \d_strd, \d_strd, #1
 .endif
         clz             \bdmax,   \bdmax       // bitdepth_max
         clz             r9,  \w
@@ -2509,10 +2507,8 @@ L(\type\()_bilin_h_tbl):
 
         sub             \s_strd,  \s_strd,  \w, lsl #1
         sub             \s_strd,  \s_strd,  #16
-.ifc \type, put
         lsl             \d_strd,  \d_strd,  #1
         sub             \d_strd,  \d_strd,  \w, lsl #1
-.endif
 161:
         vld1.16         {q4}, [\src]!
         vld1.16         {q9}, [\sr2]!
