@@ -102,7 +102,7 @@ function \type\()_8bpc_neon, export=1
         vmov.i8         q15, #256-2
 .endif
         adr             r12, L(\type\()_tbl)
-        sub             r4,  r4,  #24
+        sub             r4,  r4,  #25
         ldr             r4,  [r12, r4, lsl #2]
         \type           d16, d17, q0,  q1,  q2,  q3
         add             r12, r12, r4
@@ -110,7 +110,6 @@ function \type\()_8bpc_neon, export=1
 
         .align 2
 L(\type\()_tbl):
-        .word 1280f - L(\type\()_tbl) + CONFIG_THUMB
         .word 640f  - L(\type\()_tbl) + CONFIG_THUMB
         .word 320f  - L(\type\()_tbl) + CONFIG_THUMB
         .word 160f  - L(\type\()_tbl) + CONFIG_THUMB
@@ -207,26 +206,6 @@ L(\type\()_tbl):
         ble             0f
         \type           d16, d17, q0, q1, q2, q3
         b               64b
-1280:
-        sub             r1,  r1,  #32
-        add             r6,  r0,  #64
-128:
-        \type           d18, d19, q0, q1, q2, q3
-        \type           d20, d21, q0, q1, q2, q3
-        \type           d22, d23, q0, q1, q2, q3
-        vst1.8          {q8,  q9},  [r0, :128]!
-        \type           d16, d17, q0, q1, q2, q3
-        vst1.8          {q10, q11}, [r0, :128], r1
-        \type           d18, d19, q0, q1, q2, q3
-        \type           d20, d21, q0, q1, q2, q3
-        vst1.8          {q8,  q9},  [r6, :128]!
-        \type           d22, d23, q0, q1, q2, q3
-        subs            r5,  r5,  #1
-        vst1.8          {q10, q11}, [r6, :128], r1
-        ble             0f
-        \type           d16, d17, q0, q1, q2, q3
-        b               128b
-
 0:
         pop             {r4-r6,pc}
 endfunc
@@ -245,7 +224,7 @@ function w_mask_\type\()_8bpc_neon, export=1
         ldr             r10,      [sp, #48]
         clz             r8,  r4
         adr             r9,  L(w_mask_\type\()_tbl)
-        sub             r8,  r8,  #24
+        sub             r8,  r8,  #25
         ldr             r8,  [r9,  r8,  lsl #2]
         add             r9,  r9,  r8
         movw            r12, #6903
@@ -267,7 +246,6 @@ function w_mask_\type\()_8bpc_neon, export=1
 
         .align 2
 L(w_mask_\type\()_tbl):
-        .word 1280f  - L(w_mask_\type\()_tbl) + CONFIG_THUMB
         .word 640f   - L(w_mask_\type\()_tbl) + CONFIG_THUMB
         .word 320f   - L(w_mask_\type\()_tbl) + CONFIG_THUMB
         .word 160f   - L(w_mask_\type\()_tbl) + CONFIG_THUMB
@@ -361,7 +339,6 @@ L(w_mask_\type\()_tbl):
         vst1.16         {d25}, [r12], r1
         bgt             8b
         pop             {r4-r10,pc}
-1280:
 640:
 320:
 160:
@@ -644,7 +621,6 @@ function put_neon
 
         .align 2
 L(put_tbl):
-        .word 1280f - L(put_tbl) + CONFIG_THUMB
         .word 640f  - L(put_tbl) + CONFIG_THUMB
         .word 32f   - L(put_tbl) + CONFIG_THUMB
         .word 160f  - L(put_tbl) + CONFIG_THUMB
@@ -706,21 +682,6 @@ L(put_tbl):
         vst1.8          {q2,  q3},  [r0], r1
         bgt             64b
         pop             {r4-r11,pc}
-1280:
-        sub             r1,  r1,  #96
-        sub             r3,  r3,  #96
-128:
-        vld1.8          {q8,  q9},  [r2]!
-        vst1.8          {q8,  q9},  [r0]!
-        vld1.8          {q10, q11}, [r2]!
-        vst1.8          {q10, q11}, [r0]!
-        vld1.8          {q12, q13}, [r2]!
-        vst1.8          {q12, q13}, [r0]!
-        vld1.8          {q14, q15}, [r2], r3
-        subs            r5,  r5,  #1
-        vst1.8          {q14, q15}, [r0], r1
-        bgt             128b
-        pop             {r4-r11,pc}
 endfunc
 
 
@@ -735,7 +696,6 @@ function prep_neon
 
         .align 2
 L(prep_tbl):
-        .word 1280f - L(prep_tbl) + CONFIG_THUMB
         .word 640f  - L(prep_tbl) + CONFIG_THUMB
         .word 320f  - L(prep_tbl) + CONFIG_THUMB
         .word 160f  - L(prep_tbl) + CONFIG_THUMB
@@ -829,42 +789,6 @@ L(prep_tbl):
         vst1.16         {q12, q13}, [r0, :128], r6
         vst1.16         {q14, q15}, [r8, :128], r6
         bgt             64b
-        pop             {r4-r11,pc}
-1280:
-        sub             r3,  r3,  #96
-        add             r8,  r0,  #32
-        mov             r6,  #64
-128:
-        vld1.8          {q0,  q1},  [r2]!
-        vld1.8          {q2,  q3},  [r2]!
-        vshll.u8        q10, d0,  #4
-        vshll.u8        q11, d1,  #4
-        vshll.u8        q12, d2,  #4
-        vshll.u8        q13, d3,  #4
-        vshll.u8        q14, d4,  #4
-        vshll.u8        q15, d5,  #4
-        vld1.8          {q8,  q9},  [r2]!
-        vst1.16         {q10, q11}, [r0, :128], r6
-        vst1.16         {q12, q13}, [r8, :128], r6
-        vshll.u8        q0,  d6,  #4
-        vshll.u8        q1,  d7,  #4
-        vshll.u8        q2,  d16, #4
-        vshll.u8        q3,  d17, #4
-        vshll.u8        q8,  d18, #4
-        vshll.u8        q9,  d19, #4
-        vld1.8          {q10, q11}, [r2], r3
-        vst1.16         {q14, q15}, [r0, :128], r6
-        vst1.16         {q0,  q1},  [r8, :128], r6
-        vshll.u8        q12, d20, #4
-        vshll.u8        q13, d21, #4
-        vshll.u8        q14, d22, #4
-        vshll.u8        q15, d23, #4
-        subs            r4,  r4,  #1
-        vst1.16         {q2,  q3},  [r0, :128], r6
-        vst1.16         {q8,  q9},  [r8, :128], r6
-        vst1.16         {q12, q13}, [r0, :128], r6
-        vst1.16         {q14, q15}, [r8, :128], r6
-        bgt             128b
         pop             {r4-r11,pc}
 endfunc
 
@@ -1129,7 +1053,7 @@ function \type\()_8tap_neon
 
         clz             r8,  \w
         tst             \mx, #(0x7f << 14)
-        sub             r8,  r8,  #24
+        sub             r8,  r8,  #25
         movrel          r10, X(mc_subpel_filters), -8
         bne             L(\type\()_8tap_h)
         tst             \my, #(0x7f << 14)
@@ -1153,7 +1077,6 @@ L(\type\()_8tap_h):
 
         .align 2
 L(\type\()_8tap_h_tbl):
-        .word 1280f - L(\type\()_8tap_h_tbl) + CONFIG_THUMB
         .word 640f  - L(\type\()_8tap_h_tbl) + CONFIG_THUMB
         .word 320f  - L(\type\()_8tap_h_tbl) + CONFIG_THUMB
         .word 160f  - L(\type\()_8tap_h_tbl) + CONFIG_THUMB
@@ -1280,8 +1203,7 @@ L(\type\()_8tap_h_tbl):
 
 160:
 320:
-640:
-1280:   // 16xN, 32xN, ... h
+640:    // 16xN, 32xN, ... h
         // This could be done without touching q4-q6, by using only
         // one temporary for vext in the loop. That's slower on A7 and A53,
         // (but surprisingly, marginally faster on A8 and A73).
@@ -1388,7 +1310,6 @@ L(\type\()_8tap_v):
 
         .align 2
 L(\type\()_8tap_v_tbl):
-        .word 1280f - L(\type\()_8tap_v_tbl) + CONFIG_THUMB
         .word 640f  - L(\type\()_8tap_v_tbl) + CONFIG_THUMB
         .word 320f  - L(\type\()_8tap_v_tbl) + CONFIG_THUMB
         .word 160f  - L(\type\()_8tap_v_tbl) + CONFIG_THUMB
@@ -1596,7 +1517,6 @@ L(\type\()_8tap_v_tbl):
 1680:   // 16x8, 16x16, ...
 320:    // 32x8, 32x16, ...
 640:
-1280:
         vpush           {q4}
         vld1.8          {d0}, [\my, :64]
         sub             \src, \src, \s_strd
@@ -1723,7 +1643,6 @@ L(\type\()_8tap_hv):
 
         .align 2
 L(\type\()_8tap_hv_tbl):
-        .word 1280f - L(\type\()_8tap_hv_tbl) + CONFIG_THUMB
         .word 640f  - L(\type\()_8tap_hv_tbl) + CONFIG_THUMB
         .word 320f  - L(\type\()_8tap_hv_tbl) + CONFIG_THUMB
         .word 160f  - L(\type\()_8tap_hv_tbl) + CONFIG_THUMB
@@ -2113,7 +2032,6 @@ L(\type\()_8tap_filter_4):
 
 880:    // 8x8, 8x16, ..., 16x8, ..., 32x8, ... hv
 640:
-1280:
         vpush           {q4-q7}
         vld1.8          {d0},  [\mx, :64]
         vld1.8          {d2},  [\my, :64]
@@ -2277,7 +2195,7 @@ function \type\()_bilin_8bpc_neon, export=1
 .endif
         clz             r8,  \w
         cmp             \mx, #0
-        sub             r8,  r8,  #24
+        sub             r8,  r8,  #25
         bne             L(\type\()_bilin_h)
         cmp             \my, #0
         bne             L(\type\()_bilin_v)
@@ -2294,7 +2212,6 @@ L(\type\()_bilin_h):
 
         .align 2
 L(\type\()_bilin_h_tbl):
-        .word 1280f - L(\type\()_bilin_h_tbl) + CONFIG_THUMB
         .word 640f  - L(\type\()_bilin_h_tbl) + CONFIG_THUMB
         .word 320f  - L(\type\()_bilin_h_tbl) + CONFIG_THUMB
         .word 160f  - L(\type\()_bilin_h_tbl) + CONFIG_THUMB
@@ -2377,8 +2294,7 @@ L(\type\()_bilin_h_tbl):
         pop             {r4-r11,pc}
 160:
 320:
-640:
-1280:   // 16xN, 32xN, ... h
+640:    // 16xN, 32xN, ... h
         add             \ds2,  \dst,  \d_strd
         add             \sr2,  \src,  \s_strd
         lsl             \s_strd,  \s_strd,  #1
@@ -2446,7 +2362,6 @@ L(\type\()_bilin_v):
 
         .align 2
 L(\type\()_bilin_v_tbl):
-        .word 1280f - L(\type\()_bilin_v_tbl) + CONFIG_THUMB
         .word 640f  - L(\type\()_bilin_v_tbl) + CONFIG_THUMB
         .word 320f  - L(\type\()_bilin_v_tbl) + CONFIG_THUMB
         .word 160f  - L(\type\()_bilin_v_tbl) + CONFIG_THUMB
@@ -2564,7 +2479,6 @@ L(\type\()_bilin_v_tbl):
 160:    // 16xN, 32xN, ...
 320:
 640:
-1280:
         mov             \my, \h
 1:
         add             \ds2, \dst, \d_strd
@@ -2628,7 +2542,6 @@ L(\type\()_bilin_hv):
 
         .align 2
 L(\type\()_bilin_hv_tbl):
-        .word 1280f - L(\type\()_bilin_hv_tbl) + CONFIG_THUMB
         .word 640f  - L(\type\()_bilin_hv_tbl) + CONFIG_THUMB
         .word 320f  - L(\type\()_bilin_hv_tbl) + CONFIG_THUMB
         .word 160f  - L(\type\()_bilin_hv_tbl) + CONFIG_THUMB
@@ -2718,7 +2631,6 @@ L(\type\()_bilin_hv_tbl):
 160:
 320:
 640:
-1280:
         mov             \my, \h
 
 1:
