@@ -181,10 +181,10 @@ L(\type\()_tbl):
         lsl             r1,  r1,  #1
 4:
         subs            r5,  r5,  #4
-        vst1.16         {d16},  [r0, :64], r1
-        vst1.16         {d17},  [r7, :64], r1
-        vst1.16         {d18},  [r0, :64], r1
-        vst1.16         {d19},  [r7, :64], r1
+        vst1.16         {d16},  [r0], r1
+        vst1.16         {d17},  [r7], r1
+        vst1.16         {d18},  [r0], r1
+        vst1.16         {d19},  [r7], r1
         ble             0f
         \type           q8,  d16, d17, q9,  d18, d19
         b               4b
@@ -192,18 +192,18 @@ L(\type\()_tbl):
         add             r7,  r0,  r1
         lsl             r1,  r1,  #1
 8:
-        vst1.16         {q8},  [r0, :128], r1
+        vst1.16         {q8},  [r0], r1
         subs            r5,  r5,  #2
-        vst1.16         {q9},  [r7, :128], r1
+        vst1.16         {q9},  [r7], r1
         ble             0f
         \type           q8,  d16, d17, q9,  d18, d19
         b               8b
 160:
 16:
         \type           q10, d20, d21, q11, d22, d23
-        vst1.16         {q8,  q9},  [r0, :128], r1
+        vst1.16         {q8,  q9},  [r0], r1
         subs            r5,  r5,  #2
-        vst1.16         {q10, q11}, [r0, :128], r1
+        vst1.16         {q10, q11}, [r0], r1
         ble             0f
         \type           q8,  d16, d17, q9,  d18, d19
         b               16b
@@ -211,9 +211,9 @@ L(\type\()_tbl):
         add             r7,  r0,  #32
 32:
         \type           q10, d20, d21, q11, d22, d23
-        vst1.16         {q8,  q9},  [r0, :128], r1
+        vst1.16         {q8,  q9},  [r0], r1
         subs            r5,  r5,  #1
-        vst1.16         {q10, q11}, [r7, :128], r1
+        vst1.16         {q10, q11}, [r7], r1
         ble             0f
         \type           q8,  d16, d17, q9,  d18, d19
         b               32b
@@ -377,10 +377,10 @@ L(w_mask_\type\()_tbl):
         vrshrn.i16      d12, q6,  #2   // ((256 - sign) - ((128 - m) + (128 - n)) + 2) >> 2
         vst1.32         {d12[0]}, [r6, :32]!
 .endif
-        vst1.16         {d4}, [r0,  :64], r1
-        vst1.16         {d5}, [r12, :64], r1
-        vst1.16         {d6}, [r0,  :64], r1
-        vst1.16         {d7}, [r12, :64], r1
+        vst1.16         {d4}, [r0],  r1
+        vst1.16         {d5}, [r12], r1
+        vst1.16         {d6}, [r0],  r1
+        vst1.16         {d7}, [r12], r1
         bgt             4b
         vpop            {q4-q7}
         pop             {r4-r10,pc}
@@ -443,8 +443,8 @@ L(w_mask_\type\()_tbl):
         vrshrn.i16      d12, q6,  #2   // ((256 - sign) - ((128 - m) + (128 - n)) + 2) >> 2
         vst1.32         {d12[0]}, [r6, :32]!
 .endif
-        vst1.16         {q2}, [r0,  :128], r1
-        vst1.16         {q3}, [r12, :128], r1
+        vst1.16         {q2}, [r0],  r1
+        vst1.16         {q3}, [r12], r1
         bgt             8b
         vpop            {q4-q7}
         pop             {r4-r10,pc}
@@ -525,8 +525,8 @@ L(w_mask_\type\()_tbl):
         vrshrn.i16      d12, q6,  #2   // ((256 - sign) - ((128 - m) + (128 - n)) + 2) >> 2
         vst1.32         {d12[0]}, [r6, :32]!
 .endif
-        vst1.16         {q2}, [r0,  :128]!
-        vst1.16         {q3}, [r12, :128]!
+        vst1.16         {q2}, [r0]!
+        vst1.16         {q3}, [r12]!
         bgt             16b
         subs            r5,  r5,  #2
         add             r2,  r2,  r4,  lsl #1
@@ -575,17 +575,17 @@ L(blend_tbl):
 4:
         vld1.8          {d4}, [r5, :64]!
         vld1.16         {q1}, [r2, :128]!
-        vld1.16         {d0}, [r0, :64]
+        vld1.16         {d0}, [r0]
         vneg.s8         d4,  d4       // -m
         subs            r4,  r4,  #2
-        vld1.16         {d1}, [r12, :64]
+        vld1.16         {d1}, [r12]
         vmovl.s8        q2,  d4
         vshl.i16        q2,  q2,  #9  // -m << 9
         vsub.i16        q1,  q0,  q1  // a - b
         vqrdmulh.s16    q1,  q1,  q2  // ((a-b)*-m + 32) >> 6
         vadd.i16        q0,  q0,  q1
-        vst1.16         {d0}, [r0,  :64], r1
-        vst1.16         {d1}, [r12, :64], r1
+        vst1.16         {d0}, [r0],  r1
+        vst1.16         {d1}, [r12], r1
         bgt             4b
         pop             {r4-r5,pc}
 80:
@@ -595,8 +595,8 @@ L(blend_tbl):
         vld1.8          {q8},     [r5, :128]!
         vld1.16         {q2, q3}, [r2, :128]!
         vneg.s8         q9,  q8       // -m
-        vld1.16         {q0},     [r0,  :128]
-        vld1.16         {q1},     [r12, :128]
+        vld1.16         {q0},     [r0]
+        vld1.16         {q1},     [r12]
         vmovl.s8        q8,  d18
         vmovl.s8        q9,  d19
         vshl.i16        q8,  q8,  #9  // -m << 9
@@ -608,8 +608,8 @@ L(blend_tbl):
         vqrdmulh.s16    q3,  q3,  q9
         vadd.i16        q0,  q0,  q2
         vadd.i16        q1,  q1,  q3
-        vst1.16         {q0}, [r0,  :128], r1
-        vst1.16         {q1}, [r12, :128], r1
+        vst1.16         {q0}, [r0],  r1
+        vst1.16         {q1}, [r12], r1
         bgt             8b
         pop             {r4-r5,pc}
 160:
@@ -620,14 +620,14 @@ L(blend_tbl):
         vld1.16         {q8,  q9},  [r2, :128]!
         subs            r4,  r4,  #2
         vneg.s8         q14, q12      // -m
-        vld1.16         {q0,  q1},  [r0, :128]
+        vld1.16         {q0,  q1},  [r0]
         vneg.s8         q15, q13
         vld1.16         {q10, q11}, [r2, :128]!
         vmovl.s8        q12, d28
         vmovl.s8        q13, d29
         vmovl.s8        q14, d30
         vmovl.s8        q15, d31
-        vld1.16         {q2,  q3},  [r12, :128]
+        vld1.16         {q2,  q3},  [r12]
         vshl.i16        q12, q12, #9  // -m << 9
         vshl.i16        q13, q13, #9
         vshl.i16        q14, q14, #9
@@ -643,9 +643,9 @@ L(blend_tbl):
         vadd.i16        q0,  q0,  q8
         vadd.i16        q1,  q1,  q9
         vadd.i16        q2,  q2,  q10
-        vst1.16         {q0, q1}, [r0,  :128], r1
+        vst1.16         {q0, q1}, [r0],  r1
         vadd.i16        q3,  q3,  q11
-        vst1.16         {q2, q3}, [r12, :128], r1
+        vst1.16         {q2, q3}, [r12], r1
         bgt             16b
         pop             {r4-r5,pc}
 320:
@@ -655,14 +655,14 @@ L(blend_tbl):
         vld1.16         {q8,  q9},  [r2, :128]!
         subs            r4,  r4,  #1
         vneg.s8         q14, q12      // -m
-        vld1.16         {q0,  q1},  [r0, :128]
+        vld1.16         {q0,  q1},  [r0]
         vneg.s8         q15, q13
         vld1.16         {q10, q11}, [r2, :128]!
         vmovl.s8        q12, d28
         vmovl.s8        q13, d29
         vmovl.s8        q14, d30
         vmovl.s8        q15, d31
-        vld1.16         {q2,  q3},  [r12, :128]
+        vld1.16         {q2,  q3},  [r12]
         vshl.i16        q12, q12, #9  // -m << 9
         vshl.i16        q13, q13, #9
         vshl.i16        q14, q14, #9
@@ -678,9 +678,9 @@ L(blend_tbl):
         vadd.i16        q0,  q0,  q8
         vadd.i16        q1,  q1,  q9
         vadd.i16        q2,  q2,  q10
-        vst1.16         {q0, q1}, [r0,  :128], r1
+        vst1.16         {q0, q1}, [r0],  r1
         vadd.i16        q3,  q3,  q11
-        vst1.16         {q2, q3}, [r12, :128], r1
+        vst1.16         {q2, q3}, [r12], r1
         bgt             32b
         pop             {r4-r5,pc}
 endfunc
@@ -708,16 +708,16 @@ L(put_tbl):
         vld1.32         {d0[]}, [r2], r3
         vld1.32         {d1[]}, [r2], r3
         subs            r5,  r5,  #2
-        vst1.32         {d0[0]}, [r0, :32], r1
-        vst1.32         {d1[1]}, [r0, :32], r1
+        vst1.32         {d0[0]}, [r0], r1
+        vst1.32         {d1[1]}, [r0], r1
         bgt             2b
         pop             {r4-r11,pc}
 4:
         vld1.16         {d0}, [r2], r3
         vld1.16         {d1}, [r2], r3
         subs            r5,  r5,  #2
-        vst1.16         {d0}, [r0, :64], r1
-        vst1.16         {d1}, [r0, :64], r1
+        vst1.16         {d0}, [r0], r1
+        vst1.16         {d1}, [r0], r1
         bgt             4b
         pop             {r4-r11,pc}
 80:
@@ -729,14 +729,14 @@ L(put_tbl):
         vld1.16         {q0}, [r2], r3
         vld1.16         {q1}, [r9], r3
         subs            r5,  r5,  #2
-        vst1.16         {q0}, [r0, :128], r1
-        vst1.16         {q1}, [r8, :128], r1
+        vst1.16         {q0}, [r0], r1
+        vst1.16         {q1}, [r8], r1
         bgt             8b
         pop             {r4-r11,pc}
 16:
         vld1.16         {q0,  q1},  [r2], r3
         subs            r5,  r5,  #1
-        vst1.16         {q0,  q1},  [r0, :128], r1
+        vst1.16         {q0,  q1},  [r0], r1
         bgt             16b
         pop             {r4-r11,pc}
 320:
@@ -744,10 +744,10 @@ L(put_tbl):
         sub             r3,  r3,  #32
 32:
         vld1.16         {q0,  q1},  [r2]!
-        vst1.16         {q0,  q1},  [r0, :128]!
+        vst1.16         {q0,  q1},  [r0]!
         vld1.16         {q2,  q3},  [r2], r3
         subs            r5,  r5,  #1
-        vst1.16         {q2,  q3},  [r0, :128], r1
+        vst1.16         {q2,  q3},  [r0], r1
         bgt             32b
         pop             {r4-r11,pc}
 640:
@@ -755,14 +755,14 @@ L(put_tbl):
         sub             r3,  r3,  #96
 64:
         vld1.16         {q8,  q9},  [r2]!
-        vst1.16         {q8,  q9},  [r0, :128]!
+        vst1.16         {q8,  q9},  [r0]!
         vld1.16         {q10, q11}, [r2]!
-        vst1.16         {q10, q11}, [r0, :128]!
+        vst1.16         {q10, q11}, [r0]!
         vld1.16         {q12, q13}, [r2]!
-        vst1.16         {q12, q13}, [r0, :128]!
+        vst1.16         {q12, q13}, [r0]!
         vld1.16         {q14, q15}, [r2], r3
         subs            r5,  r5,  #1
-        vst1.16         {q14, q15}, [r0, :128], r1
+        vst1.16         {q14, q15}, [r0], r1
         bgt             64b
         pop             {r4-r11,pc}
 1280:
@@ -770,22 +770,22 @@ L(put_tbl):
         sub             r3,  r3,  #224
 128:
         vld1.16         {q8,  q9},  [r2]!
-        vst1.16         {q8,  q9},  [r0, :128]!
+        vst1.16         {q8,  q9},  [r0]!
         vld1.16         {q10, q11}, [r2]!
-        vst1.16         {q10, q11}, [r0, :128]!
+        vst1.16         {q10, q11}, [r0]!
         vld1.16         {q12, q13}, [r2]!
-        vst1.16         {q12, q13}, [r0, :128]!
+        vst1.16         {q12, q13}, [r0]!
         vld1.16         {q14, q15}, [r2]!
-        vst1.16         {q14, q15}, [r0, :128]!
+        vst1.16         {q14, q15}, [r0]!
         vld1.16         {q8,  q9},  [r2]!
-        vst1.16         {q8,  q9},  [r0, :128]!
+        vst1.16         {q8,  q9},  [r0]!
         vld1.16         {q10, q11}, [r2]!
-        vst1.16         {q10, q11}, [r0, :128]!
+        vst1.16         {q10, q11}, [r0]!
         vld1.16         {q12, q13}, [r2]!
-        vst1.16         {q12, q13}, [r0, :128]!
+        vst1.16         {q12, q13}, [r0]!
         vld1.16         {q14, q15}, [r2], r3
         subs            r5,  r5,  #1
-        vst1.16         {q14, q15}, [r0, :128], r1
+        vst1.16         {q14, q15}, [r0], r1
         bgt             128b
         pop             {r4-r11,pc}
 endfunc
@@ -1078,11 +1078,11 @@ endfunc
 .endif
 .endm
 .macro vst1_32 strd, r0, r1
-        vst1.32         {\r0[0]}, [r0, :32], \strd
-        vst1.32         {\r0[1]}, [r9, :32], \strd
+        vst1.32         {\r0[0]}, [r0], \strd
+        vst1.32         {\r0[1]}, [r9], \strd
 .ifnb \r1
-        vst1.32         {\r1[0]}, [r0, :32], \strd
-        vst1.32         {\r1[1]}, [r9, :32], \strd
+        vst1.32         {\r1[0]}, [r0], \strd
+        vst1.32         {\r1[1]}, [r9], \strd
 .endif
 .endm
 .macro vst1_reg strd, align, r0, r1, r2, r3, r4, r5, r6, r7
@@ -1099,6 +1099,20 @@ endfunc
         vst1.16         {\r7}, [r9, \align], \strd
 .endif
 .endm
+.macro vst1_reg_noalign strd, r0, r1, r2, r3, r4, r5, r6, r7
+        vst1.16         {\r0}, [r0], \strd
+        vst1.16         {\r1}, [r9], \strd
+.ifnb \r2
+        vst1.16         {\r2}, [r0], \strd
+        vst1.16         {\r3}, [r9], \strd
+.endif
+.ifnb \r4
+        vst1.16         {\r4}, [r0], \strd
+        vst1.16         {\r5}, [r9], \strd
+        vst1.16         {\r6}, [r0], \strd
+        vst1.16         {\r7}, [r9], \strd
+.endif
+.endm
 .macro finalize type, q0, q1, d0, d1, q2, q3, d2, d3
 .ifc \type, put
         vqrshrun_s32    6,   \q0, \d0, \q1, \d1, \q2, \d2, \q3, \d3
@@ -1111,15 +1125,27 @@ endfunc
 .endm
 .macro shift_store_4 type, strd, q0, q1, d0, d1, q2, q3, d2, d3
         finalize        \type, \q0, \q1, \d0, \d1, \q2, \q3, \d2, \d3
+.ifc \type, put
+        vst1_reg_noalign \strd,     \d0, \d1, \d2, \d3
+.else
         vst1_reg        \strd, :64, \d0, \d1, \d2, \d3
+.endif
 .endm
 .macro shift_store_8 type, strd, q0, q1, d0, d1, q2, q3, d2, d3
         finalize        \type, \q0, \q1, \d0, \d1, \q2, \q3, \d2, \d3
+.ifc \type, put
+        vst1_reg_noalign \strd,      \q0, \q1
+.else
         vst1_reg        \strd, :128, \q0, \q1
+.endif
 .endm
 .macro shift_store_16 type, strd, q0, q1, d0, d1, q2, q3, d2, d3
         finalize        \type, \q0, \q1, \d0, \d1, \q2, \q3, \d2, \d3
+.ifc \type, put
+        vst1.16         {\q0, \q1}, [r0], \strd
+.else
         vst1.16         {\q0, \q1}, [r0, :128], \strd
+.endif
 .endm
 
 .macro make_8tap_fn op, type, type_h, type_v
@@ -1238,8 +1264,8 @@ L(\type\()_8tap_h_tbl):
         vqmovun.s32     d2,  q1
         vrshl.s16       d2,  d2,  d26 // -intermediate_bits
         vmin.u16        d2,  d2,  d30
-        vst1.32         {d2[0]}, [\dst, :32], \d_strd
-        vst1.32         {d2[1]}, [\ds2, :32], \d_strd
+        vst1.32         {d2[0]}, [\dst], \d_strd
+        vst1.32         {d2[1]}, [\ds2], \d_strd
         bgt             2b
         pop             {r4-r11,pc}
 .endif
@@ -1278,13 +1304,15 @@ L(\type\()_8tap_h_tbl):
         vqmovun.s32     d5,  q3
         vrshl.s16       q2,  q2,  q13 // -intermediate_bits
         vmin.u16        q2,  q2,  q15
+        vst1.16         {d4}, [\dst], \d_strd
+        vst1.16         {d5}, [\ds2], \d_strd
 .else
         vmovn.s32       d4,  q2
         vmovn.s32       d5,  q3
         vsub.i16        q2,  q2,  q13 // PREP_BIAS
-.endif
         vst1.16         {d4}, [\dst, :64], \d_strd
         vst1.16         {d5}, [\ds2, :64], \d_strd
+.endif
         bgt             4b
         pop             {r4-r11,pc}
 
@@ -1346,6 +1374,8 @@ L(\type\()_8tap_h_tbl):
         vrshl.s16       q2,  q2,  q13 // -intermediate_bits
         vmin.u16        q1,  q1,  q15
         vmin.u16        q2,  q2,  q15
+        vst1.16         {q1}, [\dst]!
+        vst1.16         {q2}, [\ds2]!
 .else
         vmovn.s32       d2,  q1
         vmovn.s32       d3,  q2
@@ -1353,9 +1383,9 @@ L(\type\()_8tap_h_tbl):
         vmovn.s32       d5,  q4
         vsub.i16        q1,  q1,  q13 // PREP_BIAS
         vsub.i16        q2,  q2,  q13 // PREP_BIAS
-.endif
         vst1.16         {q1}, [\dst, :128]!
         vst1.16         {q2}, [\ds2, :128]!
+.endif
         ble             9f
 
         vmov            q8,  q9
@@ -1742,8 +1772,8 @@ L(\type\()_8tap_hv_tbl):
         vqmovun.s32     d4,  q2
         vmin.u16        d4,  d4,  d30
         subs            \h,  \h,  #2
-        vst1.32         {d4[0]}, [\dst, :32], \d_strd
-        vst1.32         {d4[1]}, [\ds2, :32], \d_strd
+        vst1.32         {d4[0]}, [\dst], \d_strd
+        vst1.32         {d4[1]}, [\ds2], \d_strd
         ble             0f
         vmov            d16, d18
         vmov            d17, d24
@@ -1798,8 +1828,8 @@ L(\type\()_8tap_hv_tbl):
         vqmovun.s32     d6,  q3
         vmin.u16        d6,  d6,  d30
         subs            \h,  \h,  #2
-        vst1.32         {d6[0]}, [\dst, :32], \d_strd
-        vst1.32         {d6[1]}, [\ds2, :32], \d_strd
+        vst1.32         {d6[0]}, [\dst], \d_strd
+        vst1.32         {d6[1]}, [\ds2], \d_strd
         ble             0f
         vmov            q8,  q9
         vmov            q9,  q10
@@ -1869,15 +1899,17 @@ L(\type\()_8tap_filter_2):
         vqmovun.s32     d4,  q2
         vqmovun.s32     d5,  q3
         vmin.u16        q2,  q2,  q15
+        subs            \h,  \h,  #2
+        vst1.16         {d4}, [\dst], \d_strd
+        vst1.16         {d5}, [\ds2], \d_strd
 .else
         vrshrn.i32      d4,  q2,  #6
         vrshrn.i32      d5,  q3,  #6
         vsub.i16        q2,  q2,  q13 // PREP_BIAS
-.endif
         subs            \h,  \h,  #2
-
         vst1.16         {d4}, [\dst, :64], \d_strd
         vst1.16         {d5}, [\ds2, :64], \d_strd
+.endif
         ble             0f
         vmov            d17, d19
         vmov            q9,  q12
@@ -1939,14 +1971,17 @@ L(\type\()_8tap_filter_2):
         vqmovun.s32     d4,  q2
         vqmovun.s32     d5,  q3
         vmin.u16        q2,  q2,  q15
+        subs            \h,  \h,  #2
+        vst1.16         {d4}, [\dst], \d_strd
+        vst1.16         {d5}, [\ds2], \d_strd
 .else
         vrshrn.i32      d4,  q2,  #6
         vrshrn.i32      d5,  q3,  #6
         vsub.i16        q2,  q2,  q13 // PREP_BIAS
-.endif
         subs            \h,  \h,  #2
         vst1.16         {d4}, [\dst, :64], \d_strd
         vst1.16         {d5}, [\ds2, :64], \d_strd
+.endif
         ble             0f
         vmov            d13, d15
         vmov            q7,  q8
@@ -2055,6 +2090,9 @@ L(\type\()_8tap_filter_4):
         vqmovun.s32     d7,  q14
         vmin.u16        q2,  q2,  q15
         vmin.u16        q3,  q3,  q15
+        subs            \h,  \h,  #2
+        vst1.16         {q2}, [\dst], \d_strd
+        vst1.16         {q3}, [\ds2], \d_strd
 .else
         vmov.i16        q9,  #PREP_BIAS
         vrshrn.i32      d4,  q2,  #6
@@ -2063,10 +2101,10 @@ L(\type\()_8tap_filter_4):
         vrshrn.i32      d7,  q14, #6
         vsub.i16        q2,  q2,  q9 // PREP_BIAS
         vsub.i16        q3,  q3,  q9 // PREP_BIAS
-.endif
         subs            \h,  \h,  #2
         vst1.16         {q2}, [\dst, :128], \d_strd
         vst1.16         {q3}, [\ds2, :128], \d_strd
+.endif
         ble             9f
         vmov            q8,  q10
         vmov            q9,  q11
@@ -2183,6 +2221,9 @@ L(\type\()_8tap_filter_4):
         vqmovun.s32     d7,  q14
         vmin.u16        q2,  q2,  q15
         vmin.u16        q3,  q3,  q15
+        subs            \h,  \h,  #2
+        vst1.16         {q2}, [\dst], \d_strd
+        vst1.16         {q3}, [\ds2], \d_strd
 .else
         vmov.i16        q5,  #PREP_BIAS
         vrshrn.i32      d4,  q2,  #6
@@ -2191,10 +2232,10 @@ L(\type\()_8tap_filter_4):
         vrshrn.i32      d7,  q14, #6
         vsub.i16        q2,  q2,  q5 // PREP_BIAS
         vsub.i16        q3,  q3,  q5 // PREP_BIAS
-.endif
         subs            \h,  \h,  #2
         vst1.16         {q2}, [\dst, :128], \d_strd
         vst1.16         {q3}, [\ds2, :128], \d_strd
+.endif
         ble             9f
         vmov            q4,  q6
         vmov            q5,  q7
@@ -2338,8 +2379,8 @@ L(\type\()_bilin_h_tbl):
         vmla.i16        d16, d17, d2
         vrshl.u16       d16, d16, d30
         vrshl.u16       d16, d16, d28
-        vst1.32         {d16[0]}, [\dst, :32], \d_strd
-        vst1.32         {d16[1]}, [\ds2, :32], \d_strd
+        vst1.32         {d16[0]}, [\dst], \d_strd
+        vst1.32         {d16[1]}, [\ds2], \d_strd
         bgt             2b
         pop             {r4-r11,pc}
 .endif
@@ -2362,11 +2403,13 @@ L(\type\()_bilin_h_tbl):
         vrshl.u16       q8,  q8,  q15
 .ifc \type, put
         vrshl.u16       q8,  q8,  q14
+        vst1.16         {d16}, [\dst], \d_strd
+        vst1.16         {d17}, [\ds2], \d_strd
 .else
         vsub.i16        q8,  q8,  q14
-.endif
         vst1.16         {d16}, [\dst, :64], \d_strd
         vst1.16         {d17}, [\ds2, :64], \d_strd
+.endif
         bgt             4b
         pop             {r4-r11,pc}
 
@@ -2390,12 +2433,14 @@ L(\type\()_bilin_h_tbl):
 .ifc \type, put
         vrshl.u16       q8,  q8,  q14
         vrshl.u16       q10, q10, q14
+        vst1.16         {q8},  [\dst], \d_strd
+        vst1.16         {q10}, [\ds2], \d_strd
 .else
         vsub.i16        q8,  q8,  q14
         vsub.i16        q10, q10, q14
-.endif
         vst1.16         {q8},  [\dst, :128], \d_strd
         vst1.16         {q10}, [\ds2, :128], \d_strd
+.endif
         bgt             8b
         pop             {r4-r11,pc}
 160:
@@ -2443,14 +2488,16 @@ L(\type\()_bilin_h_tbl):
         vrshl.u16       q5,  q5,  q14
         vrshl.u16       q9,  q9,  q14
         vrshl.u16       q10, q10, q14
+        vst1.16         {q4, q5},  [\dst]!
+        vst1.16         {q9, q10}, [\ds2]!
 .else
         vsub.i16        q4,  q4,  q14
         vsub.i16        q5,  q5,  q14
         vsub.i16        q9,  q9,  q14
         vsub.i16        q10, q10, q14
-.endif
         vst1.16         {q4, q5},  [\dst, :128]!
         vst1.16         {q9, q10}, [\ds2, :128]!
+.endif
         ble             9f
 
         vmov            q4,  q6
@@ -2512,8 +2559,8 @@ L(\type\()_bilin_v_tbl):
         vmul.i16        d16, d16, d4
         vmla.i16        d16, d17, d6
         vrshr.u16       d16, d16, #4
-        vst1.32         {d16[0]}, [\dst, :32]
-        vst1.32         {d16[1]}, [\ds2, :32]
+        vst1.32         {d16[0]}, [\dst]
+        vst1.32         {d16[1]}, [\ds2]
         pop             {r4-r11,pc}
 24:     // 2x4, 2x6, 2x8, ... v
         vld1.32         {d17[]}, [\sr2], \s_strd
@@ -2530,10 +2577,10 @@ L(\type\()_bilin_v_tbl):
         vmla.i16        q8,  q9,  q3
         cmp             \h,  #2
         vrshr.u16       q8,  q8,  #4
-        vst1.32         {d16[0]}, [\dst, :32], \d_strd
-        vst1.32         {d16[1]}, [\ds2, :32], \d_strd
-        vst1.32         {d17[0]}, [\dst, :32], \d_strd
-        vst1.32         {d17[1]}, [\ds2, :32], \d_strd
+        vst1.32         {d16[0]}, [\dst], \d_strd
+        vst1.32         {d16[1]}, [\ds2], \d_strd
+        vst1.32         {d17[0]}, [\dst], \d_strd
+        vst1.32         {d17[1]}, [\ds2], \d_strd
         blt             0f
         vmov            d16, d20
         beq             22b
@@ -2557,12 +2604,14 @@ L(\type\()_bilin_v_tbl):
         subs            \h,  \h,  #2
 .ifc \type, put
         vrshr.u16       q8,  q8,  #4
+        vst1.16         {d16}, [\dst], \d_strd
+        vst1.16         {d17}, [\ds2], \d_strd
 .else
         vrshl.u16       q8,  q8,  q15
         vsub.i16        q8,  q8,  q14
-.endif
         vst1.16         {d16}, [\dst, :64], \d_strd
         vst1.16         {d17}, [\ds2, :64], \d_strd
+.endif
         ble             0f
         vmov            d16, d19
         b               4b
@@ -2586,14 +2635,16 @@ L(\type\()_bilin_v_tbl):
 .ifc \type, put
         vrshr.u16       q8,  q8,  #4
         vrshr.u16       q9,  q9,  #4
+        vst1.16         {q8}, [\dst], \d_strd
+        vst1.16         {q9}, [\ds2], \d_strd
 .else
         vrshl.u16       q8,  q8,  q15
         vrshl.u16       q9,  q9,  q15
         vsub.i16        q8,  q8,  q14
         vsub.i16        q9,  q9,  q14
-.endif
         vst1.16         {q8}, [\dst, :128], \d_strd
         vst1.16         {q9}, [\ds2, :128], \d_strd
+.endif
         ble             0f
         vmov            q8,  q10
         b               8b
@@ -2629,6 +2680,8 @@ L(\type\()_bilin_v_tbl):
         vrshr.u16       q9,  q9,  #4
         vrshr.u16       q10, q10, #4
         vrshr.u16       q11, q11, #4
+        vst1.16         {q8,  q9},  [\dst], \d_strd
+        vst1.16         {q10, q11}, [\ds2], \d_strd
 .else
         vrshl.u16       q8,  q8,  q15
         vrshl.u16       q9,  q9,  q15
@@ -2638,9 +2691,9 @@ L(\type\()_bilin_v_tbl):
         vsub.i16        q9,  q9,  q14
         vsub.i16        q10, q10, q14
         vsub.i16        q11, q11, q14
-.endif
         vst1.16         {q8,  q9},  [\dst, :128], \d_strd
         vst1.16         {q10, q11}, [\ds2, :128], \d_strd
+.endif
         ble             9f
         vmov            q8,  q12
         vmov            q9,  q13
@@ -2718,8 +2771,8 @@ L(\type\()_bilin_hv_tbl):
         vrshl.u32       q8,  q8,  q14
         vmovn.i32       d16, q8
         subs            \h,  \h,  #2
-        vst1.32         {d16[0]}, [\dst, :32], \d_strd
-        vst1.32         {d16[1]}, [\ds2, :32], \d_strd
+        vst1.32         {d16[0]}, [\dst], \d_strd
+        vst1.32         {d16[1]}, [\ds2], \d_strd
         ble             0f
         vmov            d16, d18
         b               2b
@@ -2758,14 +2811,17 @@ L(\type\()_bilin_hv_tbl):
         vrshl.u32       q11, q11, q14
         vmovn.i32       d20, q10
         vmovn.i32       d21, q11
+        subs            \h,  \h,  #2
+        vst1.16         {d20}, [\dst], \d_strd
+        vst1.16         {d21}, [\ds2], \d_strd
 .else
         vrshrn.i32      d20, q10, #4
         vrshrn.i32      d21, q11, #4
         vsub.i16        q10, q10, q14
-.endif
         subs            \h,  \h,  #2
         vst1.16         {d20}, [\dst, :64], \d_strd
         vst1.16         {d21}, [\ds2, :64], \d_strd
+.endif
         ble             0f
         vmov            d16, d19
         b               4b
@@ -2820,6 +2876,9 @@ L(\type\()_bilin_hv_tbl):
         vmovn.i32       d23, q12
         vmovn.i32       d16, q8
         vmovn.i32       d17, q9
+        subs            \h,  \h,  #2
+        vst1.16         {q11}, [\dst], \d_strd
+        vst1.16         {q8},  [\ds2], \d_strd
 .else
         vrshrn.i32      d22, q11, #4
         vrshrn.i32      d23, q12, #4
@@ -2827,10 +2886,10 @@ L(\type\()_bilin_hv_tbl):
         vrshrn.i32      d17, q9,  #4
         vsub.i16        q11, q11, q14
         vsub.i16        q8,  q8,  q14
-.endif
         subs            \h,  \h,  #2
         vst1.16         {q11}, [\dst, :128], \d_strd
         vst1.16         {q8},  [\ds2, :128], \d_strd
+.endif
         ble             9f
         vmov            q8,  q10
         b               2b
@@ -3145,7 +3204,11 @@ function warp_affine_8x8\t\()_16bpc_neon, export=1
         vmov            q13, q14
         vmov            q14, q15
         subs            r10, r10, #1
+.ifb \t
+        vst1.16         {q0}, [r0], r1
+.else
         vst1.16         {q0}, [r0, :128], r1
+.endif
 
         add             r6,  r6,  r4
         bgt             1b
