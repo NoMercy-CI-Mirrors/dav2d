@@ -65,10 +65,10 @@
         vaddw.s16       q0,  q0,  d5
         vaddw.s16       \d1, \d1, d6
         vaddw.s16       q1,  q1,  d7
-        vmovn.i32       \d00, \d0
-        vmovn.i32       \d01, q0
-        vmovn.i32       \d10, \d1
-        vmovn.i32       \d11, q1
+        vqmovn.s32      \d00, \d0
+        vqmovn.s32      \d01, q0
+        vqmovn.s32      \d10, \d1
+        vqmovn.s32      \d11, q1
         vrshl.s16       \d0, \d0, q13 // -intermediate_bits
         vrshl.s16       \d1, \d1, q13 // -intermediate_bits
         vadd.s16        \d0, \d0, q12 // PREP_BIAS >> intermediate_bits

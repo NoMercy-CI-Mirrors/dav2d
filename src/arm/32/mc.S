@@ -41,10 +41,10 @@
 .macro w_avg dst0, dst1, t0, t1, t2, t3
         vld1.16         {\t0,\t1},   [r2, :128]!
         vld1.16         {\t2,\t3},   [r3, :128]!
-        vsub.i16        \t0,   \t2,  \t0
-        vsub.i16        \t1,   \t3,  \t1
-        vqdmulh.s16     \t0,   \t0,  q15
-        vqdmulh.s16     \t1,   \t1,  q15
+        vsub.i16        \t2,   \t0,  \t2
+        vsub.i16        \t3,   \t1,  \t3
+        vqdmulh.s16     \t2,   \t2,  q15
+        vqdmulh.s16     \t3,   \t3,  q15
         vadd.i16        \t0,   \t2,  \t0
         vadd.i16        \t1,   \t3,  \t1
         vqrshrun.s16    \dst0, \t0,  #4
@@ -77,8 +77,25 @@ function \type\()_8bpc_neon, export=1
         ldr             lr, [sp, #24]
 .endif
 .ifc \type, w_avg
+        // (a * weight + b * (16 - weight) + 128) >> 8
+        // = ((a - b) * weight + (b << 4) + 128) >> 8
+        // = ((a - b) * (weight-16) + (a << 4) + 128) >> 8
+        // = ((b - a) * -weight + (b << 4) + 128) >> 8
+        // = ((((b - a) * (-weight << 11) * 2) >> 16) + b + 8) >> 4
+        // = ((((a - b) * ((weight-16) << 11) * 2) >> 16) + a + 8) >> 4
+        vmov.i16        q14, #16
+        cmp             lr,  #16
         vdup.s16        q15, lr
-        vneg.s16        q15, q15
+        blt             1f
+        // if weight >= 16
+        vsub.i16        q15, q15, q14 // weight - 16
+        b               2f
+1:
+        mov             r12, r2       // swap tmp1/tmp2
+        mov             r2,  r3
+        mov             r3,  r12
+        vneg.s16        q15, q15      // -weight
+2:
         vshl.i16        q15, q15, #11
 .endif
 .ifc \type, mask
