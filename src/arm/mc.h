@@ -80,7 +80,7 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
     c->warp8x8 = BF(dav2d_warp_affine_8x8, neon);
     c->warp8x8t = BF(dav2d_warp_affine_8x8t, neon);
     c->emu_edge = BF(dav2d_emu_edge, neon);
-#if BITDEPTH == 8
+#if ARCH_AARCH64 && BITDEPTH == 8
     c->sad_refine_mv = BF(dav2d_sad_refine_mv, neon);
     c->sad8x8 = BF(dav2d_sad8x8, neon);
 #endif
