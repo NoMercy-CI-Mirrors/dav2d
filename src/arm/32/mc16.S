@@ -838,12 +838,11 @@ L(put_tbl):
 endfunc
 
 // This has got the same signature as the prep_8tap functions,
-// and assumes that r9 is set to (clz(w)-24), r7 to intermediate_bits and
-// r8 to w*2.
+// and assumes that r9 is set to (clz(w)-24) and r8 to intermediate_bits.
 function prep_neon
         adr             r10, L(prep_tbl)
         ldr             r9,  [r10, r9, lsl #2]
-        vdup.16         q15, r7   // intermediate_bits
+        vdup.16         q15, r8   // intermediate_bits
         vmov.i16        q14, #PREP_BIAS
         add             r10, r10, r9
         bx              r10
@@ -858,54 +857,61 @@ L(prep_tbl):
         .word 40f   - L(prep_tbl) + CONFIG_THUMB
 
 40:
-        add             r9,  r1,  r2
-        lsl             r2,  r2,  #1
+        add             r9,  r2,  r3
+        lsl             r3,  r3,  #1
+        add             r8,  r0,  r1
+        lsl             r1,  r1,  #1
 4:
-        vld1.16         {d0}, [r1], r2
-        vld1.16         {d1}, [r9], r2
-        subs            r4,  r4,  #2
+        vld1.16         {d0}, [r2], r3
+        vld1.16         {d1}, [r9], r3
+        subs            r5,  r5,  #2
         vshl.s16        q0,  q0,  q15
         vsub.i16        q0,  q0,  q14
-        vst1.16         {q0}, [r0, :128]!
+        vst1.16         {d0}, [r0], r1
+        vst1.16         {d1}, [r8], r1
         bgt             4b
         pop             {r4-r11,pc}
 80:
-        add             r9,  r1,  r2
-        lsl             r2,  r2,  #1
+        add             r9,  r2,  r3
+        lsl             r3,  r3,  #1
+        add             r8,  r0,  r1
+        lsl             r1,  r1,  #1
 8:
-        vld1.16         {q0}, [r1], r2
-        vld1.16         {q1}, [r9], r2
-        subs            r4,  r4,  #2
+        vld1.16         {q0}, [r2], r3
+        vld1.16         {q1}, [r9], r3
+        subs            r5,  r5,  #2
         vshl.s16        q0,  q0,  q15
         vshl.s16        q1,  q1,  q15
         vsub.i16        q0,  q0,  q14
         vsub.i16        q1,  q1,  q14
-        vst1.16         {q0, q1}, [r0, :128]!
+        vst1.16         {q0}, [r0, :128], r1
+        vst1.16         {q1}, [r8, :128], r1
         bgt             8b
         pop             {r4-r11,pc}
 16:
-        vld1.16         {q0, q1}, [r1], r2
+        vld1.16         {q0, q1}, [r2], r3
         vshl.s16        q0,  q0,  q15
-        vld1.16         {q2, q3}, [r1], r2
-        subs            r4,  r4,  #2
+        vld1.16         {q2, q3}, [r2], r3
+        subs            r5,  r5,  #2
         vshl.s16        q1,  q1,  q15
         vshl.s16        q2,  q2,  q15
         vshl.s16        q3,  q3,  q15
         vsub.i16        q0,  q0,  q14
         vsub.i16        q1,  q1,  q14
         vsub.i16        q2,  q2,  q14
-        vst1.16         {q0, q1}, [r0, :128]!
+        vst1.16         {q0, q1}, [r0, :128], r1
         vsub.i16        q3,  q3,  q14
-        vst1.16         {q2, q3}, [r0, :128]!
+        vst1.16         {q2, q3}, [r0, :128], r1
         bgt             16b
         pop             {r4-r11,pc}
 320:
-        sub             r2,  r2,  #32
+        sub             r3,  r3,  #32
+        sub             r1,  r1,  #32
 32:
-        vld1.16         {q0, q1}, [r1]!
-        subs            r4,  r4,  #1
+        vld1.16         {q0, q1}, [r2]!
+        subs            r5,  r5,  #1
         vshl.s16        q0,  q0,  q15
-        vld1.16         {q2, q3}, [r1], r2
+        vld1.16         {q2, q3}, [r2], r3
         vshl.s16        q1,  q1,  q15
         vshl.s16        q2,  q2,  q15
         vshl.s16        q3,  q3,  q15
@@ -914,20 +920,21 @@ L(prep_tbl):
         vsub.i16        q2,  q2,  q14
         vst1.16         {q0, q1}, [r0, :128]!
         vsub.i16        q3,  q3,  q14
-        vst1.16         {q2, q3}, [r0, :128]!
+        vst1.16         {q2, q3}, [r0, :128], r1
         bgt             32b
         pop             {r4-r11,pc}
 640:
-        sub             r2,  r2,  #96
+        sub             r3,  r3,  #96
+        sub             r1,  r1,  #96
 64:
-        vld1.16         {q0,  q1},  [r1]!
-        subs            r4,  r4,  #1
+        vld1.16         {q0,  q1},  [r2]!
+        subs            r5,  r5,  #1
         vshl.s16        q0,  q0,  q15
-        vld1.16         {q2,  q3},  [r1]!
+        vld1.16         {q2,  q3},  [r2]!
         vshl.s16        q1,  q1,  q15
-        vld1.16         {q8,  q9},  [r1]!
+        vld1.16         {q8,  q9},  [r2]!
         vshl.s16        q2,  q2,  q15
-        vld1.16         {q10, q11}, [r1], r2
+        vld1.16         {q10, q11}, [r2], r3
         vshl.s16        q3,  q3,  q15
         vshl.s16        q8,  q8,  q15
         vshl.s16        q9,  q9,  q15
@@ -944,20 +951,21 @@ L(prep_tbl):
         vsub.i16        q10, q10, q14
         vst1.16         {q8,  q9},  [r0, :128]!
         vsub.i16        q11, q11, q14
-        vst1.16         {q10, q11}, [r0, :128]!
+        vst1.16         {q10, q11}, [r0, :128], r1
         bgt             64b
         pop             {r4-r11,pc}
 1280:
-        sub             r2,  r2,  #224
+        sub             r3,  r3,  #224
+        sub             r1,  r1,  #224
 128:
-        vld1.16         {q0,  q1},  [r1]!
-        subs            r4,  r4,  #1
+        vld1.16         {q0,  q1},  [r2]!
+        subs            r5,  r5,  #1
         vshl.s16        q0,  q0,  q15
-        vld1.16         {q2,  q3},  [r1]!
+        vld1.16         {q2,  q3},  [r2]!
         vshl.s16        q1,  q1,  q15
-        vld1.16         {q8,  q9},  [r1]!
+        vld1.16         {q8,  q9},  [r2]!
         vshl.s16        q2,  q2,  q15
-        vld1.16         {q10, q11}, [r1]!
+        vld1.16         {q10, q11}, [r2]!
         vshl.s16        q3,  q3,  q15
         vshl.s16        q8,  q8,  q15
         vshl.s16        q9,  q9,  q15
@@ -969,19 +977,19 @@ L(prep_tbl):
         vsub.i16        q3,  q3,  q14
         vsub.i16        q8,  q8,  q14
         vst1.16         {q0,  q1},  [r0, :128]!
-        vld1.16         {q0,  q1},  [r1]!
+        vld1.16         {q0,  q1},  [r2]!
         vsub.i16        q9,  q9,  q14
         vsub.i16        q10, q10, q14
         vst1.16         {q2,  q3},  [r0, :128]!
-        vld1.16         {q2,  q3},  [r1]!
+        vld1.16         {q2,  q3},  [r2]!
         vsub.i16        q11, q11, q14
         vshl.s16        q0,  q0,  q15
         vst1.16         {q8,  q9},  [r0, :128]!
-        vld1.16         {q8,  q9},  [r1]!
+        vld1.16         {q8,  q9},  [r2]!
         vshl.s16        q1,  q1,  q15
         vshl.s16        q2,  q2,  q15
         vst1.16         {q10, q11}, [r0, :128]!
-        vld1.16         {q10, q11}, [r1], r2
+        vld1.16         {q10, q11}, [r2], r3
         vshl.s16        q3,  q3,  q15
         vshl.s16        q8,  q8,  q15
         vshl.s16        q9,  q9,  q15
@@ -998,7 +1006,7 @@ L(prep_tbl):
         vsub.i16        q10, q10, q14
         vst1.16         {q8,  q9},  [r0, :128]!
         vsub.i16        q11, q11, q14
-        vst1.16         {q10, q11}, [r0, :128]!
+        vst1.16         {q10, q11}, [r0, :128], r1
         bgt             128b
         pop             {r4-r11,pc}
 endfunc
