@@ -275,38 +275,38 @@ bidir_fn mask, r7
 
 .macro w_mask_fn type
 function w_mask_\type\()_16bpc_neon, export=1
-        push            {r4-r10,lr}
+        push            {r4-r11,lr}
         vpush           {q4-q7}
-        ldrd            r4,  r5,  [sp, #96]
-        ldrd            r6,  r7,  [sp, #104]
-        ldr             r8,  [sp, #112]
-        clz             r9,  r4
+        ldrd            r4,  r5,  [sp, #100]
+        ldrd            r6,  r7,  [sp, #108]
+        ldrd            r8,  r9,  [sp, #116]
+        clz             r11, r4
         adr             lr,  L(w_mask_\type\()_tbl)
-        vdup.16         q15, r8       // bitdepth_max
-        sub             r9,  r9,  #24
-        clz             r8,  r8       // clz(bitdepth_max)
-        ldr             r9,  [lr,  r9,  lsl #2]
-        add             r9,  lr,  r9
-        sub             r8,  r8,  #12 // sh = intermediate_bits + 6 = clz(bitdepth_max) - 12
+        vdup.16         q15, r9       // bitdepth_max
+        sub             r11, r11, #24
+        clz             r9,  r9       // clz(bitdepth_max)
+        ldr             r11, [lr,  r11, lsl #2]
+        add             r11, lr,  r11
+        sub             r9,  r9,  #12 // sh = intermediate_bits + 6 = clz(bitdepth_max) - 12
         mov             r10, #PREP_BIAS*64
-        neg             r8,  r8       // -sh
+        neg             r9,  r9       // -sh
         movw            r12, #27615   // (64 + 1 - 38)<<mask_sh - 1 - mask_rnd
-        vdup.32         q14, r8       // -sh
+        vdup.32         q14, r9       // -sh
         vdup.16         q0,  r12
 .if \type == 444
         vmov.i8         q1,  #64
 .elseif \type == 422
-        vdup.8          d4,  r7
+        vdup.8          d4,  r8
         vmov.i8         d2,  #129
         vsub.i16        d2,  d2,  d4
 .elseif \type == 420
-        vdup.16         q2,  r7
+        vdup.16         q2,  r8
         vmov.i16        q1,  #0x100
         vsub.i16        q1,  q1,  q2
 .endif
         add             r12, r0,  r1
         lsl             r1,  r1,  #1
-        bx              r9
+        bx              r11
 
         .align 2
 L(w_mask_\type\()_tbl):
@@ -383,7 +383,7 @@ L(w_mask_\type\()_tbl):
         vst1.16         {d7}, [r12], r1
         bgt             4b
         vpop            {q4-q7}
-        pop             {r4-r10,pc}
+        pop             {r4-r11,pc}
 8:
         vld1.16         {q2, q3}, [r2, :128]! // tmp1
         vld1.16         {q4, q5}, [r3, :128]! // tmp2
@@ -447,25 +447,31 @@ L(w_mask_\type\()_tbl):
         vst1.16         {q3}, [r12], r1
         bgt             8b
         vpop            {q4-q7}
-        pop             {r4-r10,pc}
+        pop             {r4-r11,pc}
 1280:
 640:
 320:
 160:
         sub             r1,  r1,  r4,  lsl #1
 .if \type == 444
-        add             lr,  r6,  r4
+        add             lr,  r6,  r7
+        lsl             r7,  r7,  #1
+        sub             r7,  r7,  r4
 .elseif \type == 422
-        add             lr,  r6,  r4,  lsr #1
+        add             lr,  r6,  r7
+        lsl             r7,  r7,  #1
+        sub             r7,  r7,  r4,  lsr #1
+.elseif \type == 420
+        sub             r7,  r7,  r4,  lsr #1
 .endif
-        add             r7,  r2,  r4,  lsl #1
+        add             r11, r2,  r4,  lsl #1
         add             r9,  r3,  r4,  lsl #1
 161:
         mov             r8,  r4
 16:
         vld1.16         {q2}, [r2, :128]! // tmp1
         vld1.16         {q4}, [r3, :128]! // tmp2
-        vld1.16         {q3}, [r7, :128]!
+        vld1.16         {q3}, [r11, :128]!
         vld1.16         {q5}, [r9, :128]!
         subs            r8,  r8,  #8
         vdup.32         q13, r10       // PREP_BIAS*64
@@ -531,20 +537,19 @@ L(w_mask_\type\()_tbl):
         subs            r5,  r5,  #2
         add             r2,  r2,  r4,  lsl #1
         add             r3,  r3,  r4,  lsl #1
-        add             r7,  r7,  r4,  lsl #1
+        add             r11, r11, r4,  lsl #1
         add             r9,  r9,  r4,  lsl #1
+        add             r6,  r6,  r7
 .if \type == 444
-        add             r6,  r6,  r4
-        add             lr,  lr,  r4
+        add             lr,  lr,  r7
 .elseif \type == 422
-        add             r6,  r6,  r4,  lsr #1
-        add             lr,  lr,  r4,  lsr #1
+        add             lr,  lr,  r7
 .endif
         add             r0,  r0,  r1
         add             r12, r12, r1
         bgt             161b
         vpop            {q4-q7}
-        pop             {r4-r10,pc}
+        pop             {r4-r11,pc}
 endfunc
 .endm
 

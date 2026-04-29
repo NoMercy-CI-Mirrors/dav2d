@@ -239,9 +239,10 @@ bidir_fn mask
 
 .macro w_mask_fn type
 function w_mask_\type\()_8bpc_neon, export=1
-        push            {r4-r9,lr}
-        ldrd            r4,  r5,  [sp, #28]
-        ldrd            r6,  r7,  [sp, #36]
+        push            {r4-r10,lr}
+        ldrd            r4,  r5,  [sp, #32]
+        ldrd            r6,  r7,  [sp, #40]
+        ldr             r10,      [sp, #48]
         clz             r8,  r4
         adr             r9,  L(w_mask_\type\()_tbl)
         sub             r8,  r8,  #24
@@ -252,11 +253,11 @@ function w_mask_\type\()_8bpc_neon, export=1
 .if \type == 444
         vmov.i8         q15, #64
 .elseif \type == 422
-        vdup.8          d0,  r7         // d0[] <- sign
+        vdup.8          d0,  r10        // d0[] <- sign
         vmov.i8         d30, #129
         vsub.i8         d30, d30, d0    // 129 - sign
 .elseif \type == 420
-        vdup.16         q0,  r7         // d0[] <- sign
+        vdup.16         q0,  r10        // d0[] <- sign
         vmov.i16        q15, #256
         vsub.i16        q15, q15, q0    // 256 - sign
 .endif
@@ -317,7 +318,7 @@ L(w_mask_\type\()_tbl):
         vst1.32         {d25[0]}, [r0],  r1
         vst1.32         {d25[1]}, [r12], r1
         bgt             4b
-        pop             {r4-r9,pc}
+        pop             {r4-r10,pc}
 8:
         vld1.16         {d0,  d1,  d2,  d3},  [r2,  :128]! // tmp1y1, tmp1y2
         vld1.16         {d4,  d5,  d6,  d7},  [r3,  :128]! // tmp2y1, tmp2y2
@@ -359,25 +360,31 @@ L(w_mask_\type\()_tbl):
         vst1.16         {d24}, [r0],  r1
         vst1.16         {d25}, [r12], r1
         bgt             8b
-        pop             {r4-r9,pc}
+        pop             {r4-r10,pc}
 1280:
 640:
 320:
 160:
         sub             r1,  r1,  r4
 .if \type == 444
-        add             lr,  r6,  r4
+        add             lr,  r6,  r7
+        lsl             r7,  r7,  #1
+        sub             r7,  r7,  r4
 .elseif \type == 422
-        add             lr,  r6,  r4,  lsr #1
+        add             lr,  r6,  r7
+        lsl             r7,  r7,  #1
+        sub             r7,  r7,  r4,  lsr #1
+.elseif \type == 420
+        sub             r7,  r7,  r4,  lsr #1
 .endif
         add             r9,  r3,  r4,  lsl #1
-        add             r7,  r2,  r4,  lsl #1
+        add             r10, r2,  r4,  lsl #1
 161:
         mov             r8,  r4
 16:
         vld1.16         {d0,  d1,  d2,  d3},  [r2,  :128]! // tmp1y1
         vld1.16         {d4,  d5,  d6,  d7},  [r3,  :128]! // tmp2y1
-        vld1.16         {d16, d17, d18, d19}, [r7,  :128]! // tmp1y2
+        vld1.16         {d16, d17, d18, d19}, [r10, :128]! // tmp1y2
         subs            r8,  r8,  #16
         vsub.i16        q2,  q2,  q0    // tmp2y1 - tmp1y1
         vsub.i16        q3,  q3,  q1
@@ -450,19 +457,18 @@ L(w_mask_\type\()_tbl):
         subs            r5,  r5,  #2
         add             r2,  r2,  r4,  lsl #1
         add             r3,  r3,  r4,  lsl #1
-        add             r7,  r7,  r4,  lsl #1
+        add             r10, r10, r4,  lsl #1
         add             r9,  r9,  r4,  lsl #1
+        add             r6,  r6,  r7
 .if \type == 444
-        add             r6,  r6,  r4
-        add             lr,  lr,  r4
+        add             lr,  lr,  r7
 .elseif \type == 422
-        add             r6,  r6,  r4,  lsr #1
-        add             lr,  lr,  r4,  lsr #1
+        add             lr,  lr,  r7
 .endif
         add             r0,  r0,  r1
         add             r12, r12, r1
         bgt             161b
-        pop             {r4-r9,pc}
+        pop             {r4-r10,pc}
 endfunc
 .endm
 
