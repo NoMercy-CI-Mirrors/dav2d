@@ -459,13 +459,14 @@ function blend_8bpc_neon, export=1
         ldrd            r4,  r5,  [sp, #12]
         clz             lr,  r3
         adr             r3,  L(blend_tbl)
-        sub             lr,  lr,  #26
+        sub             lr,  lr,  #25
         ldr             lr,  [r3, lr, lsl #2]
         add             r3,  r3,  lr
         bx              r3
 
         .align 2
 L(blend_tbl):
+        .word 640f  - L(blend_tbl) + CONFIG_THUMB
         .word 320f  - L(blend_tbl) + CONFIG_THUMB
         .word 160f  - L(blend_tbl) + CONFIG_THUMB
         .word 80f   - L(blend_tbl) + CONFIG_THUMB
@@ -562,6 +563,49 @@ L(blend_tbl):
         vrshrn.i16      d27, q14, #6
         vst1.u8         {q12, q13}, [r0],  r1
         bgt             32b
+        pop             {r4-r5,pc}
+640:
+        vmov.i8         q10, #64
+        add             r12, r0,  #32
+64:
+        vld1.u8         {q2,  q3},  [r5,  :128]!
+        vld1.u8         {q8,  q9},  [r2,  :128]!
+        vld1.u8         {q0,  q1},  [r0]
+        subs            r4,  r4,  #1
+        vsub.i8         q11, q10, q2
+        vmull.u8        q15, d16, d4
+        vmlal.u8        q15, d0,  d22
+        vmull.u8        q14, d17, d5
+        vmlal.u8        q14, d1,  d23
+        vsub.i8         q11, q10, q3
+        vrshrn.i16      d24, q15, #6
+        vrshrn.i16      d25, q14, #6
+        vmull.u8        q15, d18, d6
+        vmlal.u8        q15, d2,  d22
+        vmull.u8        q14, d19, d7
+        vmlal.u8        q14, d3,  d23
+        vld1.u8         {q2,  q3},  [r5,  :128]!
+        vld1.u8         {q8,  q9},  [r2,  :128]!
+        vrshrn.i16      d26, q15, #6
+        vrshrn.i16      d27, q14, #6
+        vld1.u8         {q0,  q1},  [r12]
+        vst1.u8         {q12, q13}, [r0], r1
+        vsub.i8         q11, q10, q2
+        vmull.u8        q15, d16, d4
+        vmlal.u8        q15, d0,  d22
+        vmull.u8        q14, d17, d5
+        vmlal.u8        q14, d1,  d23
+        vsub.i8         q11, q10, q3
+        vrshrn.i16      d24, q15, #6
+        vrshrn.i16      d25, q14, #6
+        vmull.u8        q15, d18, d6
+        vmlal.u8        q15, d2,  d22
+        vmull.u8        q14, d19, d7
+        vmlal.u8        q14, d3,  d23
+        vrshrn.i16      d26, q15, #6
+        vrshrn.i16      d27, q14, #6
+        vst1.u8         {q12, q13}, [r12], r1
+        bgt             64b
         pop             {r4-r5,pc}
 endfunc
 

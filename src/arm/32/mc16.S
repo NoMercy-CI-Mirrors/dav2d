@@ -557,13 +557,14 @@ function blend_16bpc_neon, export=1
         ldrd            r4,  r5,  [sp, #12]
         clz             lr,  r3
         adr             r3,  L(blend_tbl)
-        sub             lr,  lr,  #26
+        sub             lr,  lr,  #25
         ldr             lr,  [r3,  lr,  lsl #2]
         add             r3,  r3,  lr
         bx              r3
 
         .align 2
 L(blend_tbl):
+        .word 640f - L(blend_tbl) + CONFIG_THUMB
         .word 320f - L(blend_tbl) + CONFIG_THUMB
         .word 160f - L(blend_tbl) + CONFIG_THUMB
         .word 80f  - L(blend_tbl) + CONFIG_THUMB
@@ -682,6 +683,47 @@ L(blend_tbl):
         vadd.i16        q3,  q3,  q11
         vst1.16         {q2, q3}, [r12], r1
         bgt             32b
+        pop             {r4-r5,pc}
+640:
+        sub             r1,  r1,  #128
+641:
+        mov             r12, #64
+64:
+        vld1.8          {q12, q13}, [r5, :128]!
+        vld1.16         {q8,  q9},  [r2, :128]!
+        subs            r12, r12, #32
+        vneg.s8         q14, q12      // -m
+        vld1.16         {q0,  q1},  [r0]!
+        vneg.s8         q15, q13
+        vld1.16         {q10, q11}, [r2, :128]!
+        vmovl.s8        q12, d28
+        vmovl.s8        q13, d29
+        vmovl.s8        q14, d30
+        vmovl.s8        q15, d31
+        vld1.16         {q2,  q3},  [r0]
+        sub             r0,  r0,  #32
+        vshl.i16        q12, q12, #9  // -m << 9
+        vshl.i16        q13, q13, #9
+        vshl.i16        q14, q14, #9
+        vshl.i16        q15, q15, #9
+        vsub.i16        q8,  q0,  q8  // a - b
+        vsub.i16        q9,  q1,  q9
+        vsub.i16        q10, q2,  q10
+        vsub.i16        q11, q3,  q11
+        vqrdmulh.s16    q8,  q8,  q12 // ((a-b)*-m + 32) >> 6
+        vqrdmulh.s16    q9,  q9,  q13
+        vqrdmulh.s16    q10, q10, q14
+        vqrdmulh.s16    q11, q11, q15
+        vadd.i16        q0,  q0,  q8
+        vadd.i16        q1,  q1,  q9
+        vadd.i16        q2,  q2,  q10
+        vst1.16         {q0, q1}, [r0]!
+        vadd.i16        q3,  q3,  q11
+        vst1.16         {q2, q3}, [r0]!
+        bgt             64b
+        subs            r4,  r4,  #1
+        add             r0,  r0,  r1
+        bgt             641b
         pop             {r4-r5,pc}
 endfunc
 
