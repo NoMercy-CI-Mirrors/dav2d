@@ -1014,11 +1014,10 @@ endfunc
 .endif
 .endm
 
-.macro make_8tap_fn op, type, type_h, type_v
-function \op\()_8tap_\type\()_8bpc_neon, export=1
+.macro make_8tap_fn op, name, type
+function \op\()_8tap_\name\()_8bpc_neon, export=1
         push            {r4-r11,lr}
-        movw            r8,  \type_h
-        movw            r9,  \type_v
+        movw            r8,  \type
         b               \op\()_8tap_neon
 endfunc
 .endm
@@ -1029,9 +1028,9 @@ endfunc
 #define SHARP   ((2*15<<7)|3*15)
 
 .macro filter_fn type, dst, d_strd, src, s_strd, w, h, mx, my, ds2, sr2, shift_hv
-make_8tap_fn \type, regular,        REGULAR, REGULAR
-make_8tap_fn \type, smooth,         SMOOTH,  SMOOTH
-make_8tap_fn \type, sharp,          SHARP,   SHARP
+make_8tap_fn \type, regular, REGULAR
+make_8tap_fn \type, smooth,  SMOOTH
+make_8tap_fn \type, sharp,   SHARP
 
 function \type\()_8tap_neon
         ldrd            r4,  r5,  [sp, #36]
@@ -1040,7 +1039,7 @@ function \type\()_8tap_neon
         mul             \mx,  \mx, r10
         mul             \my,  \my, r10
         add             \mx,  \mx, r8 // mx, 8tap_h, 4tap_h
-        add             \my,  \my, r9 // my, 8tap_v, 4tap_v
+        add             \my,  \my, r8 // my, 8tap_v, 4tap_v
 .ifc \type, prep
         lsl             \d_strd, \d_strd, #1
 .endif
