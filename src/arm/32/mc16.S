@@ -3097,7 +3097,7 @@ function warp_affine_8x8\t\()_16bpc_neon, export=1
         sub             r2,  r2,  r3, lsl #1
         sub             r2,  r2,  r3
         sub             r2,  r2,  #6
-        movrel          r11, X(mc_warp_filter), 64*8
+        movrel          r11, X(mc_warp_filter), 3*64*8
 .ifnb \t
         lsl             r1,  r1,  #1
 .endif
