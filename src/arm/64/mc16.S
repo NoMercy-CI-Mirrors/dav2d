@@ -819,8 +819,7 @@ endjumptable
 
 
 // This has got the same signature as the prep_8tap functions,
-// and assumes that x9 is set to (clz(w)-24), w7 to intermediate_bits and
-// x8 to w*2.
+// and assumes that x9 is set to (clz(w)-24) and w8 to intermediate_bits.
 function prep_16bpc_neon
         movrel          x10, prep_16bpc_tbl
         ldrsw           x9, [x10, x9, lsl #2]
