@@ -1112,14 +1112,8 @@ endfunc
 
 .macro filter_fn type, dst, d_strd, src, s_strd, w, h, mx, my, bdmax, ds2, sr2
 make_8tap_fn \type, regular,        REGULAR, REGULAR
-make_8tap_fn \type, regular_smooth, REGULAR, SMOOTH
-make_8tap_fn \type, regular_sharp,  REGULAR, SHARP
 make_8tap_fn \type, smooth,         SMOOTH,  SMOOTH
-make_8tap_fn \type, smooth_regular, SMOOTH,  REGULAR
-make_8tap_fn \type, smooth_sharp,   SMOOTH,  SHARP
 make_8tap_fn \type, sharp,          SHARP,   SHARP
-make_8tap_fn \type, sharp_regular,  SHARP,   REGULAR
-make_8tap_fn \type, sharp_smooth,   SHARP,   SMOOTH
 
 function \type\()_8tap_neon
         ldrd            r4,  r5,  [sp, #36]
