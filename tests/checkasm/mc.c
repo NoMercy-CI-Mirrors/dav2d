@@ -55,7 +55,7 @@ static void check_mc(Dav2dMCDSPContext *const c) {
 
     for (int filter = 0; filter < DAV2D_N_FILTERS; filter++)
         for (int w = 2; w <= 64; w <<= 1) {
-            pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
+            pixel *const u_dst = w == 64 ? a_dst : a_dst + 1;
             for (int mxy = 0; mxy < 4; mxy++)
                 if (check_func(c->mc[filter], "mc_%s_w%d_%s_%dbpc",
                     filter_names[filter], w, mxy_names[mxy], BITDEPTH))
@@ -175,7 +175,7 @@ static void check_mc_scaled(Dav2dMCDSPContext *const c) {
 
     for (int filter = 0; filter < DAV2D_N_FILTERS; filter++)
         for (int w = 2; w <= 64; w <<= 1) {
-            pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
+            pixel *const u_dst = w == 64 ? a_dst : a_dst + 1;
             for (int p = 0; p < 3; ++p) {
                 if (check_func(c->mc_scaled[filter], "mc_scaled_%s_w%d%s_%dbpc",
                                filter_names[filter], w, scaled_paths[p], BITDEPTH))
@@ -289,7 +289,7 @@ static void check_avg(Dav2dMCDSPContext *const c) {
 
     for (int w = 4; w <= 64; w <<= 1)
         if (check_func(c->avg, "avg_w%d_%dbpc", w, BITDEPTH)) {
-            pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
+            pixel *const u_dst = w == 64 ? a_dst : a_dst + 1;
             for (int h = 4; h <= 64; h <<= 1)
             {
 #if BITDEPTH == 16
@@ -324,7 +324,7 @@ static void check_w_avg(Dav2dMCDSPContext *const c) {
 
     for (int w = 4; w <= 64; w <<= 1)
         if (check_func(c->w_avg, "w_avg_w%d_%dbpc", w, BITDEPTH)) {
-            pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
+            pixel *const u_dst = w == 64 ? a_dst : a_dst + 1;
             for (int h = 4; h <= 64; h <<= 1)
             {
                 int weight = rnd() % 25 - 4; // -4..20
@@ -364,7 +364,7 @@ static void check_mask(Dav2dMCDSPContext *const c) {
 
     for (int w = 4; w <= 64; w <<= 1)
         if (check_func(c->mask, "mask_w%d_%dbpc", w, BITDEPTH)) {
-            pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
+            pixel *const u_dst = w == 64 ? a_dst : a_dst + 1;
             for (int h = 4; h <= 64; h <<= 1)
             {
 #if BITDEPTH == 16
@@ -408,7 +408,7 @@ static void check_w_mask(Dav2dMCDSPContext *const c) {
             if (check_func(c->w_mask[i], "w_mask_%d_w%d_%dbpc", ss[i], w,
                            BITDEPTH))
             {
-                pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
+                pixel *const u_dst = w == 64 ? a_dst : a_dst + 1;
                 for (int h = 4; h <= 64; h <<= 1)
                 {
                     int sign = rnd() & 1;
@@ -456,7 +456,7 @@ static void check_blend(Dav2dMCDSPContext *const c) {
 
     for (int w = 4; w <= 64; w <<= 1) {
         if (check_func(c->blend, "blend_w%d_%dbpc", w, BITDEPTH)) {
-            pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
+            pixel *const u_dst = w == 64 ? a_dst : a_dst + 1;
             for (int h = 4; h <= 64; h <<= 1) {
 #if BITDEPTH == 16
                 const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
@@ -508,7 +508,7 @@ static void check_warp8x8(Dav2dMCDSPContext *const c) {
 #else
         const int bitdepth_max = 0xff;
 #endif
-        pixel *const u_dst = a_dst + 4;
+        pixel *const u_dst = a_dst + 1;
 
         abcd[0] = (rnd() & 0x6fff) - 0x3000;
         abcd[1] = (rnd() & 0x37ff) - 0x1800;
@@ -652,7 +652,7 @@ static void check_morph(Dav2dMCDSPContext *const c) {
                  int w, int h HIGHBD_DECL_SUFFIX);
 
     for (int w = 4; w <= 64; w <<= 1) {
-        pixel *const u_dst = w == 64 ? a_dst : a_dst + 4;
+        pixel *const u_dst = w == 64 ? a_dst : a_dst + 1;
         if (check_func(c->morph, "morph_w%d_%dbpc", w, BITDEPTH)) {
 #if BITDEPTH == 16
             const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
