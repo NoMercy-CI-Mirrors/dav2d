@@ -2779,7 +2779,7 @@ endfunc
 .endm
 
 filter_fn put,  r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, 10
-filter_fn prep, r0, r7, r1, r2, r3, r4, r5, r6, r8, r9, 6
+filter_fn prep, r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, 6
 
 .macro load_filter_ptr src
         asr             r12, \src, #10
