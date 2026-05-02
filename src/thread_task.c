@@ -650,7 +650,7 @@ void *dav2d_worker_task(void *data) {
                     if (t->type != DAV2D_TASK_TYPE_ENTROPY_PROGRESS && c->n_fc > 1) {
                         atomic_store(&f->cur.progress[1],
                                      atomic_load(&f->task_thread.error) ?
-                                         FRAME_ERROR : t->recon_progress);
+                                         FRAME_ERROR : (unsigned) t->recon_progress);
                     }
                     if (t->sby + 1 < f->sbh) {
                         // add sby+1 to list to replace this one
