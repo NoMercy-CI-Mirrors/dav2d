@@ -3,9 +3,9 @@
 **dav2d** is an **AV2** cross-platform **d**ecoder, open-source, and focused on speed and correctness.
 It is based on our popular **dav1d** decoder.
 
-It is now battle-tested and production-ready and can be used everywhere.
+It is a quite early project, should not be used in production, notably since the AV2 specification is not final.
 
-The canonical repository URL for this repo is https://code.videolan.org/videolan/dav2d
+The canonical repository URL for this repo is https://code.videolan.org/videolan/dav2d .
 
 This project is edited by VideoLAN as part of its membership by the *Alliance for Open Media*/**AOM**.
 
@@ -133,7 +133,7 @@ These companies can provide support and integration help, should you need it.
 
 ## Is dav2d a recursive acronym?
 
-- Yes.
+- Yes, but it is less funny than dav1d :(
 
 ## Can I help?
 
