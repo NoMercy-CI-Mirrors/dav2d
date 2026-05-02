@@ -44,8 +44,6 @@ decl_warp8x8_fn(BF(dav2d_warp_affine_8x8, lsx));
 decl_warp8x8t_fn(BF(dav2d_warp_affine_8x8t, lsx));
 decl_w_mask_fn(BF(dav2d_w_mask_420, lsx));
 decl_blend_fn(BF(dav2d_blend, lsx));
-decl_blend_dir_fn(BF(dav2d_blend_v, lsx));
-decl_blend_dir_fn(BF(dav2d_blend_h, lsx));
 decl_emu_edge_fn(BF(dav2d_emu_edge, lsx));
 
 decl_8tap_fns(lsx);
@@ -56,7 +54,6 @@ decl_mask_fn(BF(dav2d_mask, lasx));
 decl_warp8x8_fn(BF(dav2d_warp_affine_8x8, lasx));
 decl_warp8x8t_fn(BF(dav2d_warp_affine_8x8t, lasx));
 decl_w_mask_fn(BF(dav2d_w_mask_420, lasx));
-decl_blend_dir_fn(BF(dav2d_blend_h, lasx));
 
 decl_8tap_gen(mct, prep, lasx);
 
@@ -73,8 +70,6 @@ static ALWAYS_INLINE void mc_dsp_init_loongarch(Dav2dMCDSPContext *const c) {
     c->warp8x8t = BF(dav2d_warp_affine_8x8t, lsx);
     c->w_mask[2] = BF(dav2d_w_mask_420, lsx);
     c->blend = BF(dav2d_blend, lsx);
-    c->blend_v = BF(dav2d_blend_v, lsx);
-    c->blend_h = BF(dav2d_blend_h, lsx);
     c->emu_edge = BF(dav2d_emu_edge, lsx);
 
     init_8tap_fns(lsx);
@@ -87,7 +82,6 @@ static ALWAYS_INLINE void mc_dsp_init_loongarch(Dav2dMCDSPContext *const c) {
     c->warp8x8 = BF(dav2d_warp_affine_8x8, lasx);
     c->warp8x8t = BF(dav2d_warp_affine_8x8t, lasx);
     c->w_mask[2] = BF(dav2d_w_mask_420, lasx);
-    c->blend_h = BF(dav2d_blend_h, lasx);
 
     init_8tap_gen(mct, lasx);
 #endif
