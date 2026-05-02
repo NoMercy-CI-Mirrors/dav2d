@@ -109,7 +109,9 @@ build-debian:
           done
         - |
           git reset --hard
-        - ninja -C build
+        - |
+          meson configure build --werror
+          ninja -C build
         - |
           echo "[CI] Running AVM vs DAV2D MD5 regression test"
           time tests/test-md5.sh build/tools/dav2d
@@ -123,6 +125,7 @@ build-debian-avx512:
         CFLAGS: '-mavx'
     script:
         - meson setup build --buildtype debugoptimized
+                            --werror
         - ninja -C build
         - cd build
         - time meson test -v --suite checkasm
@@ -133,6 +136,7 @@ build-debian-aarch64:
     script:
         - meson setup build --buildtype debugoptimized
                             -Dtrim_dsp=false
+                            --werror
         - ninja -C build
         - meson test -v -C build
         - time tests/test-md5.sh build/tools/dav2d
@@ -141,7 +145,8 @@ build-debian-armv7:
     extends: .debian-armv7-common
     script:
         - linux32 meson setup build --buildtype debugoptimized
-                            -Dtrim_dsp=false
+                                    -Dtrim_dsp=false
+                                    --werror
         - ninja -C build
         - meson test -v -C build
         - time tests/test-md5.sh build/tools/dav2d
