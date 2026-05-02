@@ -185,7 +185,7 @@ static void backup_row_luma(pixel *dst, const pixel *src, const ptrdiff_t src_st
             dst[x] = (src[x] + src2[x]) >> 1;
         break;
     default:
-        assert(0);
+        dav2d_unreachable();
         // fall-through in non-debug mode
     case 2:
         for (int x = 0; x < w; x++)
@@ -204,7 +204,7 @@ static void backup_row_luma(pixel *dst, const pixel *src, const ptrdiff_t src_st
                 dst[x] = (src[x] + src2[x]) >> 1;
             break;
         default:
-            assert(0);
+            dav2d_unreachable();
             // fall-through in non-debug mode
         case 2:
             for (int x = -4; x < 0; x++)
@@ -227,7 +227,7 @@ static void backup_row_luma(pixel *dst, const pixel *src, const ptrdiff_t src_st
                 dst[x] = (src[x] + src2[x]) >> 1;
             break;
         default:
-            assert(0);
+            dav2d_unreachable();
             // fall-through in non-debug mode
         case 2:
             for (int x = w; x < w + 4; x++)

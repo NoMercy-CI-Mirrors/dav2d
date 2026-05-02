@@ -444,7 +444,7 @@ static int read_pal_indices(Dav2dTaskContext *const t, uint8_t *const pal_out,
                                       pal_cdf[ctx], pal_sz - 1);
                     int p;
                     switch (ctx) {
-                    default: assert(0);
+                    default: dav2d_unreachable();
                     case 1: {
                         switch (v) {
                         case 0:
@@ -1507,7 +1507,7 @@ static inline void jmvd_scale(union mv *const mv, const int amvd,
 {
     if (amvd) {
         switch (jmvd_scale_mode) {
-        default: assert(0);
+        default: dav2d_unreachable();
         case 0: break;
         case 1:
             mv->y *= 2;
@@ -1520,7 +1520,7 @@ static inline void jmvd_scale(union mv *const mv, const int amvd,
         }
     } else {
         switch (jmvd_scale_mode) {
-        default: assert(0);
+        default: dav2d_unreachable();
         case 0: break;
         case 1: mv->y *= 2; break;
         case 2: mv->x *= 2; break;
@@ -4117,7 +4117,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         break;
     }
     default:
-        assert(0);
+        dav2d_unreachable();
     }
 
     *dir_ptr |= (child_dir & 0xff) << 16;
@@ -4513,7 +4513,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
         if (atomic_load_explicit(c->flush, memory_order_acquire))
             return 1;
         switch (root_bs) {
-        default: assert(0);
+        default: dav2d_unreachable();
         case BS_64x64: {
             const int idx = ((t->bx & 0x30) >> 4) + ((t->by & 0x30) >> 2);
             t->lf_mask->cdef_idx[idx] = -1;

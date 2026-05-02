@@ -1585,7 +1585,7 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
                     }
                 }
                 switch (sum_n) {
-                default: assert(0);
+                default: dav2d_unreachable();
                 case 1:
                     rp_proj[pos + 1 + stride].mv = mv;
                     break;
@@ -1663,7 +1663,7 @@ static void fill_gap_traj(union mv *const rp_traj, const ptrdiff_t stride,
                     }
                 }
                 switch (sum_n) {
-                default: assert(0);
+                default: dav2d_unreachable();
                 case 1:
                     rp_traj[pos + 1 + stride] = mv;
                     break;

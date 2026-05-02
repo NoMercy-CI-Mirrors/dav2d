@@ -94,7 +94,7 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
          * expect execution to continue after an assertion has been triggered
          * and will therefore complain about the use of uninitialized variables
          * when compiled in debug mode if we put the default case at the end. */
-        default: assert(0); /* fall-through */
+        default: dav2d_unreachable();
         case TX_4X4:   MERGE_CTX(a,  8, 0x40);
         case TX_8X8:   MERGE_CTX(a, 16, 0x4040);
         case TX_16X16: MERGE_CTX(a, 32, 0x40404040U);
@@ -103,7 +103,7 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
                              *(const uint64_t *) &a[8]) != 0x4040404040404040ULL;
         }
         switch (t_dim->lh) {
-        default: assert(0); /* fall-through */
+        default: dav2d_unreachable();
         case TX_4X4:   MERGE_CTX(l,  8, 0x40);
         case TX_8X8:   MERGE_CTX(l, 16, 0x4040);
         case TX_16X16: MERGE_CTX(l, 32, 0x40404040U);
@@ -133,7 +133,7 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         break
 
         switch (t_dim->lw) {
-        default: assert(0); /* fall-through */
+        default: dav2d_unreachable();
         case TX_4X4:   MERGE_CTX(a,  8, TX_4X4);
         case TX_8X8:   MERGE_CTX(a, 16, TX_8X8);
         case TX_16X16: MERGE_CTX(a, 32, TX_16X16);
@@ -141,7 +141,7 @@ static inline unsigned get_skip_ctx(const TxfmInfo *const t_dim,
         case TX_64X64: MERGE_CTX(a, 32, TX_64X64);
         }
         switch (t_dim->lh) {
-        default: assert(0); /* fall-through */
+        default: dav2d_unreachable();
         case TX_4X4:   MERGE_CTX(l,  8, TX_4X4);
         case TX_8X8:   MERGE_CTX(l, 16, TX_8X8);
         case TX_16X16: MERGE_CTX(l, 32, TX_16X16);
@@ -170,7 +170,7 @@ static inline unsigned get_dc_sign_ctx(const TxfmInfo *const t_dim,
     const uint8_t *edge = a;
     for (int dir = 0, len = t_dim->lw; dir < 2; dir++, edge = l, len = t_dim->lh) {
         switch(len) {
-        default: assert(0); /* fall-through */
+        default: dav2d_unreachable();
         case TX_4X4:
             t += *edge >> 6;
             break;
@@ -313,7 +313,7 @@ static inline unsigned get_sign_ctx_idtx(const int8_t *const levels,
     case -3: return offset + 6;
     case -2:
     case -1: return offset + 2;
-    default: assert(0);
+    default: dav2d_unreachable();
     case 0: return 0;
     case 1:
     case 2: return offset + 1;
@@ -1017,7 +1017,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             DECODE_COEFS_CLASS(TX_CLASS_V, y, 0);
         }
 #undef DECODE_COEFS_CLASS
-        default: assert(0);
+        default: dav2d_unreachable();
         }
     } else if (chroma) { // dc-only
         dc_tok = 1 + dav2d_msac_decode_symbol_adapt8(&ts->msac,
@@ -1465,7 +1465,7 @@ int bytefn(dav2d_read_coef_blocks)(Dav2dTaskContext *const t,
         if (res < 0) return res;
         break;
     }
-    default: assert(0);
+    default: dav2d_unreachable();
     }
 
     if (cbs == BS_INVALID) return 0;
@@ -3240,7 +3240,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                                b->mask_sign HIGHBD_CALL_SUFFIX);
                 break;
             }
-            default: assert(0);
+            default: dav2d_unreachable();
             case COMP_INTER_NONE:
                 assert(b->ref.ref[0] == TIP_FRAME);
                 // fall-through
@@ -3474,7 +3474,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (res < 0) return res;
         break;
     }
-    default: assert(0);
+    default: dav2d_unreachable();
     }
 
     if (cbs == BS_INVALID) return 0;
@@ -3750,7 +3750,7 @@ chroma: {}
                              mask HIGHBD_CALL_SUFFIX);
                 break;
             }
-            default: assert(0);
+            default: dav2d_unreachable();
             case COMP_INTER_NONE:
                 assert(b->ref.ref[0] == TIP_FRAME);
                 // fall-through

@@ -142,7 +142,7 @@ static inline int get_comp_ctx(const BlockContext *nx[2],
                                const int8_t *const refdir)
 {
     switch (n_ctx) {
-    default: assert(0);
+    default: dav2d_unreachable();
     case 2: {
         const int refa2 = nx[0]->ref[1][xoff[0]];
         const int refb2 = nx[1]->ref[1][xoff[1]];

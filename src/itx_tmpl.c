@@ -66,7 +66,7 @@ static void residual_add(pixel *dst, const ptrdiff_t stride,
     const int dpcm_flag = txtp >> 8;
     assert(!dpcm_flag || (txtp & 0xe7) == IDTX || (txtp & 0xe7) == WHT_WHT);
     switch (dpcm_flag) {
-    default: assert(0);
+    default: dav2d_unreachable();
     case 0:
         for (int y = 0; y < h; y++, dst += PXSTRIDE(stride))
             for (int x = 0; x < w; x++)
