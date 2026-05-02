@@ -77,9 +77,10 @@ static inline void init_wiener(Dav2dFrameContext *const f) {
     const enum Dav2dRestorationType type = f->frame_hdr->restoration.p[0].type;
     if (type == DAV2D_RESTORATION_NONE) return;
 
-    int qidx = f->frame_hdr->quant.yac;
+    const int qmax = 255 + 48 * f->seq_hdr->hbd;
+    const int qidx = imin(f->frame_hdr->quant.yac, qmax);
 
-    f->lf.base_q = dav2d_dq_lookup(f->frame_hdr->quant.yac);
+    f->lf.base_q = dav2d_dq_lookup(qidx);
     int idx = 3;
     if (qidx < 130) {
         idx = 0;
