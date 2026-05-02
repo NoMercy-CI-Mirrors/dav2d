@@ -2,8 +2,15 @@ stages:
     - style
     - build
 
-.debian-amd64-common:
+.debian-amd64-cmake-common:
     image: registry.videolan.org/vlc-debian-unstable:20250528090433
+    stage: build
+    tags:
+        - docker
+        - amd64
+
+.debian-amd64-common:
+    image: registry.videolan.org/dav1d-debian-unstable:20260103195850
     stage: build
     tags:
         - docker
@@ -40,7 +47,7 @@ style-check:
           done
 
 build-debian:
-    extends: .debian-amd64-common
+    extends: .debian-amd64-cmake-common
     tags:
         - docker
         - avx2
