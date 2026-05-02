@@ -10,14 +10,14 @@ stages:
         - amd64
 
 .debian-aarch64-common:
-    image: registry.videolan.org/dav1d-debian-bookworm-aarch64:20250215002814
+    image: registry.videolan.org/dav1d-debian-bookworm-aarch64:20260228141555
     stage: build
     tags:
         - docker
         - aarch64
 
 .debian-armv7-common:
-    image: registry.videolan.org/dav1d-debian-bookworm-armv7:20250215014239
+    image: registry.videolan.org/dav1d-debian-bookworm-armv7:20260217211228
     stage: build
     tags:
         - docker
