@@ -241,9 +241,9 @@ if is_asm_enabled
         )}
         arch_flags += {'pwr9': ['-mcpu=power9', '-DDAV2D_PWR9']}
         libdav2d_arch_tmpl_sources += {'pwr9': files(
-            'ppc/itx_tmpl.c',
-            'ppc/loopfilter_tmpl.c',
-            'ppc/mc_tmpl.c',
+#            'ppc/itx_tmpl.c',
+#            'ppc/loopfilter_tmpl.c',
+#            'ppc/mc_tmpl.c',
         )}
     elif host_machine.cpu_family().startswith('riscv')
         libdav2d_sources += files(
