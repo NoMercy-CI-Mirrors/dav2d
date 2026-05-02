@@ -37,10 +37,10 @@ decl_deblock_sb_fn(BF(dav2d_deblock_v_sb_uv, ext))
 decl_deblock_sb_fns(avx2);
 
 static ALWAYS_INLINE void deblock_dsp_init_x86(Dav2dDeblockDSPContext *const c) {
-    const unsigned flags = dav2d_get_cpu_flags();
-
 #if ARCH_X86_64
 #if BITDEPTH == 8
+    const unsigned flags = dav2d_get_cpu_flags();
+
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
     c->deblock_sb[0][0] = BF(dav2d_deblock_h_sb_y, avx2);
