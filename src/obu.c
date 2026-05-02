@@ -2362,6 +2362,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
         const int op_idx =
         0; //c->operating_point < seq_hdr->num_operating_points ? c->operating_point : 0;
         c->operating_point_idc = 0;//seq_hdr->operating_points[op_idx].idc;
+        (void)op_idx;
         const unsigned spatial_mask = c->operating_point_idc >> 8;
         c->max_spatial_id = spatial_mask ? ulog2(spatial_mask) : 0;
 

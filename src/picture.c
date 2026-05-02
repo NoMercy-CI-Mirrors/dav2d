@@ -202,6 +202,7 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
     p->flags = c->frame_flags;
     c->frame_flags &= flags_mask;
 #endif
+    (void)flags_mask;
 
     p->visible = f->frame_hdr->show_immediate;
     p->showable = f->frame_hdr->show_immediate || f->frame_hdr->show_implicit;
