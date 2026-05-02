@@ -34,6 +34,7 @@
 #include "src/looprestoration.h"
 #include "src/tables.h"
 
+#if 0
 static int to_binary(int x) { /* 0-15 -> 0000-1111 */
     return (x & 1) + 5 * (x & 2) + 25 * (x & 4) + 125 * (x & 8);
 }
@@ -53,7 +54,6 @@ static void init_tmp(pixel *buf, const ptrdiff_t stride,
     }
 }
 
-#if 0
 static void check_wiener(Dav2dLoopRestorationDSPContext *const c, const int bpc) {
     PIXEL_RECT(c_dst, 384, 64);
     PIXEL_RECT(a_dst, 384, 64);
