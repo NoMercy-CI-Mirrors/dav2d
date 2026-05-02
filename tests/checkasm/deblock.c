@@ -260,7 +260,7 @@ static void check_deblock_sb(deblock_sb_fn fn, const char *const name,
             }
         }
     }
-    report(name);
+    report("%s", name);
 }
 
 void bitfn(checkasm_check_deblock)(void) {
