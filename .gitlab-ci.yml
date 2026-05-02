@@ -1,6 +1,7 @@
 stages:
     - style
     - build
+    - test
 
 .debian-amd64-cmake-common:
     image: registry.videolan.org/vlc-debian-unstable:20250528090433
@@ -11,6 +12,13 @@ stages:
 
 .debian-amd64-common:
     image: registry.videolan.org/dav1d-debian-unstable:20260103195850
+    stage: build
+    tags:
+        - docker
+        - amd64
+
+.debian-llvm-mingw-common:
+    image: registry.videolan.org/vlc-debian-llvm-ucrt:20260121170706
     stage: build
     tags:
         - docker
@@ -29,6 +37,28 @@ stages:
     tags:
         - docker
         - armv7
+
+.debian-ppc64le-common:
+    image: registry.videolan.org/dav1d-debian-unstable-ppc64le:20260210052452
+    stage: build
+    tags:
+        - docker
+        - ppc64le
+
+.android-common:
+    image: registry.videolan.org/vlc-debian-android:20260120134731
+    stage: build
+    tags:
+        - docker
+        - amd64
+
+.debian-wasm-emscripten-common:
+    image: registry.videolan.org/vlc-debian-wasm-emscripten:20260120134731
+    stage: build
+    tags:
+        - docker
+        - amd64
+
 
 style-check:
     extends: .debian-amd64-common
@@ -116,6 +146,57 @@ build-debian:
           echo "[CI] Running AVM vs DAV2D MD5 regression test"
           time tests/test-md5.sh build/tools/dav2d
 
+build-debian-static:
+    extends: .debian-amd64-common
+    script:
+        - meson setup build --buildtype release
+                            --default-library static
+        - ninja -C build
+        - cd build && meson test -v
+        - nm -A -g src/libdav2d.a | grep " [ABCDGRST] " | (! grep -v " _*dav2d_")
+
+build-debian32:
+    extends: .debian-amd64-common
+    script:
+        - meson setup build --buildtype release
+                            -Dtrim_dsp=false
+                            --cross-file package/crossfiles/i686-linux32.meson
+        - ninja -C build
+        - meson test -v -C build
+
+build-debian-no-tools:
+    extends: .debian-amd64-common
+    script:
+        - meson setup build --buildtype release
+                            -Denable_tools=false
+        - ninja -C build
+
+build-debian-bitdepth:
+    extends: .debian-amd64-common
+    script:
+        - meson setup build --buildtype release
+                            -Dbitdepths=$DEPTH
+        - ninja -C build
+    parallel:
+      matrix:
+        - DEPTH: [8, 16]
+
+build-debian-avx:
+    extends: .debian-amd64-common
+    tags:
+        - docker
+        - avx2
+        - amd64
+    variables:
+        CFLAGS: '-mavx'
+    script:
+        - meson setup build --buildtype debugoptimized
+                            --werror
+        - ninja -C build
+        - cd build
+        - time meson test -v --suite checkasm
+        - time ../tests/test-md5.sh tools/dav2d
+
 build-debian-avx512:
     extends: .debian-amd64-common
     tags:
@@ -131,6 +212,73 @@ build-debian-avx512:
         - time meson test -v --suite checkasm
         - time ../tests/test-md5.sh tools/dav2d
 
+build-debian-clang:
+    extends: .debian-amd64-common
+    variables:
+        CC: clang
+        CC_LD: mold
+    script:
+        - meson setup build --buildtype release
+                            --werror
+                            -Dtrim_dsp=false
+        - ninja -C build
+        - meson test -v -C build
+
+build-win:
+    extends: .debian-amd64-common
+    script:
+        - wineserver -p && wine wineboot
+        - meson setup build --buildtype release
+                            --libdir lib
+                            --prefix "$(pwd)/build/dav1d_install"
+                            --cross-file package/crossfiles/${CROSSFILE}.meson
+                            -Ddefault_library=both
+                            -Dtrim_dsp=false
+        - ninja -C build
+        - cd build && meson test -v
+        - ${CROSSFILE}-nm -A -g src/libdav2d.a | grep " [ABCDGRST] " | (! grep -E -v " \.| _*dav2d_")
+    parallel:
+      matrix:
+        - CROSSFILE: [i686-w64-mingw32, x86_64-w64-mingw32]
+
+build-win-arm:
+    extends: .debian-llvm-mingw-common
+    script:
+        - meson setup build --buildtype release
+                            --werror
+                            --libdir lib
+                            --prefix "$(pwd)/build/dav1d_install"
+                            --cross-file package/crossfiles/${CROSSFILE}.meson
+                            -Ddefault_library=both
+                            -Dtrim_dsp=false
+        - ninja -C build
+        - ${CROSSFILE}-nm -A -g build/src/libdav2d.a | grep " [ABCDGRST] " | (! grep -E -v " \.| _*dav2d_")
+    parallel:
+      matrix:
+        - CROSSFILE: [armv7-w64-mingw32, aarch64-w64-mingw32]
+
+.build-android-common:
+    extends: .android-common
+    script:
+        - meson setup build --buildtype release
+                            --werror
+                            --libdir lib
+                            --prefix "$(pwd)/build/dav1d_install"
+                            --cross-file $CROSSFILE
+                            -Ddefault_library=both
+                            -Dtrim_dsp=false
+        - ninja -C build
+
+build-android-armv7:
+    extends: .build-android-common
+    variables:
+        CROSSFILE: package/crossfiles/arm-android.meson
+
+build-android-aarch64:
+    extends: .build-android-common
+    variables:
+        CROSSFILE: package/crossfiles/aarch64-android.meson
+
 build-debian-aarch64:
     extends: .debian-aarch64-common
     script:
@@ -140,6 +288,48 @@ build-debian-aarch64:
         - ninja -C build
         - meson test -v -C build
         - time tests/test-md5.sh build/tools/dav2d
+
+build-debian-aarch64-clang-5:
+    extends: .debian-aarch64-common
+    variables:
+        CC: clang-5.0
+        CFLAGS: '-integrated-as'
+    script:
+        - meson setup build --buildtype release
+        - ninja -C build
+        - meson test -v -C build
+        - time tests/test-md5.sh build/tools/dav2d
+
+build-debian-aarch64-clang:
+    extends: .debian-amd64-common
+    script:
+        - meson setup build --buildtype release
+                            -Dtrim_dsp=false
+                            --werror
+                            --cross-file package/crossfiles/aarch64-linux-clang.meson
+        - ninja -C build
+        - meson test -v -C build
+
+.build-macos-common:
+    stage: build
+    script:
+        - meson setup build --buildtype release
+                            -Ddefault_library=both
+                            -Dtrim_dsp=false
+                            --werror
+        - ninja -C build
+        - meson test -v -C build
+
+build-macos-x86_64:
+    extends: .build-macos-common
+    tags:
+        - amd64
+        - macos
+
+build-macos-arm64:
+    extends: .build-macos-common
+    tags:
+        - macos-xcode26
 
 build-debian-armv7:
     extends: .debian-armv7-common
@@ -151,8 +341,71 @@ build-debian-armv7:
         - meson test -v -C build
         - time tests/test-md5.sh build/tools/dav2d
 
+build-debian-armv7-clang-5:
+    extends: .debian-armv7-common
+    variables:
+        CC: clang-5.0
+        CFLAGS: '-integrated-as'
+    script:
+        - linux32 meson setup build --buildtype release
+        - ninja -C build
+        - meson test -v -C build
+        - time tests/test-md5.sh build/tools/dav2d
+
+build-debian-ppc64le:
+    extends: .debian-ppc64le-common
+    variables:
+        CC: gcc-13
+    script:
+        - meson setup build --buildtype release
+                            -Dtrim_dsp=false
+                            --werror
+        - ninja -C build
+        - meson test -v -C build
+
+build-debian-wasm:
+    extends: .debian-wasm-emscripten-common
+    script:
+        - source $EMSCRIPTEN_SDK/emsdk_env.sh
+        - meson setup build --buildtype release
+                            --werror
+                            --default-library static
+                            --cross-file package/crossfiles/${CROSSFILE}.meson
+        - ninja -C build
+        - meson test -v -C build
+    parallel:
+      matrix:
+        - CROSSFILE: [wasm32, wasm64]
+
+build-debian-riscv64:
+    extends: .debian-amd64-common
+    variables:
+        QEMU_CPU: rv64,v=true,vext_spec=v1.0,vlen=256,elen=64
+    script:
+        - meson setup build --buildtype release
+                            -Dtrim_dsp=false
+                            --cross-file package/crossfiles/${CROSSFILE}.meson
+        - ninja -C build
+        - meson test -v -C build
+    parallel:
+      matrix:
+        - CROSSFILE: [riscv64-linux, riscv64-linux-clang]
+
+build-debian-loongarch64:
+    extends: .debian-amd64-common
+    variables:
+        QEMU_CPU: max
+    script:
+        - meson setup build --buildtype release
+                            -Dtrim_dsp=false
+                            --cross-file package/crossfiles/loongarch64-linux.meson
+        - ninja -C build
+        - meson test -v -C build
+
+
 test-win64:
     extends: .debian-amd64-common
+    stage: test
     image: registry.videolan.org/dav1d-debian-unstable:20260103195850
     script:
         - wineserver -p && wine wineboot
@@ -162,3 +415,46 @@ test-win64:
                             --cross-file package/crossfiles/x86_64-w64-mingw32.meson
         - ninja -C build
         - cd build && time meson test -v
+
+test-debian-riscv64:
+    extends:
+        - .debian-amd64-common
+    stage: test
+    needs: ["build-debian-riscv64"]
+    script:
+        - meson setup build --buildtype release
+                            -Dlogging=false
+                            -Dtrim_dsp=false
+                            --cross-file package/crossfiles/riscv64-linux.meson
+        - ninja -C build
+        - cd build && time meson test -v --timeout-multiplier 10
+    parallel:
+      matrix:
+        - QEMU_CPU: [ "rv64,v=true,vext_spec=v1.0,vlen=128,elen=64",
+                      "rv64,v=true,vext_spec=v1.0,vlen=256,elen=64",
+                      "rv64,v=true,vext_spec=v1.0,vlen=512,elen=64",
+                      "rv64,v=true,vext_spec=v1.0,vlen=1024,elen=64" ]
+
+test-debian-aarch64-qemu:
+    extends:
+        - .debian-amd64-common
+    stage: test
+    needs: ["build-debian-aarch64"]
+    script:
+        - meson setup build --buildtype release
+                            -Dlogging=false
+                            -Dtrim_dsp=false
+                            --cross-file package/crossfiles/aarch64-linux.meson
+        - ninja -C build
+        - cd build && time meson test -v --timeout-multiplier 10
+    parallel:
+      matrix:
+        # sve-default-vector-length sets the max vector length in bytes;
+        # the default is 64, allowing up to 512 bit vectors. Testing 1024
+        # and 2048 bit vectors requires raising this limit. The sve<n>
+        # option sets the active vector length in bits.
+        - QEMU_CPU: [ "max,sve-default-vector-length=256,sve128=on",
+                      "max,sve-default-vector-length=256,sve256=on",
+                      "max,sve-default-vector-length=256,sve512=on",
+                      "max,sve-default-vector-length=256,sve1024=on",
+                      "max,sve-default-vector-length=256,sve2048=on" ]
