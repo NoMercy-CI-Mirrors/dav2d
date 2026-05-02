@@ -1808,7 +1808,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     const ptrdiff_t stride = rf->rp_stride;
     const ptrdiff_t offset = sbsz8 * stride * tile_row_idx;
     const ptrdiff_t poffset = rf->have_frame_threading ? row_start8 * stride :
-                              (sbsz8 + 2) * stride * tile_row_idx + 2 * stride;
+                              (int) (sbsz8 + 2) * stride * tile_row_idx + 2 * stride;
     refmvs_sngl_mv_block *rp_proj = &rf->rp_proj[poffset];
     if (!rf->have_frame_threading) {
         memcpy(&rp_proj[col_start8 - 2 * rf->rp_stride],
