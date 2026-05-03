@@ -1007,6 +1007,7 @@ COLD void bitfn(dav2d_loop_restoration_dsp_init)(Dav2dLoopRestorationDSPContext 
     c->ns_wiener_multi = ns_wiener_multi_c;
     c->pc_wiener = pc_wiener_c;
     c->wiener_uv = ns_wiener_single_uv_c;
+
     c->gdf_add = gdf_add_c;
     c->gdf_prep = gdf_prep_c;
 

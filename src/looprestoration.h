@@ -52,7 +52,7 @@ typedef struct WienerQValApproxData {
 
     // First index doesn't depend on pixel data, so we can calculate it ahead
     // of time. Additionally, it only ever uses 2 values and only decreases.
-    int8_t idx0_changeover;
+    int16_t idx0_changeover;
 } WienerQValApproxData;
 
 #define GDF_PARAMS(...) struct {   \

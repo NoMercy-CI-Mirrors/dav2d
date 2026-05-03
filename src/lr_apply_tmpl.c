@@ -83,7 +83,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     const int ds_flt = f->seq_hdr->cfl_ds_filter_index;
 
     // TODO: We copy from a 16x18 array. That array should be 16x16 in the first place.
-    int8_t luma_filters[16][16];
+    ALIGN_STK_64(int8_t, luma_filters, 16, [16]);
 
     if (wiener_type == DAV2D_RESTORATION_NS_WIENER) {
         if (pd->frame_filters_on) {

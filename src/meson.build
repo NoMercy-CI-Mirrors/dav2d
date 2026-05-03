@@ -185,6 +185,7 @@ if is_asm_enabled
                 'x86/filmgrain_sse.asm',
                 'x86/ipred_sse.asm',
 #                'x86/mc_sse.asm',
+                'x86/wiener_avx2.asm',
             )
         endif
 
