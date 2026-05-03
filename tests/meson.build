@@ -84,6 +84,7 @@ if is_asm_enabled and checkasm_dependency.found()
         include_directories: dav2d_inc_dirs,
         build_by_default: false,
         dependencies: [
+            thread_dependency,
             libm_dependency,
             checkasm_dependency,
             ],
