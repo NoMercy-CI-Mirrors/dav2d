@@ -57,7 +57,7 @@ if is_asm_enabled and checkasm_dependency.found()
         'checkasm/filmgrain.c',
         'checkasm/ipred.c',
         'checkasm/itx.c',
-        'checkasm/looprestoration.c',
+        'checkasm/wiener.c',
         'checkasm/mc.c',
         'checkasm/stx.c',
     )

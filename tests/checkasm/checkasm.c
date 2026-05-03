@@ -47,9 +47,9 @@ static const CheckasmTest tests[] = {
     { "filmgrain_8bpc", checkasm_check_filmgrain_8bpc },
     { "ipred_8bpc", checkasm_check_ipred_8bpc },
     { "itx_8bpc", checkasm_check_itx_8bpc },
-    { "looprestoration_8bpc", checkasm_check_looprestoration_8bpc },
     { "mc_8bpc", checkasm_check_mc_8bpc },
     { "stx_8bpc", checkasm_check_stx_8bpc },
+    { "wiener_8bpc", checkasm_check_wiener_8bpc },
 #endif
 #if CONFIG_16BPC
     { "ccso_16bpc", checkasm_check_ccso_16bpc },
@@ -58,9 +58,9 @@ static const CheckasmTest tests[] = {
     { "filmgrain_16bpc", checkasm_check_filmgrain_16bpc },
     { "ipred_16bpc", checkasm_check_ipred_16bpc },
     { "itx_16bpc", checkasm_check_itx_16bpc },
-    { "looprestoration_16bpc", checkasm_check_looprestoration_16bpc },
     { "mc_16bpc", checkasm_check_mc_16bpc },
     { "stx_16bpc", checkasm_check_stx_16bpc },
+    { "wiener_16bpc", checkasm_check_wiener_16bpc },
 #endif
     { 0 }
 };

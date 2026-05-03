@@ -51,7 +51,7 @@ decl_check_bitfns(void checkasm_check_filmgrain);
 decl_check_bitfns(void checkasm_check_ipred);
 decl_check_bitfns(void checkasm_check_itx);
 decl_check_bitfns(void checkasm_check_deblock);
-decl_check_bitfns(void checkasm_check_looprestoration);
+decl_check_bitfns(void checkasm_check_wiener);
 decl_check_bitfns(void checkasm_check_mc);
 decl_check_bitfns(void checkasm_check_stx);
 
