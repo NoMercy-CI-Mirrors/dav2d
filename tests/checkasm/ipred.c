@@ -212,8 +212,8 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                             alpha_v = 0;
                                         alpha_u *= sign_u;
                                         alpha_v *= sign_v;
-                                        flags |= (alpha_u << CFL_ALPHA_U_SHIFT) & CFL_ALPHA_U_MASK;
-                                        flags |= (alpha_v << CFL_ALPHA_V_SHIFT) & CFL_ALPHA_V_MASK;
+                                        flags |= (alpha_u * (1 << CFL_ALPHA_U_SHIFT)) & CFL_ALPHA_U_MASK;
+                                        flags |= (alpha_v * (1 << CFL_ALPHA_V_SHIFT)) & CFL_ALPHA_V_MASK;
                                     }
 
                                     const int itse = flags & CFL_IS_TOP_SB_EDGE;
