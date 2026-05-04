@@ -72,6 +72,21 @@ style-check:
               fi;
           done
         - rg '[\u00a0\u061c\u2000-\u200f\u2028-\u202f\u205f-\u206f]' ./ && echo "Invisible Unicode characters" && exit 1
+        - git remote rm upstream 2> /dev/null || true
+        - git remote add upstream https://code.videolan.org/videolan/dav2d.git
+        - git fetch -q upstream main
+        - for i in $(git rev-list HEAD ^upstream/main); do
+              echo "Checking commit message of $i";
+              msg="$(git log --format=%B -n 1 $i)";
+              if [ -n "$(echo "$msg" | awk "NR==2")" ]; then
+                  echo "Malformed commit message in $i, second line must be empty";
+                  exit 1;
+              fi;
+              if echo "$msg" | head -1 | grep -q '\.$'; then
+                  echo "Malformed commit message in $i, trailing period in subject line";
+                  exit 1;
+              fi;
+          done
 
 build-debian:
     extends: .debian-amd64-cmake-common
