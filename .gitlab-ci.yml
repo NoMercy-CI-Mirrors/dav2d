@@ -403,6 +403,84 @@ build-debian-loongarch64:
         - meson test -v -C build
 
 
+test-debian-asan:
+    extends:
+        - .debian-amd64-common
+    stage: test
+    needs: ["build-debian"]
+    variables:
+        ASAN_OPTIONS: 'detect_leaks=0'
+    script:
+        - meson setup build --buildtype debugoptimized
+                            -Dlogging=false
+                            -Db_sanitize=address
+        - ninja -C build
+        - cd build
+        - exit_code=0
+        - time meson test -v -t 3 --suite checkasm || exit_code=$((exit_code + $?))
+        - time ../tests/test-md5.sh tools/dav2d
+        - if [ $exit_code -ne 0 ]; then exit $exit_code; fi
+
+test-debian-msan:
+    extends:
+        - .debian-amd64-common
+    stage: test
+    needs: ["build-debian"]
+    variables:
+        MSAN_OPTIONS: 'exitcode=1'
+        CC: clang
+    script:
+        - meson setup build --buildtype debugoptimized
+                            -Denable_seek_stress=true
+                            -Dlogging=false
+                            -Db_sanitize=memory
+                            -Db_lundef=false
+                            -Denable_asm=false
+        - ninja -C build
+        - cd build
+        - exit_code=0
+        - time meson test -v -t 3 || exit_code=$((exit_code + $?))
+        - time ../tests/test-md5.sh tools/dav2d
+        - if [ $exit_code -ne 0 ]; then exit $exit_code; fi
+
+test-debian-ubsan:
+    extends:
+        - .debian-amd64-common
+    stage: test
+    needs: ["build-debian"]
+    variables:
+        UBSAN_OPTIONS: 'print_stacktrace=1:halt_on_error=1'
+        CC: clang
+    script:
+        - meson setup build --buildtype debugoptimized
+                            -Denable_seek_stress=true
+                            -Dlogging=false
+                            -Db_sanitize=undefined
+                            -Db_lundef=false
+                            -Denable_asm=false
+        - ninja -C build
+        - cd build && time meson test -v -t 3
+        - time ../tests/test-md5.sh tools/dav2d
+
+test-debian-tsan:
+    extends:
+        - .debian-amd64-common
+    stage: test
+    needs: ["build-debian"]
+    variables:
+        TSAN_OPTIONS: 'halt_on_error=1'
+        CC: clang
+    script:
+        - meson setup build --buildtype debugoptimized
+                            -Denable_seek_stress=true
+                            -Dlogging=false
+                            -Db_sanitize=thread
+                            -Db_lundef=false
+        - ninja -C build
+        - cd build
+        - time OPTIONS="--threads=2 --framedelay=1" ../tests/test-md5.sh tools/dav2d
+        - time OPTIONS="--threads=2 --framedelay=2" ../tests/test-md5.sh tools/dav2d
+
 test-win64:
     extends: .debian-amd64-common
     stage: test
