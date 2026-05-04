@@ -1575,7 +1575,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     if (has_chroma) b->cbs = cbs;
 
     // segment_id (if seg_feature for skip/ref/gmv is enabled)
-    int seg_pred = 0;
+    int seg_pred = b->seg_id = 0, seg_postskip = 0;
     if (f->frame_hdr->segmentation.enabled) {
         if (!has_luma) {
             b->seg_id = f->cur_segmap[t->bx + t->by * f->b4_stride];
@@ -1584,10 +1584,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 unsigned seg_id = get_prev_frame_segid(f, t->by, t->bx, w4, h4,
                                                        f->prev_segmap,
                                                        f->b4_stride);
-                if (seg_id >= 16) return -1;
+                if (seg_id >= DAV2D_MAX_SEGMENTS) return -1;
                 b->seg_id = seg_id;
-            } else {
-                b->seg_id = 0;
             }
         } else if (f->frame_hdr->segmentation.preskip) {
             if (f->frame_hdr->segmentation.temporal &&
@@ -1601,10 +1599,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                                            w4, h4,
                                                            f->prev_segmap,
                                                            f->b4_stride);
-                    if (seg_id >= 16) return -1;
+                    if (seg_id >= DAV2D_MAX_SEGMENTS) return -1;
                     b->seg_id = seg_id;
-                } else {
-                    b->seg_id = 0;
                 }
             } else {
                 int seg_ctx;
@@ -1622,16 +1618,15 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
                                              last_active_seg_id + 1);
-                if (b->seg_id > last_active_seg_id) b->seg_id = 0; // error?
-                if (b->seg_id >= DAV2D_MAX_SEGMENTS) b->seg_id = 0; // error?
+                if (b->seg_id > last_active_seg_id) return -1;
+                if (b->seg_id >= DAV2D_MAX_SEGMENTS) return -1;
             }
 
-            if (!has_luma)
+            if (has_luma)
                 DEBUG_BLOCK_printf("%*sPost-segid[%d]: r=%d\n",
                                    depth, "", b->seg_id, ts->msac.rng);
-        }
-    } else {
-        b->seg_id = 0;
+        } else
+            seg_postskip = 1;
     }
 
     // cross-sb boundary neighbours
@@ -1655,8 +1650,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // skip_mode
-    if (!((f->frame_hdr->segmentation.d.globalmv_mask |
-           f->frame_hdr->segmentation.d.skip_mask) & (1 << b->seg_id)) &&
+    if ((seg_postskip ||
+         !((f->frame_hdr->segmentation.d.globalmv_mask |
+            f->frame_hdr->segmentation.d.skip_mask) & (1 << b->seg_id))) &&
         f->frame_hdr->skip_mode_enabled && bw4 * bh4 > 2 && !t->intra_region)
     {
         const int ctx = nx[0]->skip_mode[xoff[0]] + nx[1]->skip_mode[xoff[1]];
@@ -1751,13 +1747,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     const int skip_txfm = has_luma && b->skip_txfm;
 
     // segment_id
-    if (f->frame_hdr->segmentation.enabled &&
-        f->frame_hdr->segmentation.update_map &&
-        !f->frame_hdr->segmentation.preskip)
-    {
-        if (!has_luma) {
-            b->seg_id = f->cur_segmap[t->bx + t->by * f->b4_stride];
-        } else if (!b->skip_txfm && f->frame_hdr->segmentation.temporal &&
+    if (seg_postskip) {
+        if (!b->skip_txfm && f->frame_hdr->segmentation.temporal &&
             (seg_pred = dav2d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.seg_pred[t->a->seg_pred[bx4] +
                             t->l.seg_pred[by4]])))
@@ -1767,10 +1758,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 unsigned seg_id = get_prev_frame_segid(f, t->by, t->bx, w4, h4,
                                                        f->prev_segmap,
                                                        f->b4_stride);
-                if (seg_id >= 16) return -1;
+                if (seg_id >= DAV2D_MAX_SEGMENTS) return -1;
                 b->seg_id = seg_id;
-            } else {
-                b->seg_id = 0;
             }
         } else {
             int seg_ctx;
@@ -1791,9 +1780,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     f->frame_hdr->segmentation.last_active_segid;
                 b->seg_id = neg_deinterleave(diff, pred_seg_id,
                                              last_active_seg_id + 1);
-                if (b->seg_id > last_active_seg_id) b->seg_id = 0; // error?
+                if (b->seg_id > last_active_seg_id) return -1;
             }
-            if (b->seg_id >= DAV2D_MAX_SEGMENTS) b->seg_id = 0; // error?
+            if (b->seg_id >= DAV2D_MAX_SEGMENTS) return -1;
         }
 
         if (has_luma)
