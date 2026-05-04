@@ -46,29 +46,40 @@ static ALWAYS_INLINE void intra_pred_dsp_init_riscv(Dav2dIntraPredDSPContext *co
 
   if (!(flags & DAV2D_RISCV_CPU_FLAG_V)) return;
 
-#if BITDEPTH == 8
+#if BITDEPTH == 8 && 0
     c->cfl_pred[DC_PRED     ] = dav2d_ipred_cfl_8bpc_rvv;
     c->cfl_pred[DC_128_PRED ] = dav2d_ipred_cfl_128_8bpc_rvv;
     c->cfl_pred[TOP_DC_PRED ] = dav2d_ipred_cfl_top_8bpc_rvv;
     c->cfl_pred[LEFT_DC_PRED] = dav2d_ipred_cfl_left_8bpc_rvv;
-
+#endif
+#if BITDEPTH == 8
     c->intra_pred[PAETH_PRED   ] = dav2d_ipred_paeth_8bpc_rvv;
+#endif
+#if BITDEPTH == 8 && 0
     c->intra_pred[SMOOTH_PRED  ] = dav2d_ipred_smooth_8bpc_rvv;
     c->intra_pred[SMOOTH_V_PRED] = dav2d_ipred_smooth_v_8bpc_rvv;
     c->intra_pred[SMOOTH_H_PRED] = dav2d_ipred_smooth_h_8bpc_rvv;
-
+#endif
+#if BITDEPTH == 8
     c->pal_pred = dav2d_pal_pred_8bpc_rvv;
-#elif BITDEPTH == 16
+#endif
+#if BITDEPTH == 16 && 0
     c->cfl_pred[DC_PRED     ] = dav2d_ipred_cfl_16bpc_rvv;
     c->cfl_pred[DC_128_PRED ] = dav2d_ipred_cfl_128_16bpc_rvv;
     c->cfl_pred[TOP_DC_PRED ] = dav2d_ipred_cfl_top_16bpc_rvv;
     c->cfl_pred[LEFT_DC_PRED] = dav2d_ipred_cfl_left_16bpc_rvv;
 
+#endif
+#if BITDEPTH == 16
     c->intra_pred[PAETH_PRED   ] = dav2d_ipred_paeth_16bpc_rvv;
+#endif
+#if BITDEPTH == 16 && 0
     c->intra_pred[SMOOTH_PRED  ] = dav2d_ipred_smooth_16bpc_rvv;
     c->intra_pred[SMOOTH_V_PRED] = dav2d_ipred_smooth_v_16bpc_rvv;
     c->intra_pred[SMOOTH_H_PRED] = dav2d_ipred_smooth_h_16bpc_rvv;
+#endif
 
+#if BITDEPTH == 16
     c->pal_pred = dav2d_pal_pred_16bpc_rvv;
 #endif
 }
