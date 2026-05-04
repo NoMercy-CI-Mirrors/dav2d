@@ -2,6 +2,8 @@
 
 set -e
 
+: ${OPTIONS:=--threads=1}
+
 DAV2D="$1"
 if [ ! -e "$DAV2D" ]; then
     echo $0 path/to/dav2d
@@ -13,7 +15,7 @@ SRC_PATH="$(dirname "$0")/.."
 for file in "$SRC_PATH"/media/*.obu; do
     base="$(basename "$file")"
     a_md5=$(cat "$file.md5")
-    "$DAV2D" -i "$file" -o tmp.md5 --threads=1 --quiet --muxer=md5 --filmgrain=1
+    $WRAP "$DAV2D" -i "$file" -o tmp.md5 $OPTIONS --quiet --muxer=md5 --filmgrain=1
     d_md5=$(cat tmp.md5)
     rm -f tmp.md5
     if [[ "$a_md5" == "$d_md5" ]]; then
