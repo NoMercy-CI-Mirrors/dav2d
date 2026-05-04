@@ -682,7 +682,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
                                            mvy1, mvx1, mvy2, mvx2,
                                            wm1, wm2, bw4, bh4, t_swap,
-                                           mask, b->wedge_sign ^ t_swap);
+                                           mask, mask ? b->wedge_sign ^ t_swap : 0);
     } else {
         COPY2MV(s_src.mv, b->mv);
         s_src.mf |= b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1;
@@ -704,7 +704,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         } else {
             f->c->refmvs_dsp.splat_comp_wedgemv(s_dst, &s_src, t_dst, t_stride,
                                                 &t_src, bw4, bh4, mask,
-                                                b->wedge_sign ^ t_swap);
+                                                mask ? b->wedge_sign ^ t_swap : 0);
         }
     }
 }
@@ -945,7 +945,7 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     const Dav2dFrameContext *const f = t->f;
 
     if (t->task_thread.pass == PASS_RECON) {
-        if (b->motion_mode > MM_INTERINTRA) {
+        if (lbs != BS_INVALID && !b->intra && b->motion_mode > MM_INTERINTRA) {
             // restore warp matrices
             const int comp =  b->ref.ref[1] != -1;
             for (int n = 0; n <= comp; n++) {

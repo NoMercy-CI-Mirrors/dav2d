@@ -1258,9 +1258,9 @@ static void refmvs_bank_add(refmvs_tile *const rt,
     int n;
     for (n = 0; n < sz; n++) {
         const int i = (idx + n) & 3;
-        if (mv[0].n == rt->bank.mv[c][i][0].n &&
-            mv[comp].n == rt->bank.mv[c][i][comp].n &&
-            (c < 8 || ref.pair == rt->bank.ref[i].pair))
+        if ((c < 8 || ref.pair == rt->bank.ref[i].pair) &&
+            mv[0].n == rt->bank.mv[c][i][0].n &&
+            mv[comp].n == rt->bank.mv[c][i][comp].n)
         {
             break;
         }

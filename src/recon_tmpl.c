@@ -1505,7 +1505,7 @@ chroma: {}
             int x;
             for (x = 0; x < cw4ss; x += uv_t_dim->w) {
                 const ptrdiff_t i = y * cbw4ss + x;
-                if (b->bs == b->cbs)
+                if (lbs == cbs)
                     y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
                 enum TxfmType uv_txtp = y_txtp;
                 uint8_t cf_ctx;
@@ -3546,7 +3546,7 @@ chroma: {}
                     int x;
                     for (x = 0; x < cw4ss; x += uv_t_dim->w) {
                         const ptrdiff_t i = y * cbw4ss + x;
-                        if (b->bs == b->cbs)
+                        if (lbs == cbs_stage[0])
                             y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
                         enum TxfmType uv_txtp = y_txtp;
                         const int eob =
