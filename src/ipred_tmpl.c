@@ -1003,7 +1003,7 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
             sum_xy[0] += edge[0][i] * edge[1][i];
             sum_xy[1] += edge[0][i] * edge[2][i];
         }
-        const int count_l2 = ctz(n_top + n_left);
+        const int count_l2 = (n_top + n_left > 0) ? ctz(n_top + n_left) : 0;
         const int den = sum_xx - (int)(((int64_t)sum_x * sum_x) >> count_l2);
         for (int pl = 0; pl < 2; pl++) {
             int num = sum_xy[pl] - (int)(((int64_t)sum_x * sum_y[pl]) >> count_l2);
