@@ -206,7 +206,7 @@ static inline unsigned get_lo_ctx(const int8_t *const levels,
     lo_mag += imin(val, lim); \
     hi_mag += imin(val, 5); \
 } while (0)
-    unsigned lo_freq = xy < (chroma ? 1 : tx_class == TX_CLASS_2D ? 4 : 2);
+    unsigned lo_freq = xy < (chroma ? 1U : tx_class == TX_CLASS_2D ? 4U : 2U);
     unsigned lim = lo_freq ? 5 : 3;
     unsigned lo_mag = 0, hi_mag = 0;
     add(levels[0 * stride + 1]);
