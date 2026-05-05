@@ -493,7 +493,6 @@ test-debian-tsan:
 test-win64:
     extends: .debian-amd64-common
     stage: test
-    image: registry.videolan.org/dav1d-debian-unstable:20260103195850
     script:
         - wineserver -p && wine wineboot
         - meson setup build --buildtype release
