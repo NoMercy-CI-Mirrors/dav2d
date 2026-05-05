@@ -296,22 +296,30 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     if (hdr->max_tlayer_id) {
         hdr->tlayer_dependency_present = dav2d_get_bit(gb);
         if (hdr->tlayer_dependency_present) {
-            for (unsigned n = 1; n < hdr->max_tlayer_id; n++)
+            for (unsigned n = 1; n < hdr->max_tlayer_id; n++) {
+                assert(n < ARRAY_SIZE(hdr->tlayer_dependencies));
                 hdr->tlayer_dependencies[n] = dav2d_get_bits(gb, n);
+            }
         } else {
-            for (unsigned n = 1, mask = ~0U; n < hdr->max_tlayer_id; n++, mask <<= 1)
+            for (unsigned n = 1, mask = ~0U; n < hdr->max_tlayer_id; n++, mask <<= 1) {
+                assert(n < ARRAY_SIZE(hdr->tlayer_dependencies));
                 hdr->tlayer_dependencies[n] = ~mask;
+            }
         }
     }
 
     if (hdr->max_mlayer_id) {
         hdr->mlayer_dependency_present = dav2d_get_bit(gb);
         if (hdr->mlayer_dependency_present) {
-            for (unsigned n = 1; n < hdr->max_mlayer_id; n++)
+            for (unsigned n = 1; n < hdr->max_mlayer_id; n++) {
+                assert(n < ARRAY_SIZE(hdr->mlayer_dependencies));
                 hdr->mlayer_dependencies[n] = dav2d_get_bits(gb, n);
+            }
         } else {
-            for (unsigned n = 1, mask = ~0U; n < hdr->max_mlayer_id; n++, mask <<= 1)
+            for (unsigned n = 1, mask = ~0U; n < hdr->max_mlayer_id; n++, mask <<= 1) {
+                assert(n < ARRAY_SIZE(hdr->mlayer_dependencies));
                 hdr->mlayer_dependencies[n] = ~mask;
+            }
         }
     }
 
@@ -1096,9 +1104,11 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         } else if (obu_type == DAV2D_OBU_RAS || obu_type == DAV2D_OBU_OPEN_LOOP_KF) {
             if (seqhdr->number_of_bits_for_lt_frame_id) {
                 hdr->n_ref_frames = dav2d_get_bits(gb, 3);
-                for (int n = 0; n < hdr->n_ref_frames; n++)
+                for (int n = 0; n < hdr->n_ref_frames; n++) {
+                    assert(n < (int)ARRAY_SIZE(hdr->refidx));
                     hdr->refidx[n] =
                         dav2d_get_bits(gb, seqhdr->number_of_bits_for_lt_frame_id);
+                }
             }
         }
         if (obu_type != DAV2D_OBU_BRIDGE) {

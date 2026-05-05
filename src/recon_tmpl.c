@@ -4170,6 +4170,7 @@ void bytefn(dav2d_read_pal_plane)(DB_ONLY(const int depth)
                     assert((a_mask & l_mask) & 0x80000000);
                     if (a[a_n] < l[l_n]) {
 #define consume(dir) \
+                        assert(i < 8); \
                         cache[i++] = dir[dir##_n]; \
                         dir##_mask <<= 1; \
                         if (!dir##_mask) break; \
