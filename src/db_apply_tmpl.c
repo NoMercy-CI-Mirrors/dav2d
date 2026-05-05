@@ -206,9 +206,6 @@ static void setup_thr_cols_sb64(pixel *const q_thr_dst,
                                 const int ss_hor, const int ss_ver,
                                 const int w4, const int h4)
 {
-    const int mask_idx = y64 >> ss_ver;
-    const int mask_shift = y64 & ss_ver ? 8 : 0;
-
     for (int y4 = 0; y4 < h4; y4++) {
         int prev_q_thr = left_q_thr[y4];
         int prev_side_thr = left_side_thr[y4];
@@ -217,8 +214,7 @@ static void setup_thr_cols_sb64(pixel *const q_thr_dst,
             const int seg_id = segmap[x4 + y4 * seg_stride];
             const int cur_q_thr = thr_lut[0][seg_id];
             const int cur_side_thr = thr_lut[1][seg_id];
-            const int subpu =
-                3 * ((mask[x4][4][mask_idx] >> (mask_shift + y4)) & 1);
+            const int subpu = 3 * ((mask[x4][4][y64] >> y4) & 1);
 
             int edge_q_thr;
             int edge_side_thr;
@@ -257,9 +253,6 @@ static void setup_thr_rows_sb64(pixel *const q_thr_dst,
                                 const int ss_hor, const int ss_ver,
                                 const int w4, const int h4)
 {
-    const int mask_idx = sb64x >> ss_hor;
-    const int mask_shift = sb64x & ss_hor ? 8 : 0;
-
     pixel above_q_thr[16] = { 0 };
     pixel above_side_thr[16] = { 0 };
     if (above_thr_lut) {
@@ -278,8 +271,7 @@ static void setup_thr_rows_sb64(pixel *const q_thr_dst,
             const int seg_id = segmap[x4 + y4 * seg_stride];
             const int cur_q_thr = thr_lut[0][seg_id];
             const int cur_side_thr = thr_lut[1][seg_id];
-            const int subpu =
-                3 * ((mask[y4][4][mask_idx] >> (mask_shift + x4)) & 1);
+            const int subpu = 3 * ((mask[y4][4][sb64x] >> x4) & 1);
 
             int edge_q_thr;
             int edge_side_thr;
@@ -371,9 +363,6 @@ static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
     const Dav2dDSPContext *const dsp = f->dsp;
     const int apply_u = f->frame_hdr->deblock.level_u;
     const int apply_v = f->frame_hdr->deblock.level_v;
-    const int mask_idx = y64 >> ss_ver;
-    const int mask_shift = y64 & ss_ver ? 8 : 0;
-    const int bytes_mask = ss_ver ? 0xff : 0xffff;
 
     // filter edges between columns (e.g. block1 | block2)
     for (int x = 0; x < w4; x++, u_q_thr += 16, u_side_thr += 16,
@@ -381,9 +370,7 @@ static inline void filter_plane_cols_uv(const Dav2dFrameContext *const f,
     {
         if (!have_left && !x) continue;
         uint16_t hmask[3] = {
-            (mask[x][0][mask_idx] >> mask_shift) & bytes_mask,
-            (mask[x][1][mask_idx] >> mask_shift) & bytes_mask,
-            (mask[x][2][mask_idx] >> mask_shift) & bytes_mask,
+            mask[x][0][y64], mask[x][1][y64], mask[x][2][y64],
         };
         if (apply_u)
             dsp->lf.deblock_sb[1][0](&u[x * 4], ls, hmask, ll_mask + x,
@@ -414,9 +401,6 @@ static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
     ptrdiff_t off_l = 0;
     const int apply_u = f->frame_hdr->deblock.level_u;
     const int apply_v = f->frame_hdr->deblock.level_v;
-    const int mask_idx = sb64x >> ss_hor;
-    const int mask_shift = sb64x & ss_hor ? 8 : 0;
-    const int bytes_mask = ss_hor ? 0xff : 0xffff;
 
     //                                 block1
     // filter edges between rows (e.g. ------)
@@ -427,9 +411,7 @@ static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
     {
         if (!have_top && !y) continue;
         const uint16_t vmask[3] = {
-            (mask[y][0][mask_idx] >> mask_shift) & bytes_mask,
-            (mask[y][1][mask_idx] >> mask_shift) & bytes_mask,
-            (mask[y][2][mask_idx] >> mask_shift) & bytes_mask,
+            mask[y][0][sb64x], mask[y][1][sb64x], mask[y][2][sb64x]
         };
         if (apply_u)
             dsp->lf.deblock_sb[1][1](&u[off_l], ls, vmask, ll_mask + y,
@@ -491,17 +473,16 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
             lpf_y += halign;
 
             if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
-                const int uv_endy4 = (starty4 >> ss_ver) + uv_h4;
                 uint16_t (*const uv_hmask)[4] = lflvl[x256].filter_uv[0][cbx4];
-                sidx = (y64 & 3) >> ss_ver;
-                for (int y4 = starty4 >> ss_ver; y4 < uv_endy4; y4++) {
-                    const unsigned smask = 1 << (y4 & 0xf);
+                sidx = y64 & 3;
+                for (int y4 = 0; y4 < uv_h4; y4++) {
+                    const unsigned smask = 1 << y4;
                     const int idx = 2 * !!(uv_hmask[2][sidx] & smask) +
                                     !!(uv_hmask[1][sidx] & smask);
                     uv_hmask[2][sidx] &= ~smask;
                     uv_hmask[1][sidx] &= ~smask;
                     uv_hmask[0][sidx] &= ~smask;
-                    uv_hmask[imin(idx, lpf_uv[y4 - (starty4 >> ss_ver)])][sidx] |= smask;
+                    uv_hmask[imin(idx, lpf_uv[y4])][sidx] |= smask;
                 }
             }
             lpf_uv += halign >> ss_ver;
@@ -511,6 +492,7 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
         if (start_of_tile_row) {
             const BlockContext *a;
             int x256;
+            const int uv_submask = 0xf >> ss_hor;
             for (x256 = 0, a = &f->a[f->sb256w * (start_of_tile_row - 1)];
                  x256 < f->sb256w; x256++, a++)
             {
@@ -533,8 +515,8 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
                     const int cw = w >> ss_hor;
                     uint16_t (*const uv_vmask)[4] = lflvl[x256].filter_uv[1][starty4 >> ss_ver];
                     for (int i = 0; i < cw; i++) {
-                        const int sidx = i >> 4;
-                        const unsigned smask = 1 << (i & 0xf);
+                        const int sidx = i >> (4 - ss_hor);
+                        const unsigned smask = 1 << (i & uv_submask);
                         const int idx = 2 * !!(uv_vmask[2][sidx] & smask) +
                                         !!(uv_vmask[1][sidx] & smask);
                         uv_vmask[2][sidx] &= ~smask;

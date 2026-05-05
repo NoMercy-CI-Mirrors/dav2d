@@ -38,15 +38,17 @@
 
 static ALWAYS_INLINE void mask_outer_edge_l(uint16_t (*const masks)[4],
                                             const int by4, const int h4,
-                                            const int bwl4c, uint8_t *const l)
+                                            const int bwl4c, uint8_t *const l,
+                                            const int ss_ver)
 {
     assert((unsigned) bwl4c <= 3U);
 
     // left block edge
+    const int sh = 4 - ss_ver;
     uint64_t mask = 1ULL << by4;
     for (int y = 0; y < h4; y++, mask <<= 1) {
-        const int sidx = (by4 + y) >> 4;
-        const unsigned smask = (unsigned) (mask >> (sidx << 4));
+        const int sidx = (by4 + y) >> sh;
+        const unsigned smask = (unsigned) (mask >> (sidx << sh));
         masks[imin(bwl4c, l[y])][sidx] |= smask;
     }
     dav2d_memset_likely_pow2(l, bwl4c, h4);
@@ -54,15 +56,17 @@ static ALWAYS_INLINE void mask_outer_edge_l(uint16_t (*const masks)[4],
 
 static ALWAYS_INLINE void mask_outer_edge_t(uint16_t (*const masks)[4],
                                             const int bx4, const int w4,
-                                            const int bhl4c, uint8_t *const a)
+                                            const int bhl4c, uint8_t *const a,
+                                            const int ss_hor)
 {
     assert((unsigned) bhl4c <= 3U);
 
     // top block edge
     uint64_t mask = 1ULL << bx4;
+    const int sh = 4 - ss_hor;
     for (int x = 0; x < w4; x++, mask <<= 1) {
-        const int sidx = (bx4 + x) >> 4;
-        const unsigned smask = (unsigned) (mask >> (sidx << 4));
+        const int sidx = (bx4 + x) >> sh;
+        const unsigned smask = (unsigned) (mask >> (sidx << sh));
         masks[imin(bhl4c, a[x])][sidx] |= smask;
     }
     dav2d_memset_likely_pow2(a, bhl4c, w4);
@@ -72,15 +76,17 @@ static ALWAYS_INLINE void mask_inner_edges_v(uint16_t (*const masks)[64][5][4],
                                              const uint64_t inner,
                                              const int bx4, const int w4,
                                              const int twl4c, const int xoff,
-                                             const int hstep)
+                                             const int hstep, const int ss_ver)
 {
     assert((unsigned) twl4c <= 3U);
 
     // inner (tx) left|right edges
-    const unsigned inner1 = (unsigned) (inner & 0xffff);
-    const unsigned inner2 = (unsigned) ((inner >> 16) & 0xffff);
-    const unsigned inner3 = (unsigned) ((inner >> 32) & 0xffff);
-    const unsigned inner4 = (unsigned) ((inner >> 48));
+    const int sh = 16 - ss_ver * 8;
+    const unsigned mask = 0xffff >> (ss_ver * 8);
+    const unsigned inner1 = (unsigned) (inner & mask);
+    const unsigned inner2 = (unsigned) ((inner >> (sh * 1)) & mask);
+    const unsigned inner3 = (unsigned) ((inner >> (sh * 2)) & mask);
+    const unsigned inner4 = (unsigned) ((inner >> (sh * 3)));
     for (int x = xoff; x < w4; x += hstep) {
         if (inner1) masks[0][bx4 + x][twl4c][0] |= inner1;
         if (inner2) masks[0][bx4 + x][twl4c][1] |= inner2;
@@ -93,17 +99,19 @@ static ALWAYS_INLINE void mask_inner_edges_h(uint16_t (*const masks)[64][5][4],
                                              const uint64_t inner,
                                              const int by4, const int h4,
                                              const int thl4c, const int yoff,
-                                             const int vstep)
+                                             const int vstep, const int ss_hor)
 {
     assert((unsigned) thl4c <= 3U);
 
     //            top
     // inner (tx) --- edges
     //           bottom
-    const unsigned inner1 = (unsigned) (inner & 0xffff);
-    const unsigned inner2 = (unsigned) ((inner >> 16) & 0xffff);
-    const unsigned inner3 = (unsigned) ((inner >> 32) & 0xffff);
-    const unsigned inner4 = (unsigned) ((inner >> 48));
+    const int sh = 16 - ss_hor * 8;
+    const unsigned mask = 0xffff >> (ss_hor * 8);
+    const unsigned inner1 = (unsigned) (inner & mask);
+    const unsigned inner2 = (unsigned) ((inner >> (sh * 1)) & mask);
+    const unsigned inner3 = (unsigned) ((inner >> (sh * 2)) & mask);
+    const unsigned inner4 = (unsigned) ((inner >> (sh * 3)));
     for (int y = yoff; y < h4; y += vstep) {
         if (inner1) masks[1][by4 + y][thl4c][0] |= inner1;
         if (inner2) masks[1][by4 + y][thl4c][1] |= inner2;
@@ -118,56 +126,57 @@ static inline void mask_edges_part(uint16_t (*const masks)[64][5][4],
                                    const enum TxPartition tx_part,
                                    const TxfmInfo *const t_dim,
                                    const int hlim, const int vlim,
-                                   uint8_t *const a, uint8_t *const l)
+                                   uint8_t *const a, uint8_t *const l,
+                                   const int ss_hor, const int ss_ver)
 {
     const int tw4 = t_dim->w, th4 = t_dim->h;
     const int twl4c = imin(hlim, t_dim->lw), thl4c = imin(vlim, t_dim->lh);
 
     if (tx_part < TX_PARTITION_H5) {
-        mask_outer_edge_l(masks[0][bx4], by4, h4, twl4c, l);
-        mask_outer_edge_t(masks[1][by4], bx4, w4, thl4c, a);
+        mask_outer_edge_l(masks[0][bx4], by4, h4, twl4c, l, ss_ver);
+        mask_outer_edge_t(masks[1][by4], bx4, w4, thl4c, a, ss_hor);
         if (w4 > tw4) {
             const uint64_t inner = (~0ULL >> (64 - h4)) << by4;
-            mask_inner_edges_v(masks, inner, bx4, w4, twl4c, tw4, tw4);
+            mask_inner_edges_v(masks, inner, bx4, w4, twl4c, tw4, tw4, ss_ver);
         }
         if (h4 > th4) {
             const uint64_t inner = (~0ULL >> (64 - w4)) << bx4;
-            mask_inner_edges_h(masks, inner, by4, h4, thl4c, th4, th4);
+            mask_inner_edges_h(masks, inner, by4, h4, thl4c, th4, th4, ss_hor);
         }
     } else if (tx_part == TX_PARTITION_H5) {
         assert(th4 * 4 >= h4 && tw4 * 2 >= w4);
-        mask_outer_edge_t(masks[1][by4], bx4, w4, thl4c, a);
-        mask_outer_edge_l(masks[0][bx4], by4, imin(th4, h4), twl4c, l);
+        mask_outer_edge_t(masks[1][by4], bx4, w4, thl4c, a, ss_hor);
+        mask_outer_edge_l(masks[0][bx4], by4, imin(th4, h4), twl4c, l, ss_ver);
         if (h4 > th4) {
             mask_outer_edge_l(masks[0][bx4], by4 + th4, imin(2 * th4, h4 - th4),
-                              imin(twl4c + 1, hlim), &l[th4]);
+                              imin(twl4c + 1, hlim), &l[th4], ss_ver);
             if (h4 > th4 * 3)
                 mask_outer_edge_l(masks[0][bx4], by4 + th4 * 3,
-                                  imin(th4, h4 - 3 * th4), twl4c, &l[th4 * 3]);
+                                  imin(th4, h4 - 3 * th4), twl4c, &l[th4 * 3], ss_ver);
         }
         const uint64_t inner = (~0ULL >> (64 - w4)) << bx4;
-        mask_inner_edges_h(masks, inner, by4, h4, thl4c, th4, th4 * 2);
+        mask_inner_edges_h(masks, inner, by4, h4, thl4c, th4, th4 * 2, ss_hor);
         const uint64_t inner_a = (~0ULL >> (64 - h4)) << by4;
         const uint64_t inner_b = (~0ULL >> (64 - th4 * 2)) << (by4 + th4);
         const uint64_t inner_c = inner_a & ~inner_b;
-        mask_inner_edges_v(masks, inner_c, bx4, w4, twl4c, tw4, tw4);
+        mask_inner_edges_v(masks, inner_c, bx4, w4, twl4c, tw4, tw4, ss_ver);
     } else {
         assert(tx_part == TX_PARTITION_V5 && tw4 * 4 >= w4 && th4 * 2 >= h4);
-        mask_outer_edge_l(masks[0][bx4], by4, h4, twl4c, l);
-        mask_outer_edge_t(masks[1][by4], bx4, imin(tw4, w4), thl4c, a);
+        mask_outer_edge_l(masks[0][bx4], by4, h4, twl4c, l, ss_ver);
+        mask_outer_edge_t(masks[1][by4], bx4, imin(tw4, w4), thl4c, a, ss_hor);
         if (w4 > tw4) {
             mask_outer_edge_t(masks[1][by4], bx4 + tw4, imin(2 * tw4, w4 - tw4),
-                              imin(thl4c + 1, vlim), &a[tw4]);
+                              imin(thl4c + 1, vlim), &a[tw4], ss_hor);
             if (w4 > tw4 * 3)
                 mask_outer_edge_t(masks[1][by4], bx4 + tw4 * 3,
-                                  imin(tw4, w4 - 3 * tw4), thl4c, &a[tw4 * 3]);
+                                  imin(tw4, w4 - 3 * tw4), thl4c, &a[tw4 * 3], ss_hor);
         }
         const uint64_t inner = (~0ULL >> (64 - h4)) << by4;
-        mask_inner_edges_v(masks, inner, bx4, w4, twl4c, tw4, tw4 * 2);
+        mask_inner_edges_v(masks, inner, bx4, w4, twl4c, tw4, tw4 * 2, ss_ver);
         const uint64_t inner_a = (~0ULL >> (64 - w4)) << bx4;
         const uint64_t inner_b = (~0ULL >> (64 - tw4 * 2)) << (bx4 + tw4);
         const uint64_t inner_c = inner_a & ~inner_b;
-        mask_inner_edges_h(masks, inner_c, by4, h4, thl4c, th4, th4);
+        mask_inner_edges_h(masks, inner_c, by4, h4, thl4c, th4, th4, ss_hor);
     }
 }
 
@@ -176,7 +185,8 @@ static ALWAYS_INLINE void mask_subpu_edges(uint16_t (*const masks)[64][5][4],
                                            const int w4, const int h4,
                                            const int twl4c, const int thl4c,
                                            const int hsz, const int vsz,
-                                           const int ds_sub_pu_mask)
+                                           const int ds_sub_pu_mask,
+                                           const int ss_hor, const int ss_ver)
 {
     assert(!(hsz & (hsz - 1)) && hsz >= 0 && hsz <= 8);
     assert(!(vsz & (vsz - 1)) && vsz >= 0 && vsz <= 8);
@@ -186,10 +196,12 @@ static ALWAYS_INLINE void mask_subpu_edges(uint16_t (*const masks)[64][5][4],
     if (hsz) {
         // inner (subpu) left|right edges
         const uint64_t inner = (~0ULL >> (64 - h4)) << by4;
-        const unsigned inner0 = (unsigned) (inner & 0xffff);
-        const unsigned inner1 = (unsigned) ((inner >> 16) & 0xffff);
-        const unsigned inner2 = (unsigned) ((inner >> 32) & 0xffff);
-        const unsigned inner3 = (unsigned) ((inner >> 48));
+        const int sh = 16 - 8 * ss_ver;
+        const unsigned mask = 0xffff >> (ss_ver * 8);
+        const unsigned inner0 = (unsigned) (inner & mask);
+        const unsigned inner1 = (unsigned) ((inner >> (sh * 1)) & mask);
+        const unsigned inner2 = (unsigned) ((inner >> (sh * 2)) & mask);
+        const unsigned inner3 = (unsigned) ((inner >> (sh * 3)));
         for (int x = hsz; x < w4; x += hsz) {
 #define mask_subpu(a, b, c, d, e) \
             if (inner##e) { \
@@ -210,10 +222,12 @@ static ALWAYS_INLINE void mask_subpu_edges(uint16_t (*const masks)[64][5][4],
         // inner (subpu) --- edges
         //              bottom
         const uint64_t inner = (~0ULL >> (64 - w4)) << bx4;
-        const unsigned inner0 = (unsigned) (inner & 0xffff);
-        const unsigned inner1 = (unsigned) ((inner >> 16) & 0xffff);
-        const unsigned inner2 = (unsigned) ((inner >> 32) & 0xffff);
-        const unsigned inner3 = (unsigned) ((inner >> 48));
+        const int sh = 16 - 8 * ss_hor;
+        const unsigned mask = 0xffff >> (ss_hor * 8);
+        const unsigned inner0 = (unsigned) (inner & mask);
+        const unsigned inner1 = (unsigned) ((inner >> (sh * 1)) & mask);
+        const unsigned inner2 = (unsigned) ((inner >> (sh * 2)) & mask);
+        const unsigned inner3 = (unsigned) ((inner >> (sh * 3)));
         for (int y = vsz; y < h4; y += vsz) {
             mask_subpu(1, by4, y, thl4c, 0);
             mask_subpu(1, by4, y, thl4c, 1);
@@ -287,7 +301,7 @@ void dav2d_create_db_mask(uint16_t (*const masks)[64][5][4],
         const TxfmInfo *const t_dim = &dav2d_txfm_dimensions[tx];
         mask_edges_part(masks, by4, bx4, bw4, bh4, tx_part, t_dim,
                         iclip(subpu_l2 - ss_hor, 0, 3 - chroma),
-                        iclip(subpu_l2 - ss_ver, 0, 3 - chroma), a, l);
+                        iclip(subpu_l2 - ss_ver, 0, 3 - chroma), a, l, ss_hor, ss_ver);
         twl4c = imin(subpu_l2, t_dim->lw);
         thl4c = imin(subpu_l2, t_dim->lh);
     } else {
@@ -299,8 +313,8 @@ void dav2d_create_db_mask(uint16_t (*const masks)[64][5][4],
             hlim = iclip(imin(subpu_l2, b_dim[2]) - ss_hor, 0, 3 - chroma);
             vlim = iclip(imin(subpu_l2, b_dim[3]) - ss_ver, 0, 3 - chroma);
         }
-        mask_outer_edge_l(masks[0][bx4], by4, bh4, hlim, l);
-        mask_outer_edge_t(masks[1][by4], bx4, bw4, vlim, a);
+        mask_outer_edge_l(masks[0][bx4], by4, bh4, hlim, l, ss_ver);
+        mask_outer_edge_t(masks[1][by4], bx4, bw4, vlim, a, ss_hor);
         twl4c = thl4c = subpu_l2;
     }
 
@@ -310,6 +324,6 @@ void dav2d_create_db_mask(uint16_t (*const masks)[64][5][4],
         mask_subpu_edges(masks, by4, bx4, bw4, bh4, h_subpu_l2, v_subpu_l2,
                          (1 << subpu_l2) >> ss_hor, (1 << subpu_l2) >> ss_ver,
                          // this variable isn't subsampled for some reason
-                         ds_subpu_mask);
+                         ds_subpu_mask, ss_hor, ss_ver);
     }
 }
