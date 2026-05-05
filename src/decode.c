@@ -52,18 +52,25 @@
 #include "src/wedge.h"
 #include "src/wiener_tables.h"
 
-static void init_quant_tables(const Dav2dFrameHeader *const frame_hdr,
+static ALWAYS_INLINE int clip_qidx(const int qidx, const int delta, const int qmax) {
+    return !qidx && delta <= 0 ? 0 : iclip(qidx + delta, 1, qmax);
+}
+
+static void init_quant_tables(const Dav2dSequenceHeader *const seq_hdr,
+                              const Dav2dFrameHeader *const frame_hdr,
                               const int qidx, uint32_t (*dq)[3][2])
 {
+    const int qmax = 255 + 48 * seq_hdr->hbd;
     // and then ac == dc
     for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
-        const int yac = frame_hdr->segmentation.enabled ?
-            qidx + frame_hdr->segmentation.d.delta_q[i] : qidx;
-        const int ydc = yac + frame_hdr->quant.ydc_delta;
-        const int uac = yac + frame_hdr->quant.uac_delta;
-        const int udc = yac + frame_hdr->quant.udc_delta;
-        const int vac = yac + frame_hdr->quant.vac_delta;
-        const int vdc = yac + frame_hdr->quant.vdc_delta;
+        const int yac = iclip(frame_hdr->segmentation.enabled ?
+                              qidx + frame_hdr->segmentation.d.delta_q[i] :
+                              qidx, 0, qmax);
+        const int ydc = clip_qidx(yac, frame_hdr->quant.ydc_delta, qmax);
+        const int uac = clip_qidx(yac, frame_hdr->quant.uac_delta, qmax);
+        const int udc = clip_qidx(yac, frame_hdr->quant.udc_delta, qmax);
+        const int vac = clip_qidx(yac, frame_hdr->quant.vac_delta, qmax);
+        const int vdc = clip_qidx(yac, frame_hdr->quant.vdc_delta, qmax);
 
         dq[i][0][0] = dav2d_dq_lookup(ydc);
         dq[i][0][1] = dav2d_dq_lookup(yac);
@@ -1921,7 +1928,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 if (dav2d_msac_decode_bool_bypass(&ts->msac)) delta_q = -delta_q;
                 delta_q *= 1 << f->frame_hdr->delta.q.res_log2;
             }
-            ts->last_qidx = iclip(ts->last_qidx + delta_q, 1, 255);
+
+            const int qmax = 255 + 48 * f->seq_hdr->hbd;
+            ts->last_qidx = iclip(ts->last_qidx + delta_q, 1, qmax);
             DEBUG_BLOCK_printf("%*sPost-delta_q[%d->%d]: r=%d\n",
                                depth, "", delta_q >> f->frame_hdr->delta.q.res_log2,
                                ts->last_qidx, ts->msac.rng);
@@ -1933,7 +1942,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             ts->dq = f->dq;
         } else if (new_qidx != prev_qidx) {
             // find sb-specific quant parameters
-            init_quant_tables(f->frame_hdr, new_qidx, ts->dqmem);
+            init_quant_tables(f->seq_hdr, f->frame_hdr, new_qidx, ts->dqmem);
             ts->dq = ts->dqmem;
         }
 
@@ -4949,7 +4958,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     }
 
     // setup dequant tables
-    init_quant_tables(f->frame_hdr, f->frame_hdr->quant.yac, f->dq);
+    init_quant_tables(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, f->dq);
     if (f->frame_hdr->quant.qm.enabled)
         for (int i = 0; i < N_RECT_TX_SIZES; i++) {
             f->qm[i][0] = dav2d_qm_tbl[f->frame_hdr->quant.qm.y[0]][0][i];
