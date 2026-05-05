@@ -289,7 +289,11 @@ static ALWAYS_INLINE void intra_pred_dsp_init_arm(Dav2dIntraPredDSPContext *cons
 
 #if ARCH_AARCH64 && 0
     c->intra_pred[DC_PRED]       = BF(dav2d_ipred_dc, neon);
+#endif
+#if ARCH_AARCH64
     c->intra_pred[DC_128_PRED]   = BF(dav2d_ipred_dc_128, neon);
+#endif
+#if ARCH_AARCH64 && 0
     c->intra_pred[TOP_DC_PRED]   = BF(dav2d_ipred_dc_top, neon);
 #endif
 #if ARCH_AARCH64 && BITDEPTH == 8
