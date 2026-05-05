@@ -620,8 +620,8 @@ static void deblock_sbrow64_cols(const Dav2dFrameContext *const f,
         f->lf.segmap_uv ? &f->lf.segmap_uv[y64 * (16 >> ss_ver) * uv_seg_stride] : NULL;
     pixel edge_q_thr[2][16 * 16];
     pixel edge_side_thr[2][16 * 16];
-    pixel left_q_thr[2][16] = { 0 };
-    pixel left_side_thr[2][16] = { 0 };
+    pixel left_q_thr[2][16] = { { 0 } };
+    pixel left_side_thr[2][16] = { { 0 } };
     uint16_t ll_mask[17] = { 0 };
     ptrdiff_t uv_off;
     int tile_col = 1;

@@ -2974,7 +2974,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         ALIGN(pixel luma[CFL_MHCCP_MAX_LUMA_SIZE], 64);
         int refw = ctw4 * 4, refh = cth4 * 4, luma_top_stride;
         uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES];
-        int32_t mat[3][3] = { 0 };
+        int32_t mat[3][3] = { { 0 } };
         int n_tr = 0, n_bl = 0;
         if (has_top) {
             const int csbsz = sbsz >> ss_hor;
