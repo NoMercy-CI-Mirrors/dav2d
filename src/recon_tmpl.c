@@ -326,7 +326,7 @@ static inline int tcq_next_state(const int state, const int abs_level) {
     // bit2 is set based on bit0 ^ bit2 & (abs_level & 1)
     // bit31 is to always set it to 0 if tcq is disabled
     return (((state & 0x4) ^ (((abs_level & 1) ^ (state & 0x1)) << 2)) |
-            ((state & 0x6) >> 1) | -0x80000000) & (state >> 31);
+            ((state & 0x6) >> 1) | INT32_MIN) & (state >> 31);
 }
 
 static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
@@ -720,7 +720,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     int dc_tok;
     const int tcq_enabled = !chroma && f->frame_hdr->tcq &&
                             tx_class == TX_CLASS_2D && !lossless;
-    int hr_avg = 0, tcq_state = tcq_enabled * -0x80000000;
+    int hr_avg = 0, tcq_state = tcq_enabled * INT32_MIN;
     const uint8_t *const qm_tbl = *txtp < IDTX ? f->qm[tx][plane] : NULL;
     int dq_shift = tcq_enabled + 3 + imax(0, t_dim->ctx - 2);
     const uint32_t *const dq_tbl = ts->dq[b->seg_id][plane];
@@ -934,7 +934,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         dc_tok < lim || !hi_cdf ? -1 : hr_ctx, \
                         lim == 5 ? "lo" : "hi", chroma ? "uv" : "y", \
                         dc_tok, ts->msac.rng); \
-        tcq_state = tcq_enabled * -0x80000000; \
+        tcq_state = tcq_enabled * INT32_MIN; \
         const unsigned ac_dq = dq_tbl[1]; /* FIXME qm */ \
         for (int i = eob; i > 0; i--) { \
             if (tx_class == TX_CLASS_2D) \
