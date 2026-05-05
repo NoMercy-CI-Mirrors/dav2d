@@ -57,44 +57,44 @@ L(ipred_dc_128_tbl):
         .word 8f   - L(ipred_dc_128_tbl) + CONFIG_THUMB
         .word 4f   - L(ipred_dc_128_tbl) + CONFIG_THUMB
 4:
-        vst1.16         {d0},  [r0,  :64], r1
-        vst1.16         {d0},  [r12, :64], r1
+        vst1.16         {d0},  [r0],  r1
+        vst1.16         {d0},  [r12], r1
         subs            r4,  r4,  #4
-        vst1.16         {d0},  [r0,  :64], r1
-        vst1.16         {d0},  [r12, :64], r1
+        vst1.16         {d0},  [r0],  r1
+        vst1.16         {d0},  [r12], r1
         bgt             4b
         pop             {r4, pc}
 8:
-        vst1.16         {d0,  d1}, [r0,  :128], r1
-        vst1.16         {d0,  d1}, [r12, :128], r1
+        vst1.16         {d0,  d1}, [r0],  r1
+        vst1.16         {d0,  d1}, [r12], r1
         subs            r4,  r4,  #4
-        vst1.16         {d0,  d1}, [r0,  :128], r1
-        vst1.16         {d0,  d1}, [r12, :128], r1
+        vst1.16         {d0,  d1}, [r0],  r1
+        vst1.16         {d0,  d1}, [r12], r1
         bgt             8b
         pop             {r4, pc}
 160:
         vmov            q1,  q0
 16:
-        vst1.16         {d0,  d1,  d2,  d3},  [r0,  :128], r1
-        vst1.16         {d0,  d1,  d2,  d3},  [r12, :128], r1
+        vst1.16         {d0,  d1,  d2,  d3},  [r0],  r1
+        vst1.16         {d0,  d1,  d2,  d3},  [r12], r1
         subs            r4,  r4,  #4
-        vst1.16         {d0,  d1,  d2,  d3},  [r0,  :128], r1
-        vst1.16         {d0,  d1,  d2,  d3},  [r12, :128], r1
+        vst1.16         {d0,  d1,  d2,  d3},  [r0],  r1
+        vst1.16         {d0,  d1,  d2,  d3},  [r12], r1
         bgt             16b
         pop             {r4, pc}
 320:
         vmov            q1,  q0
         sub             r1,  r1,  #32
 32:
-        vst1.16         {d0,  d1,  d2,  d3},  [r0,  :128]!
-        vst1.16         {d0,  d1,  d2,  d3},  [r12, :128]!
-        vst1.16         {d0,  d1,  d2,  d3},  [r0,  :128], r1
-        vst1.16         {d0,  d1,  d2,  d3},  [r12, :128], r1
+        vst1.16         {d0,  d1,  d2,  d3},  [r0]!
+        vst1.16         {d0,  d1,  d2,  d3},  [r12]!
+        vst1.16         {d0,  d1,  d2,  d3},  [r0],  r1
+        vst1.16         {d0,  d1,  d2,  d3},  [r12], r1
         subs            r4,  r4,  #4
-        vst1.16         {d0,  d1,  d2,  d3},  [r0,  :128]!
-        vst1.16         {d0,  d1,  d2,  d3},  [r12, :128]!
-        vst1.16         {d0,  d1,  d2,  d3},  [r0,  :128], r1
-        vst1.16         {d0,  d1,  d2,  d3},  [r12, :128], r1
+        vst1.16         {d0,  d1,  d2,  d3},  [r0]!
+        vst1.16         {d0,  d1,  d2,  d3},  [r12]!
+        vst1.16         {d0,  d1,  d2,  d3},  [r0],  r1
+        vst1.16         {d0,  d1,  d2,  d3},  [r12], r1
         bgt             32b
         pop             {r4, pc}
 640:
@@ -897,7 +897,7 @@ L(ipred_paeth_tbl):
         vmov            d7,  d6
         vmov            d17, d16
 4:
-        vld4.16         {d0[], d1[], d2[], d3[]},  [r2, :64], r5
+        vld4.16         {d0[], d1[], d2[], d3[]},  [r2], r5
         vadd.i16        q9,  q8,  q0  // base
         vadd.i16        q10, q8,  q1
         vabd.s16        q11, q3,  q9  // tdiff
@@ -916,11 +916,11 @@ L(ipred_paeth_tbl):
         vbsl            q11, q3,  q2
         vbit            q12, q1,  q10 // ldiff <= min ? left : ...
         vbit            q11, q0,  q9
-        vst1.16         {d25}, [r0, :64], r1
-        vst1.16         {d24}, [lr, :64], r1
+        vst1.16         {d25}, [r0], r1
+        vst1.16         {d24}, [lr], r1
         subs            r4,  r4,  #4
-        vst1.16         {d23}, [r0, :64], r1
-        vst1.16         {d22}, [lr, :64], r1
+        vst1.16         {d23}, [r0], r1
+        vst1.16         {d22}, [lr], r1
         bgt             4b
         vpop            {q4}
         pop             {r4-r6, pc}
@@ -932,7 +932,7 @@ L(ipred_paeth_tbl):
         mov             r12, r3
         sub             r1,  r1,  r3, lsl #1
 1:
-        vld2.16         {d0[], d2[]},  [r2, :32], r5
+        vld2.16         {d0[], d2[]},  [r2], r5
         vmov            d1,  d0
         vmov            d3,  d2
 2:
@@ -956,8 +956,8 @@ L(ipred_paeth_tbl):
         vbit            q12, q1,  q10 // ldiff <= min ? left : ...
         vbit            q11, q0,  q9
         subs            r3,  r3,  #8
-        vst1.16         {q12}, [r0, :128]!
-        vst1.16         {q11}, [lr, :128]!
+        vst1.16         {q12}, [r0]!
+        vst1.16         {q11}, [lr]!
         ble             8f
         vld1.16         {q3},  [r6]!
         b               2b
@@ -1775,12 +1775,12 @@ L(pal_pred_tbl):
         vadd.i16        q1,  q1,  q15
         vtbl.8          d0, {q14}, d0
         vtbl.8          d1, {q14}, d1
-        vst1.16         {d0}, [r0, :64], r1
+        vst1.16         {d0}, [r0], r1
         vtbl.8          d2, {q14}, d2
-        vst1.16         {d1}, [r2, :64], r1
+        vst1.16         {d1}, [r2], r1
         vtbl.8          d3, {q14}, d3
-        vst1.16         {d2}, [r0, :64], r1
-        vst1.16         {d3}, [r2, :64], r1
+        vst1.16         {d2}, [r0], r1
+        vst1.16         {d3}, [r2], r1
         bgt             4b
         pop             {r4-r5, pc}
 80:
@@ -1809,12 +1809,12 @@ L(pal_pred_tbl):
         vtbl.8          d3, {q14}, d3
         vtbl.8          d4, {q14}, d4
         vtbl.8          d5, {q14}, d5
-        vst1.16         {q0}, [r0, :128], r1
+        vst1.16         {q0}, [r0], r1
         vtbl.8          d6, {q14}, d6
-        vst1.16         {q1}, [r2, :128], r1
+        vst1.16         {q1}, [r2], r1
         vtbl.8          d7, {q14}, d7
-        vst1.16         {q2}, [r0, :128], r1
-        vst1.16         {q3}, [r2, :128], r1
+        vst1.16         {q2}, [r0], r1
+        vst1.16         {q3}, [r2], r1
         bgt             8b
         pop             {r4-r5, pc}
 160:
@@ -1859,15 +1859,15 @@ L(pal_pred_tbl):
         vtbl.8          d16, {q14}, d16
         vtbl.8          d17, {q14}, d17
         vtbl.8          d18, {q14}, d18
-        vst1.16         {q0,  q1},  [r0, :128], r1
+        vst1.16         {q0,  q1},  [r0], r1
         vtbl.8          d19, {q14}, d19
         vtbl.8          d20, {q14}, d20
-        vst1.16         {q2,  q3},  [r2, :128], r1
+        vst1.16         {q2,  q3},  [r2], r1
         vtbl.8          d21, {q14}, d21
         vtbl.8          d22, {q14}, d22
-        vst1.16         {q8,  q9},  [r0, :128], r1
+        vst1.16         {q8,  q9},  [r0], r1
         vtbl.8          d23, {q14}, d23
-        vst1.16         {q10, q11}, [r2, :128], r1
+        vst1.16         {q10, q11}, [r2], r1
         bgt             16b
         pop             {r4-r5, pc}
 320:
@@ -1913,15 +1913,15 @@ L(pal_pred_tbl):
         vtbl.8          d16, {q14}, d16
         vtbl.8          d17, {q14}, d17
         vtbl.8          d18, {q14}, d18
-        vst1.16         {q0,  q1},  [r0, :128]!
+        vst1.16         {q0,  q1},  [r0]!
         vtbl.8          d19, {q14}, d19
         vtbl.8          d20, {q14}, d20
-        vst1.16         {q2,  q3},  [r0, :128], r1
+        vst1.16         {q2,  q3},  [r0], r1
         vtbl.8          d21, {q14}, d21
         vtbl.8          d22, {q14}, d22
-        vst1.16         {q8,  q9},  [r2, :128]!
+        vst1.16         {q8,  q9},  [r2]!
         vtbl.8          d23, {q14}, d23
-        vst1.16         {q10, q11}, [r2, :128], r1
+        vst1.16         {q10, q11}, [r2], r1
         bgt             32b
         pop             {r4-r5, pc}
 640:
