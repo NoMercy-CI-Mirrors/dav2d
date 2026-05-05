@@ -382,7 +382,7 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
     } else {
         ptrs[1][0] = ptrs[1][1] = ptrs[1][2];
     }
-    backup_row_luma(bak_rows[1][3], luma + (1 << ss_ver) * PXSTRIDE(lstride),
+    backup_row_luma(bak_rows[1][3], luma + ((size_t) 1 << ss_ver) * PXSTRIDE(lstride),
                     lstride, w << ss_hor, edges, ss_hor, ss_ver, params->single.ds_flt);
     ptrs[1][3] = bak_rows[1][3];
     int lbak_idx = 4;
