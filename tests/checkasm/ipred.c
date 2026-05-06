@@ -158,14 +158,16 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
 }
 
 static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
-    PIXEL_RECT(c_y, 128, 128);
-    PIXEL_RECT(c_u, 128, 128);
-    PIXEL_RECT(c_v, 128, 128);
-    PIXEL_RECT(a_y, 128, 128);
-    PIXEL_RECT(a_u, 128, 128);
-    PIXEL_RECT(a_v, 128, 128);
+    PIXEL_RECT(c_y, 128, 129);
+    PIXEL_RECT(c_u, 128, 129);
+    PIXEL_RECT(c_v, 128, 129);
+    PIXEL_RECT(a_y, 128, 129);
+    PIXEL_RECT(a_u, 128, 129);
+    PIXEL_RECT(a_v, 128, 129);
     ALIGN_STK_64(pixel, c_top_sb, 3 * 128,);
     ALIGN_STK_64(pixel, a_top_sb, 3 * 128,);
+    pixel *const c_y0 = c_y, *const c_u0 = c_u, *const c_v0 = c_v;
+    pixel *const a_y0 = a_y, *const a_u0 = a_u, *const a_v0 = a_v;
 
     declare_func(void, pixel *const *ptrs, const ptrdiff_t *stride,
                  int wpad, int hpad, int w, int h, int flags HIGHBD_DECL_SUFFIX);
@@ -213,6 +215,13 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                         flags |= (alpha_v * (1 << CFL_ALPHA_V_SHIFT)) & CFL_ALPHA_V_MASK;
                                     }
 
+                                    const int unaligned_offset = imax(w / 2, 4);
+                                    c_y = c_y0 + (unaligned_offset << ss_hor);
+                                    a_y = a_y0 + (unaligned_offset << ss_hor);
+                                    c_u = c_u0 + unaligned_offset;
+                                    a_u = a_u0 + unaligned_offset;
+                                    c_v = c_v0 + unaligned_offset;
+                                    a_v = a_v0 + unaligned_offset;
                                     const int itse = flags & CFL_IS_TOP_SB_EDGE;
                                     pixel *c_ytop = itse ? c_top_sb : c_y - (1 + ss_ver) * strides[0];
                                     pixel *c_utop = itse ? c_top_sb + 128 : c_u - strides[1];
