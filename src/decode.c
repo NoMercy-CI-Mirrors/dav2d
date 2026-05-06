@@ -4252,7 +4252,7 @@ static void setup_tile(Dav2dTileState *const ts,
 
     if (f->c->n_tc > 1) {
         for (int p = 0; p < 3; p++)
-            atomic_init(&ts->progress[p], row_sb_start);
+            atomic_init(&ts->progress[p], ts->tiling.row_start >> 4);
     }
 }
 
@@ -4798,48 +4798,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
 
     // update allocation of block contexts for above
     ptrdiff_t y_stride = f->cur.p.stride[0], uv_stride = f->cur.p.stride[1];
-    if (y_stride * f->sbh * 4 != f->lf.cdef_buf_plane_sz[0] ||
-        uv_stride * f->sbh * 8 != f->lf.cdef_buf_plane_sz[1] ||
-        f->sbh != f->lf.cdef_buf_sbh)
-    {
-        dav2d_free_aligned(f->lf.cdef_line_buf);
-        size_t alloc_sz = 64;
-        alloc_sz += (size_t)llabs(y_stride) * 4 * f->sbh;
-        alloc_sz += (size_t)llabs(uv_stride) * 8 * f->sbh;
-        uint8_t *ptr = f->lf.cdef_line_buf = dav2d_alloc_aligned(ALLOC_CDEF, alloc_sz, 32);
-        if (!ptr) {
-            f->lf.cdef_buf_plane_sz[0] = f->lf.cdef_buf_plane_sz[1] = 0;
-            goto error;
-        }
-
-        ptr += 32;
-        if (y_stride < 0) {
-            f->lf.cdef_line[0][0] = ptr - y_stride * (f->sbh * 4 - 1);
-            f->lf.cdef_line[1][0] = ptr - y_stride * (f->sbh * 4 - 3);
-        } else {
-            f->lf.cdef_line[0][0] = ptr + y_stride * 0;
-            f->lf.cdef_line[1][0] = ptr + y_stride * 2;
-        }
-        ptr += llabs(y_stride) * f->sbh * 4;
-        if (uv_stride < 0) {
-            f->lf.cdef_line[0][1] = ptr - uv_stride * (f->sbh * 8 - 1);
-            f->lf.cdef_line[0][2] = ptr - uv_stride * (f->sbh * 8 - 3);
-            f->lf.cdef_line[1][1] = ptr - uv_stride * (f->sbh * 8 - 5);
-            f->lf.cdef_line[1][2] = ptr - uv_stride * (f->sbh * 8 - 7);
-        } else {
-            f->lf.cdef_line[0][1] = ptr + uv_stride * 0;
-            f->lf.cdef_line[0][2] = ptr + uv_stride * 2;
-            f->lf.cdef_line[1][1] = ptr + uv_stride * 4;
-            f->lf.cdef_line[1][2] = ptr + uv_stride * 6;
-        }
-
-        f->lf.cdef_buf_plane_sz[0] = (int) y_stride * f->sbh * 4;
-        f->lf.cdef_buf_plane_sz[1] = (int) uv_stride * f->sbh * 8;
-        f->lf.cdef_buf_sbh = f->sbh;
-    }
-
-    const int sb256 = f->frame_hdr->sb128;
-    const int num_lines = c->n_tc > 1 ? f->sbh * 4 << sb256 : 20;
+    const int num_lines = c->n_tc > 1 ? f->sb64h * 4 : 8;
     // FIXME double this with threading enabled
     const int n_tile_rows_m1 = f->frame_hdr->tiling.t.rows - 1;
     y_stride = f->cur.p.stride[0], uv_stride = f->cur.p.stride[1];
@@ -5113,7 +5072,7 @@ void dav2d_decode_tip_frame_init(Dav2dFrameContext *const f) {
             ts->tiling.row_end = imin(row_sb_end << sb_shift, f->bh);
             if (f->c->n_tc > 1)
                 for (int p = 0; p < 3; p++)
-                    atomic_init(&ts->progress[p], row_sb_start);
+                    atomic_init(&ts->progress[p], ts->tiling.row_start >> 4);
         }
     }
     atomic_store(&f->task_thread.entropy_task_counter,
@@ -5134,6 +5093,7 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
         reset_context(&f->a[n], IS_KEY_OR_INTRA(f->frame_hdr),
                       f->frame_hdr->tip.frame_mode == 2);
 
+    const int sb128 = f->frame_hdr->sb128;
     for (int tile_row = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
         const int sby_start = f->frame_hdr->tiling.t.row_start_sb[tile_row];
         const int sbh_end =
@@ -5152,8 +5112,10 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
         }
         // post filters (deblock + cdef + ccso + ...)
         // do this after completing full tiles, so that intra bc works correctly
-        for (int sby = sby_start; sby < sbh_end; sby++) {
-            f->bd_fn.filter_sbrow(f, sby);
+        const int sb64h_end =
+            imin(f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] << sb128, f->sb64h);
+        for (int by64 = sby_start << sb128; by64 < sb64h_end; by64++) {
+            f->bd_fn.filter_slice(f, by64);
         }
     }
 
@@ -5376,11 +5338,11 @@ int dav2d_submit_frame(Dav2dContext *const c) {
 
 #define assign_bitdepth_case(bd) \
         f->bd_fn.recon_b = dav2d_recon_b_##bd##bpc; \
-        f->bd_fn.filter_sbrow = dav2d_filter_sbrow_##bd##bpc; \
-        f->bd_fn.filter_sbrow_deblock_cols = dav2d_filter_sbrow_deblock_cols_##bd##bpc; \
-        f->bd_fn.filter_sbrow_deblock_rows = dav2d_filter_sbrow_deblock_rows_##bd##bpc; \
-        f->bd_fn.filter_sbrow_cdef = dav2d_filter_sbrow_cdef_##bd##bpc; \
-        f->bd_fn.filter_sbrow_lr = dav2d_filter_sbrow_lr_##bd##bpc; \
+        f->bd_fn.filter_slice = dav2d_filter_slice_##bd##bpc; \
+        f->bd_fn.filter_slice_deblock_cols = dav2d_filter_slice_deblock_cols_##bd##bpc; \
+        f->bd_fn.filter_slice_deblock_rows = dav2d_filter_slice_deblock_rows_##bd##bpc; \
+        f->bd_fn.filter_slice_cdef = dav2d_filter_slice_cdef_##bd##bpc; \
+        f->bd_fn.filter_slice_lr = dav2d_filter_slice_lr_##bd##bpc; \
         f->bd_fn.backup_prefilter_data = dav2d_backup_prefilter_data_##bd##bpc; \
         f->bd_fn.read_coef_blocks = dav2d_read_coef_blocks_##bd##bpc; \
         f->bd_fn.copy_pal_block_y = dav2d_copy_pal_block_y_##bd##bpc; \
@@ -5517,6 +5479,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     f->bh = ((f->frame_hdr->height + 7) >> 3) << 1;
     f->sb256w = (f->bw + 63) >> 6;
     f->sb256h = (f->bh + 63) >> 6;
+    f->sb64h = (f->bh + 15) >> 4;
     f->sb_shift = 4 + f->frame_hdr->sb128;
     f->sb_step = 16 << f->frame_hdr->sb128;
     f->sbh = (f->bh + f->sb_step - 1) >> f->sb_shift;
@@ -5527,7 +5490,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     const int cols = f->frame_hdr->tiling.t.cols;
     const int rows = f->frame_hdr->tiling.t.rows;
     atomic_store(&f->task_thread.task_counter,
-                 cols * rows * n_passes + f->sbh * imin(n_passes, 2));
+                 cols * rows * n_passes + f->sb64h + f->sbh * (n_passes > 1));
 
     // ref_mvs
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {

@@ -37,9 +37,9 @@ int (name)(Dav2dTaskContext *t, DB_ONLY(int depth) \
            enum BlockSize bs, const enum BlockSize cbs[2], Av2Block *b)
 typedef decl_recon_b_fn(*recon_b_fn);
 
-#define decl_filter_sbrow_fn(name) \
-void (name)(Dav2dFrameContext *f, int sby)
-typedef decl_filter_sbrow_fn(*filter_sbrow_fn);
+#define decl_filter_slice_fn(name) \
+void (name)(Dav2dFrameContext *f, int by64)
+typedef decl_filter_slice_fn(*filter_slice_fn);
 
 #define decl_backup_prefilter_data_fn(name) \
 void (name)(Dav2dTaskContext *t)
@@ -62,16 +62,16 @@ typedef decl_read_pal_plane_fn(*read_pal_plane_fn);
 decl_recon_b_fn(dav2d_recon_b_8bpc);
 decl_recon_b_fn(dav2d_recon_b_16bpc);
 
-decl_filter_sbrow_fn(dav2d_filter_sbrow_8bpc);
-decl_filter_sbrow_fn(dav2d_filter_sbrow_16bpc);
-decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_cols_8bpc);
-decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_cols_16bpc);
-decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_rows_8bpc);
-decl_filter_sbrow_fn(dav2d_filter_sbrow_deblock_rows_16bpc);
-void dav2d_filter_sbrow_cdef_8bpc(Dav2dTaskContext *tc, int sby);
-void dav2d_filter_sbrow_cdef_16bpc(Dav2dTaskContext *tc, int sby);
-decl_filter_sbrow_fn(dav2d_filter_sbrow_lr_8bpc);
-decl_filter_sbrow_fn(dav2d_filter_sbrow_lr_16bpc);
+decl_filter_slice_fn(dav2d_filter_slice_8bpc);
+decl_filter_slice_fn(dav2d_filter_slice_16bpc);
+decl_filter_slice_fn(dav2d_filter_slice_deblock_cols_8bpc);
+decl_filter_slice_fn(dav2d_filter_slice_deblock_cols_16bpc);
+decl_filter_slice_fn(dav2d_filter_slice_deblock_rows_8bpc);
+decl_filter_slice_fn(dav2d_filter_slice_deblock_rows_16bpc);
+void dav2d_filter_slice_cdef_8bpc(Dav2dTaskContext *tc, int by64);
+void dav2d_filter_slice_cdef_16bpc(Dav2dTaskContext *tc, int by64);
+decl_filter_slice_fn(dav2d_filter_slice_lr_8bpc);
+decl_filter_slice_fn(dav2d_filter_slice_lr_16bpc);
 
 decl_backup_prefilter_data_fn(dav2d_backup_prefilter_data_8bpc);
 decl_backup_prefilter_data_fn(dav2d_backup_prefilter_data_16bpc);

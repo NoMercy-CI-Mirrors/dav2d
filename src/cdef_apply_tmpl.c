@@ -94,19 +94,19 @@ static int adjust_strength(const int strength, const unsigned var) {
     return (strength * (4 + i) + 8) >> 4;
 }
 
-void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
-                             pixel *const p[3],
-                             const Av2Filter *const lflvl,
-                             const int by_start, const int by_end,
-                             const int sbrow_start, const int sby)
+void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
+                              pixel *const p[3],
+                              const Av2Filter *const lflvl,
+                              const int by_start, const int by_end,
+                              const int by64)
 {
     Dav2dFrameContext *const f = (Dav2dFrameContext *)tc->f;
+    const Dav2dContext *const c = f->c;
     const int bitdepth_min_8 = BITDEPTH == 8 ? 0 : f->cur.p.p.bpc - 8;
     const Dav2dDSPContext *const dsp = f->dsp;
     enum CdefEdgeFlags edges = CDEF_HAVE_BOTTOM | (by_start > 0 ? CDEF_HAVE_TOP : 0);
     pixel *ptrs[3] = { p[0], p[1], p[2] };
-    const int sbsz = 16;
-    const int sb64w = (f->bw + sbsz - 1) >> 4;
+    const int sb64w = (f->bw + 15) >> 4;
     const int damping = f->frame_hdr->cdef.damping + bitdepth_min_8;
     const int on_skip_tx = f->frame_hdr->cdef.on_skiptx;
     const enum Dav2dPixelLayout layout = f->cur.p.p.layout;
@@ -116,26 +116,19 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
     static const uint8_t uv_dirs[2][8] = { { 0, 1, 2, 3, 4, 5, 6, 7 },
                                            { 7, 0, 2, 4, 5, 6, 6, 6 } };
     const uint8_t *uv_dir = uv_dirs[layout == DAV2D_PIXEL_LAYOUT_I422];
-    const int have_tt = f->c->n_tc > 1;
-    const int sb128 = f->frame_hdr->sb128;
     const ptrdiff_t y_stride = PXSTRIDE(f->cur.p.stride[0]);
     const ptrdiff_t uv_stride = PXSTRIDE(f->cur.p.stride[1]);
 
     for (int by = by_start; by < by_end; by += 2, edges |= CDEF_HAVE_TOP) {
-        const int tf = tc->top_pre_cdef_toggle;
+        const int tf = tc->lf.top_pre_cdef_toggle;
         const int by_idx = (by & 0x3e) >> 1;
         if (by + 2 >= f->bh) edges &= ~CDEF_HAVE_BOTTOM;
+        const int slice_top = by == by_start && !((by + 2) & 15);
+        const int slice_bottom = by + 2 == by_end && !((by + 4) & 15);
 
-        if ((!have_tt || sbrow_start || by + 2 < by_end) &&
-            edges & CDEF_HAVE_BOTTOM)
-        {
+        if (!slice_bottom && edges & CDEF_HAVE_BOTTOM) {
             // backup pre-filter data for next iteration
-            pixel *const cdef_top_bak[3] = {
-                f->lf.cdef_line[!tf][0] + have_tt * sby * 4 * y_stride,
-                f->lf.cdef_line[!tf][1] + have_tt * sby * 8 * uv_stride,
-                f->lf.cdef_line[!tf][2] + have_tt * sby * 8 * uv_stride
-            };
-            backup2lines(cdef_top_bak, ptrs, f->cur.p.stride, layout);
+            backup2lines(tc->lf.cdef_line[!tf], ptrs, f->cur.p.stride, layout);
         }
 
         ALIGN_STK_16(pixel, lr_bak, 2 /* idx */, [3 /* plane */][8 /* y */][2 /* x */]);
@@ -143,10 +136,10 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
         edges &= ~CDEF_HAVE_LEFT;
         edges |= CDEF_HAVE_RIGHT;
         enum Backup2x8Flags prev_flag = 0;
-        for (int sbx = 0, bit = 0; sbx < sb64w; sbx++, edges |= CDEF_HAVE_LEFT) {
+        for (int sb64x = 0, bit = 0; sb64x < sb64w; sb64x++, edges |= CDEF_HAVE_LEFT) {
             ALIGN_STK_64(uint8_t, ccso_lut_idx, 3, [64*8]);
-            const int sb256x = sbx >> 2;
-            const int sb64x_idx = sbx & 3;
+            const int sb256x = sb64x >> 2;
+            const int sb64x_idx = sb64x & 3;
             const int sb64_idx = ((by & 0x30) >> 2) + sb64x_idx;
             const int cdef_idx = lflvl[sb256x].cdef_idx[sb64_idx];
 
@@ -176,27 +169,24 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                     const pixel *top, *bot;
                     ptrdiff_t offset;
                     enum CdefEdgeFlags sb_edges = edges;
-                    if ((sbx + 1) * sbsz >= f->bw) sb_edges &= ~CDEF_HAVE_RIGHT;
-                    const int w = imin(sbsz, f->bw - sbx * sbsz) * 4;
+                    if ((sb64x + 1) * 16 >= f->bw) sb_edges &= ~CDEF_HAVE_RIGHT;
+                    const int w = imin(16, f->bw - sb64x * 16) * 4;
                     assert(w >= 0);
 
-                    if (!have_tt) goto sb_st_y;
-                    if (sbrow_start && by == by_start) {
-                        offset = (sby * (4 << sb128) - 4) * y_stride +
-                                 sbx * sbsz * 4;
+                    if (slice_top) {
+                        assert(edges & CDEF_HAVE_TOP);
+                        offset = (c->n_tc == 1 ? f->lf.top_lr_db_toggle * 4 :
+                                  by64 * 4 - 4) * y_stride + sb64x * 64;
                         top = &f->lf.lr_db_line[0][offset];
-                        bot = iptrs[0] + 8 * y_stride;
-                    } else if (!sbrow_start && by + 2 >= by_end) {
-                        offset = sby * 4 * y_stride + sbx * sbsz * 4;
-                        top = &f->lf.cdef_line[tf][0][offset];
-                        offset = ((sby + 1) * (4 << sb128) - 2) * y_stride +
-                                 sbx * sbsz * 4;
+                        bot = &iptrs[0][8 * y_stride];
+                    } else if (slice_bottom) {
+                        top = &tc->lf.cdef_line[tf][0][sb64x * 64];
+                        offset = (c->n_tc == 1 ? !f->lf.top_lr_db_toggle * 4 + 2 :
+                                  by64 * 4 + 2) * y_stride + sb64x * 64;
                         bot = &f->lf.lr_db_line[0][offset];
                     } else {
-                sb_st_y:
-                        offset = have_tt * sby * 4 * y_stride + sbx * sbsz * 4;
-                        top = &f->lf.cdef_line[tf][0][offset];
-                        bot = iptrs[0] + 8 * y_stride;
+                        top = &tc->lf.cdef_line[tf][0][sb64x * 64];
+                        bot = &iptrs[0][8 * y_stride];
                     }
 
                     dsp->ccso.prep[!!pl * uv_idx](ccso_lut_idx[pl], 64 >> (!!pl * ss_hor),
@@ -248,7 +238,7 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
             uv_sec_lvl <<= bitdepth_min_8;
 
             pixel *bptrs[3] = { iptrs[0], iptrs[1], iptrs[2] };
-            for (int bx = sbx * sbsz; bx < imin((sbx + 1) * sbsz, f->bw);
+            for (int bx = sb64x * 16; bx < imin((sb64x + 1) * 16, f->bw);
                  bx += 2, edges |= CDEF_HAVE_LEFT)
             {
                 if (bx + 2 >= f->bw) edges &= ~CDEF_HAVE_RIGHT;
@@ -285,21 +275,20 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 const pixel *top, *bot;
                 ptrdiff_t offset;
 
-                if (!have_tt) goto st_y;
-                if (sbrow_start && by == by_start) {
-                    offset = (sby * (4 << sb128) - 4) * y_stride + bx * 4;
+                if (slice_top) {
+                    assert(edges & CDEF_HAVE_TOP);
+                    offset = (c->n_tc == 1 ? f->lf.top_lr_db_toggle * 4 :
+                              by64 * 4 - 4) * y_stride + bx * 4;
                     top = &f->lf.lr_db_line[0][offset];
-                    bot = bptrs[0] + 8 * y_stride;
-                } else if (!sbrow_start && by + 2 >= by_end) {
-                    top = &f->lf.cdef_line[tf][0][sby * 4 * y_stride + bx * 4];
-                    const int line = (sby + 1) * (4 << sb128) - 2;
-                    offset = line * y_stride + bx * 4;
+                    bot = &bptrs[0][8 * y_stride];
+                } else if (slice_bottom) {
+                    top = &tc->lf.cdef_line[tf][0][bx * 4];
+                    offset = (c->n_tc == 1 ? !f->lf.top_lr_db_toggle * 4 + 2 :
+                              by64 * 4 + 2) * y_stride + bx * 4;
                     bot = &f->lf.lr_db_line[0][offset];
                 } else {
-            st_y:;
-                    offset = sby * 4 * y_stride;
-                    top = &f->lf.cdef_line[tf][0][have_tt * offset + bx * 4];
-                    bot = bptrs[0] + 8 * y_stride;
+                    top = &tc->lf.cdef_line[tf][0][bx * 4];
+                    bot = &bptrs[0][8 * y_stride];
                 }
                 if (y_pri_lvl) {
                     const int adj_y_pri_lvl = adjust_strength(y_pri_lvl, variance);
@@ -317,24 +306,20 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
 
                 const int uvdir = uv_pri_lvl ? uv_dir[dir] : 0;
                 for (int pl = 1; pl <= 2; pl++) {
-                    if (!have_tt) goto st_uv;
-                    if (sbrow_start && by == by_start) {
-                        const int line = sby * (4 << sb128) - 4;
-                        offset = line * uv_stride + (bx * 4 >> ss_hor);
+                    if (slice_top) {
+                        assert(edges & CDEF_HAVE_TOP);
+                        offset = (c->n_tc == 1 ? f->lf.top_lr_db_toggle * 4 :
+                                  by64 * 4 - 4) * uv_stride + (bx * 4 >> ss_hor);
                         top = &f->lf.lr_db_line[pl][offset];
-                        bot = bptrs[pl] + (8 >> ss_ver) * uv_stride;
-                    } else if (!sbrow_start && by + 2 >= by_end) {
-                        const ptrdiff_t top_offset = sby * 8 * uv_stride +
-                                                     (bx * 4 >> ss_hor);
-                        top = &f->lf.cdef_line[tf][pl][top_offset];
-                        const int line = (sby + 1) * (4 << sb128) - 2;
-                        offset = line * uv_stride + (bx * 4 >> ss_hor);
+                        bot = &bptrs[pl][(8 >> ss_ver) * uv_stride];
+                    } else if (slice_bottom) {
+                        top = &tc->lf.cdef_line[tf][pl][bx * 4 >> ss_hor];
+                        offset = (c->n_tc == 1 ? !f->lf.top_lr_db_toggle * 4 + 2 :
+                                  by64 * 4 + 2) * uv_stride + (bx * 4 >> ss_hor);
                         bot = &f->lf.lr_db_line[pl][offset];
                     } else {
-                st_uv:;
-                        const ptrdiff_t offset = sby * 8 * uv_stride;
-                        top = &f->lf.cdef_line[tf][pl][have_tt * offset + (bx * 4 >> ss_hor)];
-                        bot = bptrs[pl] + (8 >> ss_ver) * uv_stride;
+                        top = &tc->lf.cdef_line[tf][pl][bx * 4 >> ss_hor];
+                        bot = &bptrs[pl][(8 >> ss_ver) * uv_stride];
                     }
                     dsp->cdef.fb[uv_idx](bptrs[pl], f->cur.p.stride[1],
                                          lr_bak[bit][pl], top, bot,
@@ -359,14 +344,14 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                 // (so the right side ones) by checking whether next sb/b needs
                 // it (if has_cdef or has_ccso)
                 const enum Backup2x8Flags do_right = flag & ~prev_flag;
-                if (do_right && (sbx + 1) * sbsz < f->bw) {
-                    backup2x8(lr_bak[bit], iptrs, f->cur.p.stride, sbsz * 4,
+                if (do_right && (sb64x + 1) * 16 < f->bw) {
+                    backup2x8(lr_bak[bit], iptrs, f->cur.p.stride, 64,
                               layout, do_right);
                     prev_flag |= do_right;
                 }
                 for (int pl = 0; pl < 3; pl++)
                     if (lflvl[sb256x].ccso[pl]) {
-                        const int w = imin(sbsz, f->bw - sbx * sbsz) * 4;
+                        const int w = imin(16, f->bw - sb64x * 16) * 4;
                         dsp->ccso.add(iptrs[pl], f->cur.p.stride[!!pl],
                                       ccso_lut_idx[pl], 64 >> (!!pl * ss_hor),
                                       f->frame_hdr->ccso.p[pl].filter_off,
@@ -375,14 +360,14 @@ void bytefn(dav2d_cdef_brow)(Dav2dTaskContext *const tc,
                                       pl ? uv_ll_mask : y_ll_mask HIGHBD_CALL_SUFFIX);
                     }
             }
-            iptrs[0] += sbsz * 4;
-            iptrs[1] += sbsz * 4 >> ss_hor;
-            iptrs[2] += sbsz * 4 >> ss_hor;
+            iptrs[0] += 64;
+            iptrs[1] += 64 >> ss_hor;
+            iptrs[2] += 64 >> ss_hor;
         }
 
         ptrs[0] += 8 * PXSTRIDE(f->cur.p.stride[0]);
         ptrs[1] += 8 * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver;
         ptrs[2] += 8 * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver;
-        tc->top_pre_cdef_toggle ^= 1;
+        tc->lf.top_pre_cdef_toggle ^= 1;
     }
 }

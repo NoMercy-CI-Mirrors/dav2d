@@ -668,6 +668,7 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
                 pthread_join(pf->task_thread.td.thread, NULL);
                 pthread_cond_destroy(&pf->task_thread.td.cond);
                 pthread_mutex_destroy(&pf->task_thread.td.lock);
+                dav2d_free_aligned(pf->lf.cdef_line_buf);
             }
             pthread_cond_destroy(&ttd->delayed_fg.cond);
             pthread_cond_destroy(&ttd->cond);
@@ -706,7 +707,6 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
         dav2d_free(f->lf.tx_db_right_edge[0]);
         dav2d_free(f->lf.start_of_tile_row);
         dav2d_free_aligned(f->rf.rp_proj);
-        dav2d_free_aligned(f->lf.cdef_line_buf);
         dav2d_free_aligned(f->lf.lr_line_buf);
     }
     dav2d_free_aligned(c->fc);

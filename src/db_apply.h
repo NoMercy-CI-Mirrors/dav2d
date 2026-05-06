@@ -35,14 +35,14 @@
 #include "src/internal.h"
 #include "src/levels.h"
 
-void bytefn(dav2d_deblock_sbrow_cols)(const Dav2dFrameContext *f,
+void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *f,
                                       pixel *const p[3], Av2Filter *lflvl,
-                                      int sby, int start_of_tile_row);
-void bytefn(dav2d_deblock_sbrow_rows)(const Dav2dFrameContext *f,
+                                      int by64, int start_of_tile_row);
+void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *f,
                                       pixel *const p[3], Av2Filter *lflvl,
-                                      int sby);
+                                      int by64);
 
-void bytefn(dav2d_copy_db)(Dav2dFrameContext *const f,
-                                /*const*/ pixel *const src[3], int sby);
+void bytefn(dav2d_copy_db_slice)(Dav2dFrameContext *const f,
+                                 /*const*/ pixel *const src[3], int by64);
 
 #endif /* DAV2D_SRC_DB_APPLY_H */

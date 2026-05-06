@@ -3913,38 +3913,40 @@ chroma: {}
     return 0;
 }
 
-void bytefn(dav2d_filter_sbrow_deblock_cols)(Dav2dFrameContext *const f, const int sby) {
+void bytefn(dav2d_filter_slice_deblock_cols)(Dav2dFrameContext *const f, const int by64) {
     if (!(f->c->inloop_filters & DAV2D_INLOOPFILTER_DEBLOCK) ||
         (!f->frame_hdr->deblock.level_y[0] && !f->frame_hdr->deblock.level_y[1]))
     {
         return;
     }
-    const int y = sby * f->sb_step * 4;
+    const int y = by64 * 64;
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     pixel *const p[3] = {
         f->lf.p[0] + y * PXSTRIDE(f->cur.p.stride[0]),
         f->lf.p[1] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
     };
-    Av2Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
-    const int start_of_tile_row = f->lf.start_of_tile_row[sby];
-    bytefn(dav2d_deblock_sbrow_cols)(f, p, mask, sby,
-                                     start_of_tile_row & 1 ? start_of_tile_row >> 1 : 0);
+    Av2Filter *mask = f->lf.mask + (by64 >> 2) * f->sb256w;
+    const int sb128 = f->frame_hdr->sb128, sb64sz = 1 << sb128;
+    const int start_of_tile_row = f->lf.start_of_tile_row[by64 >> sb128];
+    bytefn(dav2d_deblock_slice_cols)(f, p, mask, by64,
+                                     start_of_tile_row & 1 && !(by64 & (sb64sz - 1)) ?
+                                     start_of_tile_row >> 1 : 0);
 }
 
-void bytefn(dav2d_filter_sbrow_deblock_rows)(Dav2dFrameContext *const f, const int sby) {
-    const int y = sby * f->sb_step * 4;
+void bytefn(dav2d_filter_slice_deblock_rows)(Dav2dFrameContext *const f, const int by64) {
+    const int y = by64 * 64;
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     pixel *const p[3] = {
         f->lf.p[0] + y * PXSTRIDE(f->cur.p.stride[0]),
         f->lf.p[1] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
     };
-    Av2Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
+    Av2Filter *mask = f->lf.mask + (by64 >> 2) * f->sb256w;
     if (f->c->inloop_filters & DAV2D_INLOOPFILTER_DEBLOCK &&
         (f->frame_hdr->deblock.level_y[0] || f->frame_hdr->deblock.level_y[1]))
     {
-        bytefn(dav2d_deblock_sbrow_rows)(f, p, mask, sby);
+        bytefn(dav2d_deblock_slice_rows)(f, p, mask, by64);
     }
     if ((f->seq_hdr->cdef &&
          f->c->inloop_filters & DAV2D_INLOOPFILTER_CDEF) ||
@@ -3952,58 +3954,74 @@ void bytefn(dav2d_filter_sbrow_deblock_rows)(Dav2dFrameContext *const f, const i
          f->c->inloop_filters & (DAV2D_INLOOPFILTER_WIENER | DAV2D_INLOOPFILTER_GDF)))
     {
         // Store deblocked pixels required by CDEF / LR
-        bytefn(dav2d_copy_db)(f, p, sby);
+        bytefn(dav2d_copy_db_slice)(f, p, by64);
     }
 }
 
-void bytefn(dav2d_filter_sbrow_cdef)(Dav2dTaskContext *const tc, const int sby) {
+void bytefn(dav2d_filter_slice_cdef)(Dav2dTaskContext *const tc, const int by64) {
     const Dav2dFrameContext *const f = tc->f;
     if (!(f->c->inloop_filters & (DAV2D_INLOOPFILTER_CDEF | DAV2D_INLOOPFILTER_CCSO))) return;
-    const int sbsz = f->sb_step;
-    const int y = sby * sbsz * 4;
-    const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-    pixel *const p[3] = {
-        f->lf.p[0] + y * PXSTRIDE(f->cur.p.stride[0]),
-        f->lf.p[1] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver),
-        f->lf.p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
-    };
-    Av2Filter *prev_mask = f->lf.mask + ((sby - 1) >> (2 - f->frame_hdr->sb128)) * f->sb256w;
-    Av2Filter *mask = f->lf.mask + (sby >> (2 - f->frame_hdr->sb128)) * f->sb256w;
-    const int start = sby * sbsz;
-    if (sby) {
-        const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-        pixel *p_up[3] = {
-            p[0] - 8 * PXSTRIDE(f->cur.p.stride[0]),
-            p[1] - (8 * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver),
-            p[2] - (8 * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver),
-        };
-        bytefn(dav2d_cdef_brow)(tc, p_up, prev_mask, start - 2, start, 1, sby);
+
+    const size_t cdef_bak_sz = f->cur.p.stride[0] * 4 + f->cur.p.stride[1] * 8;
+    if (cdef_bak_sz > tc->lf.cdef_line_sz) {
+        dav2d_free_aligned(tc->lf.cdef_line_buf);
+        tc->lf.cdef_line_buf = dav2d_alloc_aligned(ALLOC_CDEF, cdef_bak_sz, 32);
+        tc->lf.cdef_line[0][0] = tc->lf.cdef_line_buf;
+        tc->lf.cdef_line[1][0] = tc->lf.cdef_line_buf + PXSTRIDE(f->cur.p.stride[0]) * 2;
+        pixel *ptr = tc->lf.cdef_line_buf + PXSTRIDE(f->cur.p.stride[0]) * 4;
+        tc->lf.cdef_line[0][1] = ptr;
+        tc->lf.cdef_line[1][1] = ptr + PXSTRIDE(f->cur.p.stride[1]) * 2;
+        tc->lf.cdef_line[0][2] = ptr + PXSTRIDE(f->cur.p.stride[1]) * 4;
+        tc->lf.cdef_line[1][2] = ptr + PXSTRIDE(f->cur.p.stride[1]) * 6;
+        tc->lf.cdef_line_sz = cdef_bak_sz;
     }
-    const int n_blks = sbsz - 2 * (sby + 1 < f->sbh);
+
+    const int y = by64 * 64 - 8 * !!by64;
+    const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+    pixel *p[3] = {
+        f->lf.p[0] + y * PXSTRIDE(f->cur.p.stride[0]),
+        f->lf.p[1] + (y >> ss_ver) * PXSTRIDE(f->cur.p.stride[1]),
+        f->lf.p[2] + (y >> ss_ver) * PXSTRIDE(f->cur.p.stride[1])
+    };
+    Av2Filter *mask = f->lf.mask + (by64 >> 2) * f->sb256w;
+    int start = by64 * 16, n_blks = 16 - 2 * (by64 + 1 < f->sb64h);
+    if (by64) {
+        if (!(start & (f->sb_step - 1))) {
+            Av2Filter *prev_mask = f->lf.mask + ((by64 - 1) >> 2) * f->sb256w;
+            const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+            bytefn(dav2d_cdef_slice)(tc, p, prev_mask, start - 2, start, by64);
+            p[0] += 8 * PXSTRIDE(f->cur.p.stride[0]);
+            p[1] += (8 >> ss_ver) * PXSTRIDE(f->cur.p.stride[1]);
+            p[2] += (8 >> ss_ver) * PXSTRIDE(f->cur.p.stride[1]);
+        } else {
+            start -= 2;
+            n_blks += 2;
+        }
+    }
     const int end = imin(start + n_blks, f->bh);
-    bytefn(dav2d_cdef_brow)(tc, p, mask, start, end, 0, sby);
+    bytefn(dav2d_cdef_slice)(tc, p, mask, start, end, by64);
 }
 
-void bytefn(dav2d_filter_sbrow_lr)(Dav2dFrameContext *const f, const int sby) {
+void bytefn(dav2d_filter_slice_lr)(Dav2dFrameContext *const f, const int by64) {
     if (!(f->c->inloop_filters & (DAV2D_INLOOPFILTER_WIENER | DAV2D_INLOOPFILTER_GDF)))
         return;
-    const int y = sby * f->sb_step * 4;
+    const int y = by64 * 64;
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     pixel *const p[3] = {
         f->lf.p[0] + y * PXSTRIDE(f->cur.p.stride[0]),
         f->lf.p[1] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver),
         f->lf.p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
     };
-    bytefn(dav2d_lr_sbrow)(f, p, sby);
+    bytefn(dav2d_lr_slice)(f, p, by64);
 }
 
-void bytefn(dav2d_filter_sbrow)(Dav2dFrameContext *const f, const int sby) {
-    bytefn(dav2d_filter_sbrow_deblock_cols)(f, sby);
-    bytefn(dav2d_filter_sbrow_deblock_rows)(f, sby);
+void bytefn(dav2d_filter_slice)(Dav2dFrameContext *const f, const int by64) {
+    bytefn(dav2d_filter_slice_deblock_cols)(f, by64);
+    bytefn(dav2d_filter_slice_deblock_rows)(f, by64);
     if (f->seq_hdr->cdef)
-        bytefn(dav2d_filter_sbrow_cdef)(f->c->tc, sby);
+        bytefn(dav2d_filter_slice_cdef)(f->c->tc, by64);
     if (f->lf.restore_planes)
-        bytefn(dav2d_filter_sbrow_lr)(f, sby);
+        bytefn(dav2d_filter_slice_lr)(f, by64);
 }
 
 void bytefn(dav2d_backup_prefilter_data)(Dav2dTaskContext *const t) {

@@ -52,10 +52,14 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     const int ss_ver = chroma & (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420);
     const int ss_hor = chroma & (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444);
     const ptrdiff_t stride = f->cur.p.stride[chroma];
-    const int sby = (y + (y ? 8 << ss_ver : 0)) >> (6 - ss_ver + f->frame_hdr->sb128);
+    const int by64 = (y + (y ? 8 << ss_ver : 0)) >> (6 - ss_ver);
     const int have_tt = f->c->n_tc > 1;
-    const pixel *lpf = f->lf.lr_db_line[plane] +
-        have_tt * (sby * (4 << f->frame_hdr->sb128) - 4) * PXSTRIDE(stride) + x;
+    const pixel *lpf = &f->lf.lr_db_line[plane][(have_tt ? by64 * 4 - 4 :
+                                                 f->lf.top_lr_db_toggle * 4) *
+                                                PXSTRIDE(stride) + x];
+    const pixel *lpfb = have_tt ? lpf + 6 * PXSTRIDE(stride) :
+        &f->lf.lr_db_line[plane][(!f->lf.top_lr_db_toggle * 4 + 2) *
+                                 PXSTRIDE(stride) + x];
     const pixel *top =
         ((edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ==
                   (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED)) ?
@@ -118,8 +122,12 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         }
     }
     const ptrdiff_t lstride = f->cur.p.stride[0];
-    const pixel *llpf = f->lf.lr_db_line[0] +
-        have_tt * (sby * (4 << f->frame_hdr->sb128) - 4) * PXSTRIDE(lstride) + x * 2;
+    const pixel *llpf = &f->lf.lr_db_line[0][(have_tt ? by64 * 4 - 4 :
+                                              f->lf.top_lr_db_toggle * 4) *
+                                             PXSTRIDE(lstride) + (x << ss_hor)];
+    const pixel *llpfb = have_tt ? llpf + 6 * PXSTRIDE(lstride) :
+        &f->lf.lr_db_line[0][(!f->lf.top_lr_db_toggle * 4 + 2) *
+                             PXSTRIDE(lstride) + (x << ss_hor)];
     if (chroma) {
         wiener_params.single.ss_ver = ss_ver;
         wiener_params.single.ss_hor = ss_hor;
@@ -133,10 +141,10 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
             wiener_params.single.luma =
                 &((pixel *) f->lf.p[0])[(x << ss_hor) + (y << ss_ver) * PXSTRIDE(lstride)];
             wiener_params.single.luma_top = llpf;
-            wiener_params.single.luma_bottom = llpf + 6 * PXSTRIDE(lstride);
+            wiener_params.single.luma_bottom = llpfb;
         }
-        // Change the HAVE_BOTTOM bit in edges to (sby + 1 != f->sbh || y + stripe_h != row_h)
-        edges ^= (-(sby + 1 != f->sbh || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
+        // Change the HAVE_BOTTOM bit in edges to (by64 + 1 != f->sb64h || y + stripe_h != row_h)
+        edges ^= (-(by64 + 1 != f->sb64h || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
         const int inc =
             (edges & (LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED |
                       LR_HAVE_BOTTOM_INTEGRATED)) == LR_HAVE_TOP &&
@@ -146,8 +154,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                   f->lf.mask[sb256_idx].gdf[(((y + inc) >> 4) & 12) + sb64x_idx];
 
         if (gdf) {
-            dsp->lr.gdf_prep(gdf_err, 64, p, stride, left, top ? top : lpf,
-                             lpf + 6 * PXSTRIDE(stride),
+            dsp->lr.gdf_prep(gdf_err, 64, p, stride, left, top ? top : lpf, lpfb,
                              w, stripe_h, ref_dst_idx, qp_idx, edges HIGHBD_CALL_SUFFIX);
         }
         const int y4 = ((y << ss_ver) & 255) >> 2;
@@ -169,7 +176,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         }
         if (wiener_fn) {
             wiener_fn(p, stride, left, top ? top + (2 * !chroma) * PXSTRIDE(stride) : lpf,
-                      lpf + 6 * PXSTRIDE(stride), w, stripe_h, &wiener_params,
+                      lpfb, w, stripe_h, &wiener_params,
                       edges, ll_mask HIGHBD_CALL_SUFFIX);
             if (multi_wiener)
                 wiener_params.multi.noskip_mask += stripe_h >> 2;
@@ -178,6 +185,9 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
             dsp->lr.gdf_add(p, stride, gdf_err, 64, w, stripe_h, gdf_scale,
                             ll_mask HIGHBD_CALL_SUFFIX);
         }
+        // this loop runs twice at the bottom of a frame, if e.g. the sequence
+        // height is 128px, the first slice is 56px, followed by a 72px slice
+        // which is iterated twice in this loop - one 64px and one 8px
         edges &= ~(LR_HAVE_BOTTOM_INTEGRATED | LR_HAVE_TOP_INTEGRATED);
         left += stripe_h;
         y += stripe_h;
@@ -185,8 +195,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         edges |= LR_HAVE_TOP;
         stripe_h = imin(64 >> ss_ver, row_h - y);
         if (stripe_h == 0) break;
-        lpf += 4 * PXSTRIDE(stride);
-        llpf += 4 * PXSTRIDE(lstride);
+        lpf = &lpfb[-2 * PXSTRIDE(stride)];
+        llpf = &llpfb[-2 * PXSTRIDE(lstride)];
         top = NULL;
     }
 }
@@ -274,27 +284,28 @@ static inline void copyNlines(pixel *dst, const pixel *src, const ptrdiff_t stri
     memcpy(dst, src, stride * n);
 }
 
-void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
-                            const int sby)
+void bytefn(dav2d_lr_slice)(Dav2dFrameContext *const f, pixel *const dst[3],
+                            const int by64)
 {
     // TODO: strips starting at each tile row need to be shorted, not just the first row.
     const ptrdiff_t *const dst_stride = f->cur.p.stride;
     const int restore_planes = f->lf.restore_planes;
-    const int not_last = sby + 1 < f->sbh;
-    int first_sby_in_tile_row = f->lf.start_of_tile_row[sby];
+    const int not_last = by64 + 1 < f->sb64h;
+    const int sb128 = f->frame_hdr->sb128, sb64sz = 1 << sb128;
+    int first_sby_in_tile_row = f->lf.start_of_tile_row[by64 >> sb128];
     const int tile_row = first_sby_in_tile_row >> 1;
-    first_sby_in_tile_row &= 1;
+    first_sby_in_tile_row &= !(by64 & (sb64sz - 1));
 
     if (restore_planes & (LR_RESTORE_U | LR_RESTORE_V)) {
         const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
         const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
         const int h = f->bh * 4 >> ss_ver;
         const int w = f->bw * 4 >> ss_hor;
-        const int next_row_y = (sby + 1) << ((6 - ss_ver) + f->frame_hdr->sb128);
+        const int next_row_y = (by64 + 1) << (6 - ss_ver);
         const int row_h = imin(next_row_y - (8 >> ss_ver) * not_last, h);
-        int offset_uv = 8 * !!sby >> ss_ver;
-        int y_stripe = (sby << ((6 - ss_ver) + f->frame_hdr->sb128)) - offset_uv;
-        if (sby && first_sby_in_tile_row) {
+        int offset_uv = 8 * !!by64 >> ss_ver;
+        int y_stripe = (by64 << (6 - ss_ver)) - offset_uv;
+        if (by64 && first_sby_in_tile_row) {
             if (restore_planes & LR_RESTORE_U) {
                 copyNlines(&f->lf.lr_cdef_line[1][2 * PXSTRIDE(dst_stride[1]) *
                                                   (tile_row - 1)],
@@ -328,11 +339,11 @@ void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
     if (restore_planes & LR_RESTORE_Y) {
         const int h = f->bh * 4;
         const int w = f->bw * 4;
-        const int next_row_y = (sby + 1) << (6 + f->frame_hdr->sb128);
+        const int next_row_y = (by64 + 1) << 6;
         int row_h = imin(next_row_y - 8 * not_last, h);
-        int offset_y = 8 * !!sby;
-        int y_stripe = (sby << (6 + f->frame_hdr->sb128)) - offset_y;
-        if (sby && first_sby_in_tile_row) {
+        int offset_y = 8 * !!by64;
+        int y_stripe = (by64 << 6) - offset_y;
+        if (by64 && first_sby_in_tile_row) {
             copyNlines(&f->lf.lr_cdef_line[0][6 * PXSTRIDE(dst_stride[0]) * (tile_row - 1)],
                        dst[0] - 6 * PXSTRIDE(dst_stride[0]), dst_stride[0], 6);
             lr_sbrow(f, dst[0] - offset_y * PXSTRIDE(dst_stride[0]), y_stripe, w,

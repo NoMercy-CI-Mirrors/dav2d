@@ -41,7 +41,7 @@ enum LrRestorePlanes {
     LR_RESTORE_V = 1 << 2,
 };
 
-void bytefn(dav2d_lr_sbrow)(Dav2dFrameContext *const f, pixel *const dst[3],
-                            int sby);
+void bytefn(dav2d_lr_slice)(Dav2dFrameContext *const f, pixel *const dst[3],
+                            int by64);
 
 #endif /* DAV2D_SRC_LR_APPLY_H */

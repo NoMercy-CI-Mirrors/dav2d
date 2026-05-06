@@ -230,7 +230,7 @@ struct Dav2dContext {
 struct Dav2dTask {
     unsigned frame_idx;         // frame thread id
     enum TaskType type;         // task work
-    int sby;                    // sbrow
+    int by64;                   // sby can be derived using by64 >> sb128
 
     // task dependencies
     int recon_progress, deblock_progress;
@@ -285,11 +285,11 @@ struct Dav2dFrameContext {
     const Dav2dDSPContext *dsp;
     struct {
         recon_b_fn recon_b;
-        filter_sbrow_fn filter_sbrow;
-        filter_sbrow_fn filter_sbrow_deblock_cols;
-        filter_sbrow_fn filter_sbrow_deblock_rows;
-        void (*filter_sbrow_cdef)(Dav2dTaskContext *tc, int sby);
-        filter_sbrow_fn filter_sbrow_lr;
+        filter_slice_fn filter_slice;
+        filter_slice_fn filter_slice_deblock_cols;
+        filter_slice_fn filter_slice_deblock_rows;
+        void (*filter_slice_cdef)(Dav2dTaskContext *tc, int sby);
+        filter_slice_fn filter_slice_lr;
         backup_prefilter_data_fn backup_prefilter_data;
         read_coef_blocks_fn read_coef_blocks;
         copy_pal_block_fn copy_pal_block_y;
@@ -300,7 +300,7 @@ struct Dav2dFrameContext {
     pixel *prefilter_data[3];
     int prefilter_data_full_frame;
     ptrdiff_t b4_stride;
-    int bw, bh, sb256w, sb256h, sbh, sb_shift, sb_step;
+    int bw, bh, sb256w, sb256h, sbh, sb64h, sb_shift, sb_step;
     int ss_ver, ss_hor;
     uint32_t dq[DAV2D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
     const uint8_t *qm[N_RECT_TX_SIZES][3 /* plane */];
@@ -341,8 +341,6 @@ struct Dav2dFrameContext {
         uint8_t *segmap_uv;
         int mask_sz /* w*h */, lr_mask_sz, uv_segmap_sz;
         ptrdiff_t uv_segmap_stride;
-        int cdef_buf_plane_sz[2]; /* stride*sbh*4 */
-        int cdef_buf_sbh;
         /* 0-1: (stride*sbh*4) << sb128 if n_tc > 1, else stride*4;
          * 2-3: stride*(n_tile_rows-1)*4 if n_tc==1, double that otherwise */
         int lr_buf_plane_sz[4];
@@ -353,9 +351,9 @@ struct Dav2dFrameContext {
         const uint8_t *pc_subclass_lut;
         const int16_t (*pc_filters)[13];
         uint8_t *tx_db_right_edge[2];
-        uint8_t *cdef_line_buf, *lr_line_buf;
-        pixel *cdef_line[2 /* pre, post */][3 /* plane */];
+        uint8_t *lr_line_buf;
         pixel *lr_db_line[3 /* plane */];
+        int top_lr_db_toggle;
         pixel *lr_cdef_line[3 /* plane */];
 
         // in-loop filter per-frame state keeping
@@ -513,7 +511,12 @@ struct Dav2dTaskContext {
         union mv rmv[16 * 16 /* y * 16 + x */][2 /* refined, tmv */][2 /* ref */];
     };
     Av2Filter *lf_mask;
-    int top_pre_cdef_toggle;
+    struct {
+        pixel *cdef_line[2][3];
+        pixel *cdef_line_buf;
+        size_t cdef_line_sz;
+        int top_pre_cdef_toggle;
+    } lf;
     uint8_t u_has_cf;
 
     struct {
