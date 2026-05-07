@@ -31,6 +31,7 @@
 decl_blend_fn(BF(dav2d_blend, rvv));
 
 decl_blend_fn(BF(dav2d_blend_vl256, rvv));
+decl_blend_fn(BF(dav2d_blend_vl512, rvv));
 
 decl_avg_fn(BF(dav2d_avg, rvv));
 decl_w_avg_fn(BF(dav2d_w_avg, rvv));
@@ -44,13 +45,17 @@ static ALWAYS_INLINE void mc_dsp_init_riscv(Dav2dMCDSPContext *const c) {
 
   if (!(flags & DAV2D_RISCV_CPU_FLAG_V)) return;
 
+#if BITDEPTH == 8
   c->blend = BF(dav2d_blend, rvv);
 
   if (dav2d_get_vlen() >= 256) {
     c->blend = BF(dav2d_blend_vl256, rvv);
   }
 
-#if BITDEPTH == 8
+  if (dav2d_get_vlen() >= 512) {
+    c->blend = BF(dav2d_blend_vl512, rvv);
+  }
+
   c->avg     = BF(dav2d_avg, rvv);
   c->w_avg   = BF(dav2d_w_avg, rvv);
   c->mask    = BF(dav2d_mask, rvv);

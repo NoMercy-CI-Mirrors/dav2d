@@ -1134,6 +1134,8 @@ static unsigned sad8x8_c(const pixel *p0, const ptrdiff_t p0_stride,
 #include "src/arm/mc.h"
 #elif ARCH_X86
 #include "src/x86/mc.h"
+#elif ARCH_RISCV
+#include "src/riscv/mc.h"
 #endif
 #endif
 
@@ -1172,6 +1174,8 @@ COLD void bitfn(dav2d_mc_dsp_init)(Dav2dMCDSPContext *const c) {
     mc_dsp_init_arm(c);
 #elif ARCH_X86
     mc_dsp_init_x86(c);
+#elif ARCH_RISCV
+    mc_dsp_init_riscv(c);
 #endif
 #endif
 }

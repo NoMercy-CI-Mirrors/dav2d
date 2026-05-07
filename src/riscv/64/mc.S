@@ -27,20 +27,30 @@
 
 #include "src/riscv/asm.S"
 
+function blend_vl512_8bpc_rvv, export=1, ext=zbb
+  srai t0, a3, 3
+  ctz t0, t0
+  addi t0, t0, 0xc5
+  li t1, 64
+  j L(blend_epilog)
+endfunc
+
 function blend_vl256_8bpc_rvv, export=1, ext=zbb
   ctz t0, a3
   addi t0, t0, 0xc3
+  li t1, 64
   j L(blend_epilog)
 endfunc
 
 function blend_8bpc_rvv, export=1, ext="v,zbb"
+  li t1, 64
   ctz t0, a3
   addi t0, t0, 0xc4
+  beq t1, a3, 2f
 L(blend_epilog):
   csrw vxrm, zero
   andi t0, t0, 0xc7
   vsetvl zero, a3, t0
-  li t1, 64
 1:
   addi a4, a4, -2
   vle8.v v4, (a2)
@@ -55,18 +65,40 @@ L(blend_epilog):
   add t0, a0, a1
   vle8.v v2, (t0)
   vwmulu.vv v16, v4, v8
-  vwmulu.vv v20, v6, v10
+  vwmulu.vv v24, v6, v10
   vrsub.vx v8, v8, t1
   vrsub.vx v10, v10, t1
   vwmaccu.vv v16, v0, v8
-  vwmaccu.vv v20, v2, v10
+  vwmaccu.vv v24, v2, v10
   vnclipu.wi v0, v16, 6
-  vnclipu.wi v2, v20, 6
+  vnclipu.wi v2, v24, 6
   vse8.v v0, (a0)
   vse8.v v2, (t0)
   add a0, t0, a1
   bnez a4, 1b
   ret
+
+ 2:
+
+  csrw vxrm, zero
+  andi t0, t0, 0xc7
+  vsetvl zero, a3, t0
+
+  addi a4, a4, -1
+  vle8.v v4, (a2)
+  add a2, a2, a3
+  vle8.v v8, (a5)
+  add a5, a5, a3
+  vle8.v v0, (a0)
+  vwmulu.vv v16, v4, v8
+  vrsub.vx v8, v8, t1
+  vwmaccu.vv v16, v0, v8
+  vnclipu.wi v0, v16, 6
+  vse8.v v0, (a0)
+  add a0, a0, a1
+  bnez a4, 2b
+  ret
+
 endfunc
 
 .macro avg va, vb, vm
@@ -95,9 +127,11 @@ function \type\()_8bpc_rvv, export=1, ext="v,zba,zbb"
 .ifc \type, mask
     li a7, 64
 .endif
-    li t0, 4
+    xori t0, a4, 4
+    andi t1, a0, 3
+    or t0, t0, t1
     csrw vxrm, zero
-    beq t0, a4, 4f
+    beqz t0, 4f //Go to aligned 4x* function
     csrr t0, vlenb
     ctz t1, a4
     ctz t0, t0
@@ -224,7 +258,7 @@ function warp_8x8_8bpc_rvv, export=1, ext="v"
     sub a2, a2, t0
     addi a2, a2, -3
 
-    li t0, 64
+    li t0, 64*3
     addi a3, a3, -8
     li t1, 15
     la t2, dav2d_mc_warp_filter
@@ -331,7 +365,7 @@ function warp_8x8t_8bpc_rvv, export=1, ext="v,zba"
     sub a2, a2, t0
     addi a2, a2, -3
 
-    li t0, 64
+    li t0, 64*3
     addi a3, a3, -8
     li t1, 15
     la t2, dav2d_mc_warp_filter
