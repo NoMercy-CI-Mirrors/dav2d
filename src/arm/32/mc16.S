@@ -695,9 +695,9 @@ L(blend_tbl):
         vadd.i16        q0,  q0,  q8
         vadd.i16        q1,  q1,  q9
         vadd.i16        q2,  q2,  q10
-        vst1.16         {q0, q1}, [r0]!
+        vst1.16         {q0, q1}, [r0, :128]!
         vadd.i16        q3,  q3,  q11
-        vst1.16         {q2, q3}, [r0]!
+        vst1.16         {q2, q3}, [r0, :128]!
         bgt             64b
         subs            r4,  r4,  #1
         add             r0,  r0,  r1
@@ -774,14 +774,14 @@ L(put_tbl):
         sub             r3,  r3,  #96
 64:
         vld1.16         {q8,  q9},  [r2]!
-        vst1.16         {q8,  q9},  [r0]!
+        vst1.16         {q8,  q9},  [r0, :128]!
         vld1.16         {q10, q11}, [r2]!
-        vst1.16         {q10, q11}, [r0]!
+        vst1.16         {q10, q11}, [r0, :128]!
         vld1.16         {q12, q13}, [r2]!
-        vst1.16         {q12, q13}, [r0]!
+        vst1.16         {q12, q13}, [r0, :128]!
         vld1.16         {q14, q15}, [r2], r3
         subs            r5,  r5,  #1
-        vst1.16         {q14, q15}, [r0], r1
+        vst1.16         {q14, q15}, [r0, :128], r1
         bgt             64b
         pop             {r4-r11,pc}
 endfunc

@@ -589,7 +589,7 @@ L(blend_tbl):
         vrshrn.i16      d26, q15, #6
         vrshrn.i16      d27, q14, #6
         vld1.u8         {q0,  q1},  [r12]
-        vst1.u8         {q12, q13}, [r0], r1
+        vst1.u8         {q12, q13}, [r0, :128], r1
         vsub.i8         q11, q10, q2
         vmull.u8        q15, d16, d4
         vmlal.u8        q15, d0,  d22
@@ -604,7 +604,7 @@ L(blend_tbl):
         vmlal.u8        q14, d3,  d23
         vrshrn.i16      d26, q15, #6
         vrshrn.i16      d27, q14, #6
-        vst1.u8         {q12, q13}, [r12], r1
+        vst1.u8         {q12, q13}, [r12, :128], r1
         bgt             64b
         pop             {r4-r5,pc}
 endfunc
@@ -676,10 +676,10 @@ L(put_tbl):
         sub             r3,  r3,  #32
 64:
         vld1.8          {q0,  q1},  [r2]!
-        vst1.8          {q0,  q1},  [r0]!
+        vst1.8          {q0,  q1},  [r0, :128]!
         vld1.8          {q2,  q3},  [r2], r3
         subs            r5,  r5,  #1
-        vst1.8          {q2,  q3},  [r0], r1
+        vst1.8          {q2,  q3},  [r0, :128], r1
         bgt             64b
         pop             {r4-r11,pc}
 endfunc
