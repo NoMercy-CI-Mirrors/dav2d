@@ -4555,29 +4555,29 @@ ALIGN function_align
     pshufb              xm9, xm5, xm11
     vinserti128          m8, m10, xm8, 1
     vinserti128          m9, m10, xm9, 1
-    paddw                m0, m8
-    paddw                m4, m8
-    paddw                m1, m9
-    paddw                m5, m9
+    paddsw               m0, m8
+    paddsw               m4, m8
+    paddsw               m1, m9
+    paddsw               m5, m9
     jmp .write_32x2
 .write_32x2_vdpcm2:
-    paddw                m0, m1
-    paddw                m4, m5
-    paddw                m1, m0, m2
-    paddw                m5, m4, m3
+    paddsw               m0, m1
+    paddsw               m4, m5
+    paddsw               m1, m0, m2
+    paddsw               m5, m4, m3
 .write_32x2:
     movu                 m9, [dstq+dsq*0]
     punpcklbw            m8, m9, m10
     punpckhbw            m9, m10
-    paddw                m8, m0
-    paddw                m9, m4
+    paddsw               m8, m0
+    paddsw               m9, m4
     packuswb             m8, m9
     movu                 m9, [dstq+dsq*1]
     movu       [dstq+dsq*0], m8
     punpcklbw            m8, m9, m10
     punpckhbw            m9, m10
-    paddw                m8, m1
-    paddw                m9, m5
+    paddsw               m8, m1
+    paddsw               m9, m5
     packuswb             m8, m9
     movu       [dstq+dsq*1], m8
     lea                dstq, [dstq+dsq*2]
