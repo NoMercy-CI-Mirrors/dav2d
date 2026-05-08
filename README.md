@@ -124,16 +124,16 @@ The result can be found in `build/doc/html/`. An online version built from maste
 
 # Support
 
-This project is partially funded by the *Alliance for Open Media*/**AOM** and is supported by TwoOrioles and VideoLabs.
+This project is partially funded by members of the *Alliance for Open Media*/**AOM** - Google, Meta and Netflix, and is supported by Arm, TwoOrioles and VideoLabs.
 
-These companies can provide support and integration help, should you need it.
+Some of these companies may provide support and integration help, should you need it.
 
 
 # FAQ
 
 ## Is dav2d a recursive acronym?
 
-- Yes, but it is less funny than dav1d :(
+- Yes, but it is less funny than dav1d :(, except in French ("deux-vid")
 
 ## Can I help?
 
