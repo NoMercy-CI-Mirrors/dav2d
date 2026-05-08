@@ -82,7 +82,6 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t morph_pred[3][2], 4);
     ALIGN(uint16_t txsz_lossless[4][2][2], 4);
     ALIGN(uint16_t tx_split[2][2][9][2], 4);
-    ALIGN(uint16_t tx_part_2d[2][2][14][7+1], 16);
     ALIGN(uint16_t tx_part_1d[2][2][2][2], 4);
     ALIGN(uint16_t txtp_lossless[2], 4);
     ALIGN(uint16_t txtp_long32_dct[2][2], 4);
@@ -185,6 +184,10 @@ typedef struct CdfCoefContext {
     ALIGN(uint16_t base_uv_tok_lf[12][6+2], 16);
 } CdfCoefContext;
 
+typedef struct CdfTxPart2dContext {
+    ALIGN(uint16_t tx_part_2d[2][2][14][7+1], 16);
+} CdfTxPart2dContext;
+
 typedef struct CdfMvContext {
     ALIGN(uint16_t shell_lower[7][8], 16);
     ALIGN(uint16_t shell_upper[7][8], 16);
@@ -200,6 +203,7 @@ typedef struct CdfMvContext {
 typedef struct CdfContext {
     CdfCoefContext coef;
     CdfModeContext m;
+    CdfTxPart2dContext tx2d;
     CdfMvContext mv, dmv;
 } CdfContext;
 
@@ -207,7 +211,9 @@ typedef struct CdfThreadContext {
     Dav2dRef *ref; ///< allocation origin
     union {
         CdfContext *cdf; // if ref != NULL
-        unsigned qcat; // if ref == NULL, from static CDF tables
+        struct {
+            unsigned qcat, rtxp; // if ref == NULL, from static CDF tables
+        };
     } data;
     atomic_uint *progress;
 } CdfThreadContext;
@@ -218,7 +224,8 @@ void dav2d_cdf_shift_accumulate(CdfContext *dst, const CdfContext *src,
                                 int n_tiles_log2);
 void dav2d_cdf_pri_sec_average(CdfContext *dst, const CdfThreadContext *src1,
                                const CdfThreadContext *src2);
-void dav2d_cdf_thread_init_static(CdfThreadContext *cdf, unsigned qidx);
+void dav2d_cdf_thread_init_static(CdfThreadContext *cdf, unsigned qidx,
+                                  const unsigned reduced_tx_part_set);
 int dav2d_cdf_thread_alloc(Dav2dContext *c, CdfThreadContext *cdf,
                            const int have_frame_mt);
 void dav2d_cdf_thread_copy(CdfContext *dst, const CdfThreadContext *src);

@@ -1453,10 +1453,10 @@ static void read_tx_part(Dav2dTaskContext *const t,
                     const int ctx = size_to_tx_type_group_vh_lookup[bs];
                     b->tx_part = 1 +
                         dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                            ts->cdf.m.tx_part_2d[b->fsc][inter][ctx], 6);
+                            ts->cdf.tx2d.tx_part_2d[b->fsc][inter][ctx], 6);
                 } else if (imax(bw4, bh4) >= 4) {
                     const int ctx = bw4 >= 4;
-                    const int tx_part_4way =
+                    const int tx_part_4way = f->seq_hdr->reduced_tx_part_set ? 0 :
                         dav2d_msac_decode_bool_adapt(&ts->msac,
                             ts->cdf.m.tx_part_1d[b->fsc][inter][ctx]);
                     b->tx_part = TX_PARTITION_H + ctx + tx_part_4way * 2;
@@ -5439,7 +5439,8 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     // setup entropy
     const int p_ref_idx = f->frame_hdr->primary_ref_frame;
     if (p_ref_idx == DAV2D_PRIMARY_REF_NONE) {
-        dav2d_cdf_thread_init_static(&f->in_cdf, f->frame_hdr->quant.yac);
+        dav2d_cdf_thread_init_static(&f->in_cdf, f->frame_hdr->quant.yac,
+                                     f->seq_hdr->reduced_tx_part_set);
         f->use_pri_sec_cdf = 0;
     } else {
         const int s_ref_idx = f->frame_hdr->secondary_ref_frame;
