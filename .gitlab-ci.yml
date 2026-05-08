@@ -71,7 +71,7 @@ style-check:
                   exit 1;
               fi;
           done
-        - rg '[\u061c\u2000-\u200f\u2028-\u202f\u205f-\u206f]' ./ && echo "Invisible Unicode characters" && exit 1
+        - rg '[\u00a0\u061c\u2000-\u200f\u2028-\u202f\u205f-\u206f]' ./ && echo "Invisible Unicode characters" && exit 1
 
 build-debian:
     extends: .debian-amd64-cmake-common
