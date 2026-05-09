@@ -47,6 +47,29 @@
 #include "src/thread_task.h"
 #include "src/warpmv.h"
 
+static int read_extension_bits(GetBits *const gb, ptrdiff_t *extension_bits) {
+    // extension is all following bits except trailing one & any following zeroes
+    const uint8_t *ptr = &gb->ptr_end[-1], *cur = &gb->ptr[-(1 + (gb->bits_left >> 3))];
+    while (ptr >= cur && !*ptr) ptr--;
+    if (ptr < cur) goto error;
+    int n = 8, m = 0x80, byte = *ptr;
+    for (; n >= 0; n++, m >>= 1) {
+        if (byte & m) break;
+    }
+    assert(n >= 0);
+    *extension_bits = (&ptr[1] - gb->ptr) * 8 + gb->bits_left - n;
+
+    // set up bitreader to skip all extension bits, but not the trailing one
+    // and any following zeroes
+    gb->ptr = &ptr[1];
+    gb->state = (uint64_t) byte << (64 - n);
+    gb->bits_left = n;
+
+    return 0;
+error:
+    return DAV2D_ERR(EINVAL);
+}
+
 static int check_trailing_bits(GetBits *const gb,
                                const int strict_std_compliance)
 {
@@ -669,28 +692,9 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     if (!gb->error && !strict_std_compliance && !DEBUG_SEQ_HDR) return 0;
 
     const int has_extension = dav2d_get_bit(gb);
-#if DEBUG_SEQ_HDR
     ptrdiff_t extension_bits = 0;
-#endif
-    if (has_extension) {
-        // extension is all following bits except trailing one & any following zeroes
-        const uint8_t *ptr = &gb->ptr_end[-1], *cur = &gb->ptr[-(1 + (gb->bits_left >> 3))];
-        while (ptr >= cur && !*ptr) ptr--;
-        if (ptr < cur) goto error;
-        int n = 8, m = 0x80, byte = *ptr;
-        for (; n >= 0; n++, m >>= 1) {
-            if (byte & m) break;
-        }
-        assert(n >= 0);
-#if DEBUG_SEQ_HDR
-        extension_bits = (&ptr[1] - gb->ptr) * 8 + gb->bits_left - n;
-#endif
-        // set up bitreader to skip all extension bits, but not the trailing one
-        // and any following zeroes
-        gb->ptr = &ptr[1];
-        gb->state = (uint64_t) byte << (64 - n);
-        gb->bits_left = n;
-    }
+    if (has_extension && read_extension_bits(gb, &extension_bits))
+        goto error;
 #if DEBUG_SEQ_HDR
     printf("SEQHDR: post-extension[%d,nbits=%td]: off=%u\n",
            has_extension, extension_bits,
@@ -2140,7 +2144,9 @@ error:
     return -1;
 }
 
-static int parse_ci_hdr(Dav2dContext *const c, GetBits *const gb) {
+static int parse_ci_hdr(Dav2dContext *const c, GetBits *const gb,
+                        const int strict_std_compliance)
+{
 #define DEBUG_CI_HDR 0
 #if DEBUG_CI_HDR
     const uint8_t *const init_ptr = gb->ptr;
@@ -2153,16 +2159,14 @@ static int parse_ci_hdr(Dav2dContext *const c, GetBits *const gb) {
     ci->chroma_sample_position_present = dav2d_get_bit(gb);
     ci->aspect_ratio_info_present = dav2d_get_bit(gb);
     ci->timing_info_present = dav2d_get_bit(gb);
-    ci->extension_present = dav2d_get_bit(gb);
-    dav2d_get_bit(gb); // reserved
+    dav2d_get_bits(gb, 2); // reserved
 
 #if DEBUG_CI_HDR
     printf("CI: post-flags[scan=%d,colordesc=%d,chrsamplepos=%d,"
-           "aspectratio=%d,timinginfo=%d,extension=%d]: off=%td\n",
+           "aspectratio=%d,timinginfo=%d]: off=%td\n",
            ci->scan_type, ci->color_description_present,
            ci->chroma_sample_position_present, ci->aspect_ratio_info_present,
-           ci->timing_info_present, ci->extension_present,
-           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+           ci->timing_info_present, (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
     if (ci->color_description_present) {
@@ -2293,6 +2297,21 @@ static int parse_ci_hdr(Dav2dContext *const c, GetBits *const gb) {
 #endif
     }
 
+    // extension is all bits until the trailing one, so
+    // since we don't care about the contents anyway, we
+    // can skip & ignore it if we don't care about strict
+    // conformance
+    if (!gb->error && !strict_std_compliance && !DEBUG_CI_HDR) return 0;
+
+    ci->extension_present = dav2d_get_bit(gb);
+    ptrdiff_t extension_bits = 0;
+    if (ci->extension_present && read_extension_bits(gb, &extension_bits))
+        goto error;
+#if DEBUG_CI_HDR
+    printf("CI: post-extension[%d,nbits=%td]: off=%td\n",
+           ci->extension_present, extension_bits,
+           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
     return 0;
 
 error:
@@ -2522,7 +2541,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
         if (c->ci_ref) dav2d_ref_dec(&c->ci_ref);
         c->ci_ref = dav2d_ref_create_using_pool(c->ci_pool,
                                                 sizeof(Dav2dContentInterpretation));
-        parse_ci_hdr(c, &gb);
+        parse_ci_hdr(c, &gb, c->strict_std_compliance);
         if (check_trailing_bits(&gb, c->strict_std_compliance) < 0)
             goto error;
         break;
