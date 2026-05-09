@@ -2318,16 +2318,18 @@ static void splat_mv_c(refmvs_block *s_dst, refmvs_block *const s_src,
     do {
         s_src->ox4 = 0;
         for (int x = 0; x < bw4; x += 2, s_src->ox4 += 2) {
-            memcpy(&s_dst[x], s_src, offsetof(refmvs_block, lmv));
-            if (bw4 > 1) {
+            if (bh4 == 1 || x >= bw4 - 3)
+                memcpy(&s_dst[x], s_src, offsetof(refmvs_block, lmv));
+            if (bw4 > 1 && (bh4 == 1 || x + 1 >= bw4 - 3)) {
                 s_src->ox4++;
                 memcpy(&s_dst[x + 1], s_src, offsetof(refmvs_block, lmv));
                 s_src->ox4--;
             }
             if (bh4 > 1) {
                 s_src->oy4++;
-                memcpy(&s_dst[x + 128], s_src, offsetof(refmvs_block, lmv));
-                if (bw4 > 1) {
+                if (bh4 == 2 || x >= bw4 - 3)
+                    memcpy(&s_dst[x + 128], s_src, offsetof(refmvs_block, lmv));
+                if (bw4 > 1 && (bh4 == 2 || x + 1 >= bw4 - 3)) {
                     s_src->ox4++;
                     memcpy(&s_dst[x + 129], s_src, offsetof(refmvs_block, lmv));
                     s_src->ox4--;
@@ -2366,13 +2368,17 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
             if (s_src->mf & 2)
                 s_src->mv[0] = warpmv;
             t_src->mv.mv[0] = t_src->mv.mv[1] = quantize_mv(warpmv);
-            s_dst[x] = *s_src;
+            if (x >= bw4 - 3)
+                s_dst[x] = *s_src;
             s_src->ox4++;
-            s_dst[x + 1] = *s_src;
+            if (x + 1 >= bw4 - 3)
+                s_dst[x + 1] = *s_src;
             s_src->oy4++;
-            s_dst[x + 129] = *s_src;
+            if (bh4 == 2 || x + 1 >= bw4 - 3)
+                s_dst[x + 129] = *s_src;
             s_src->ox4--;
-            s_dst[x + 128] = *s_src;
+            if (bh4 == 2 || x >= bw4 - 3)
+                s_dst[x + 128] = *s_src;
             s_src->oy4--;
             if (t_dst) {
                 t_dst[x >> 1].mv.n = t_src->mv.n;
@@ -2428,13 +2434,17 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 const int d = mask[x >> 1];
                 if (d != 2) t_src->mv.mv[d ^ w_swap].n = INVALID_TRAJ;
             }
-            s_dst[x] = *s_src;
+            if (x >= bw4 - 3)
+                s_dst[x] = *s_src;
             s_src->ox4++;
-            s_dst[x + 1] = *s_src;
+            if (x + 1 >= bw4 - 3)
+                s_dst[x + 1] = *s_src;
             s_src->oy4++;
-            s_dst[x + 129] = *s_src;
+            if (bh4 == 2 || x + 1 >= bw4 - 3)
+                s_dst[x + 129] = *s_src;
             s_src->ox4--;
-            s_dst[x + 128] = *s_src;
+            if (bh4 == 2 || x >= bw4 - 3)
+                s_dst[x + 128] = *s_src;
             s_src->oy4--;
             if (t_dst) {
                 if (t_src->mv.mv[0].n == INVALID_TRAJ) {
@@ -2481,13 +2491,17 @@ static void splat_comp_wedgemv_c(refmvs_block *s_dst, refmvs_block *const s_src,
     do {
         s_src->ox4 = 0;
         for (int x = 0; x < bw4; x += 2, s_src->ox4 += 2) {
-            memcpy(&s_dst[x], s_src, offsetof(refmvs_block, lmv));
+            if (x >= bw4 - 3)
+                memcpy(&s_dst[x], s_src, offsetof(refmvs_block, lmv));
             s_src->ox4++;
-            memcpy(&s_dst[x + 1], s_src, offsetof(refmvs_block, lmv));
+            if (x + 1 >= bw4 - 3)
+                memcpy(&s_dst[x + 1], s_src, offsetof(refmvs_block, lmv));
             s_src->oy4++;
-            memcpy(&s_dst[x + 129], s_src, offsetof(refmvs_block, lmv));
+            if (bh4 == 2 || x + 1 >= bw4 - 3)
+                memcpy(&s_dst[x + 129], s_src, offsetof(refmvs_block, lmv));
             s_src->ox4--;
-            memcpy(&s_dst[x + 128], s_src, offsetof(refmvs_block, lmv));
+            if (bh4 == 2 || x >= bw4 - 3)
+                memcpy(&s_dst[x + 128], s_src, offsetof(refmvs_block, lmv));
             s_src->oy4--;
             const int d = mask[x >> 1];
             if (t_dst) {

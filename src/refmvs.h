@@ -185,6 +185,9 @@ void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
 typedef decl_splat_comp_wedgemv_fn(*splat_comp_wedgemv_fn);
 
 typedef struct Dav2dRefmvsDSPContext {
+    // for each of these functions, t_dst can be NULL to only write the
+    // spatial portions. For s_dst, only the bottom line and right-most 3
+    // columns are written out, since the rest is unused.
     splat_mv_fn splat_mv;
     splat_warpmv_fn splat_warpmv;
     splat_comp_warpmv_fn splat_comp_warpmv;
