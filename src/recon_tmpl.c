@@ -3602,55 +3602,27 @@ chroma: {}
         }
     } else if (cbs != lbs && imin(bw4, bh4) < 16) {
         // sub8x8 coding
-        if (f->c->task_thread.n_passes == 3) {
-            uint16_t mask[16] = { 0 };
-            ptrdiff_t uvoff = uvdstoff;
-            for (int y = 0; y < ch4; y++, uvoff += 4 * PXSTRIDE(stride) >> ss_ver) {
-                for (int x = 0, m = 1; x < cw4; x++, m <<= 1) {
-                    if (mask[y] & m) continue;
-                    // for 3-pass coding, refmvs is active for the mv-resolution
-                    // (2nd) pass and cannot be reused in the reconstruction (3rd)
-                    // pass, so instead we use the block coding array.
-                    // for 2-pass coding, this codepath and the spatial refmvs
-                    // codepath a few lines down should both be valid.
-                    const Av2Block *const b2 =
-                        &f->frame_thread.b[(t->cby + y) * f->b4_stride + t->cbx + x];
-                    const int ref = b2->ref.ref[0];
-                    const union mv mv = b2->mv[0];
-                    const Dav2dThreadPicture *const refp = &f->refp[ref];
-                    const uint8_t *const sdim = dav2d_block_dimensions[b2->bs];
-                    for (int pl = 0; pl < 2; pl++) {
-                        mc(t, ((pixel *) f->cur.p.data[1 + pl]) + uvoff + (x * 4 >> ss_hor),
-                           NULL, stride, sdim[0], sdim[1], t->cbx + x, t->cby + y,
-                           1 + pl, mv, refp, ref, b2->filter,
-                           0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
-                    }
-                    const unsigned m2 = ((1 << sdim[0]) - 1) << x;
-                    for (int yy = y; yy < y + sdim[1]; yy++)
-                        mask[yy] |= m2;
+        uint16_t mask[16] = { 0 };
+        ptrdiff_t uvoff = uvdstoff;
+        for (int y = 0; y < ch4; y++, uvoff += 4 * PXSTRIDE(stride) >> ss_ver) {
+            for (int x = 0, m = 1; x < cw4; x++, m <<= 1) {
+                if (mask[y] & m) continue;
+                const Av2Block *const b2 = f->c->task_thread.n_passes > 1 ?
+                    &f->frame_thread.b[(t->cby + y) * f->b4_stride + t->cbx + x] :
+                    &f->frame_thread.b[((t->cby + y) & 15) * 16 + ((t->cbx + x) & 15)];
+                const int ref = b2->ref.ref[0];
+                const union mv mv = b2->mv[0];
+                const Dav2dThreadPicture *const refp = &f->refp[ref];
+                const uint8_t *const sdim = dav2d_block_dimensions[b2->bs];
+                for (int pl = 0; pl < 2; pl++) {
+                    mc(t, ((pixel *) f->cur.p.data[1 + pl]) + uvoff + (x * 4 >> ss_hor),
+                       NULL, stride, sdim[0], sdim[1], t->cbx + x, t->cby + y,
+                       1 + pl, mv, refp, ref, b2->filter,
+                       0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
                 }
-            }
-        } else {
-            const refmvs_block *r = &t->rt.r[(t->cby & 63) * 128 + (t->cbx & 127)];
-            ptrdiff_t uvoff = uvdstoff;
-            for (int y = 0; y < ch4; y++, r += 128,
-                 uvoff += 4 * PXSTRIDE(stride) >> ss_ver)
-            {
-                for (int x = 0; x < cw4; x++) {
-                    // grab ref/MV/filter from spatial refmvs
-                    const refmvs_block *const r2 = &r[x];
-                    if (r2->ox4 || r2->oy4) continue;
-                    const int ref = r2->ref.ref[0];
-                    const union mv mv = r2->mf & 2 ? r2->lmv[0] : r2->mv[0];
-                    const Dav2dThreadPicture *const refp = &f->refp[ref];
-                    const uint8_t *const sdim = dav2d_block_dimensions[r2->bs];
-                    for (int pl = 0; pl < 2; pl++) {
-                        mc(t, ((pixel *) f->cur.p.data[1 + pl]) + uvoff + (x * 4 >> ss_hor),
-                           NULL, stride, sdim[0], sdim[1], t->cbx + x, t->cby + y,
-                           1 + pl, mv, refp, ref, r2->subpel_filter,
-                           0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
-                    }
-                }
+                const unsigned m2 = ((1 << sdim[0]) - 1) << x;
+                for (int yy = y; yy < y + sdim[1]; yy++)
+                    mask[yy] |= m2;
             }
         }
         if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)

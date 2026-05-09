@@ -924,16 +924,19 @@ static void derive_lowest_px(Dav2dTaskContext *const t,
     if (has_sub8x8_chroma) {
         const int ch4 = imin(cbh4, f->bh - t->cby);
         const int cw4 = imin(cbw4, f->bw - t->cbx);
-        const refmvs_block *r = &t->rt.r[(t->cby & 63) * 128 + (t->cbx & 127)];
-        for (int y = 0; y < ch4; y++, r += 128) {
-            for (int x = 0; x < cw4; x++) {
-                // grab ref/MV/filter from spatial refmvs
-                const refmvs_block *const r2 = &r[x];
-                if (r2->ox4 || r2->oy4) continue;
-                const union mv mv = r2->mf & 2 ? r2->lmv[0] : r2->mv[0];
-                const uint8_t *const sdim = dav2d_block_dimensions[r2->bs];
-                mc_lowest_px(&lowest_px[r2->ref.ref[0]][1], t->cby + y, sdim[1],
-                             mv.y, ss_ver, &f->svc[b->ref.ref[0]][1]);
+        uint16_t mask[16] = { 0 };
+        for (int y = 0; y < ch4; y++) {
+            for (int x = 0, m = 1; x < cw4; x++, m <<= 1) {
+                if (mask[y] & m) continue;
+                const Av2Block *const b2 =
+                    &f->frame_thread.b[(t->cby + y) * f->b4_stride + t->cbx + x];
+                const union mv mv = b2->mv[0];
+                const uint8_t *const sdim = dav2d_block_dimensions[b2->bs];
+                mc_lowest_px(&lowest_px[b2->ref.ref[0]][1], t->cby + y, sdim[1],
+                             mv.y, ss_ver, &f->svc[b2->ref.ref[0]][1]);
+                const unsigned m2 = ((1 << sdim[0]) - 1) << x;
+                for (int yy = y; yy < y + sdim[1]; yy++)
+                    mask[yy] |= m2;
             }
         }
     }
@@ -1538,8 +1541,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     assert(bs != BS_INVALID);
     Dav2dTileState *const ts = t->ts;
     const Dav2dFrameContext *const f = t->f;
-    Av2Block b_mem, *const b = f->c->task_thread.n_passes > 1 ?
-        &f->frame_thread.b[t->by * f->b4_stride + t->bx] : &b_mem;
+    Av2Block *const b = f->c->task_thread.n_passes > 1 ?
+        &f->frame_thread.b[t->by * f->b4_stride + t->bx] :
+        &f->frame_thread.b[(t->by & 15) * 16 + (t->bx & 15)];
     const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bx4 = t->bx & 63, by4 = t->by & 63;
     const int bw4 = b_dim[0], bh4 = b_dim[1];
@@ -4893,14 +4897,13 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
             f->lf.mask_sz = 0;
             goto error;
         }
-        if (c->task_thread.n_passes > 1) {
-            dav2d_free(f->frame_thread.b);
-            f->frame_thread.b = dav2d_malloc(ALLOC_BLOCK, sizeof(*f->frame_thread.b) *
-                                             num_sb256 * 64 * 64);
-            if (!f->frame_thread.b) {
-                f->lf.mask_sz = 0;
-                goto error;
-            }
+        dav2d_free(f->frame_thread.b);
+        f->frame_thread.b = dav2d_malloc(ALLOC_BLOCK, sizeof(*f->frame_thread.b) *
+                                         (c->task_thread.n_passes > 1 ?
+                                              num_sb256 * 64 * 64 : 16 * 16));
+        if (!f->frame_thread.b) {
+            f->lf.mask_sz = 0;
+            goto error;
         }
         f->lf.mask_sz = num_sb256;
     }
