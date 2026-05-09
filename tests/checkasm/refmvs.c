@@ -30,8 +30,16 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#if 0
+static inline enum BlockSize bs_from_bwh4(const int bw4, const int bh4) {
+    for (enum BlockSize bs = 0; bs < N_BS_SIZES; bs++) {
+        const uint8_t *const b_dim = dav2d_block_dimensions[bs];
+        if (b_dim[0] == bw4 && b_dim[1] == bh4) return bs;
+    }
+    return BS_INVALID;
+}
+
 static inline int gen_mv(const int total_bits, int spel_bits) {
     int bits = rnd() & ((1 << spel_bits) - 1);
     do {
@@ -42,6 +50,37 @@ static inline int gen_mv(const int total_bits, int spel_bits) {
     return rnd() & 1 ? -bits : bits;
 }
 
+static int check_spatial_mv(const refmvs_block *a, const ptrdiff_t as,
+                            const refmvs_block *b, const ptrdiff_t bs,
+                            const int w, const int h, const int is_warp)
+{
+    for (int y = 0; y < h; y++)
+        // only the right-most 3 columns are filled in, except for the last line
+        for (int x = (y + 1 == h ? 0 : imax(w - 3, 0)); x < w; x++)
+            if (memcmp(&a[y * as + x], &b[y * bs + x],
+                       is_warp ? sizeof(refmvs_block) : offsetof(refmvs_block, lmv)))
+            {
+                printf("spatial %dx%d,y4=%d,x4=%d\n", w * 4, h * 4, y, x);
+                return 1;
+            }
+    return 0;
+}
+
+static int check_temporal_mv(const refmvs_temporal_block *a, const ptrdiff_t as,
+                             const refmvs_temporal_block *b, const ptrdiff_t bs,
+                             const int w, const int h)
+{
+    const int th = (h + 1) >> 1, tw = (w + 1) >> 1;
+    for (int y = 0; y < th; y++)
+        for (int x = 0; x < tw; x++)
+            if (memcmp(&a[y * as + x], &b[y * bs + x], sizeof(refmvs_temporal_block))) {
+                fprintf(stderr, "temporal %dx%d,y8=%d,x8=%d\n", w, h, y, x);
+                return 1;
+            }
+    return 0;
+}
+
+#if 0
 static inline int get_min_mv_val(const int idx) {
     if      (idx <= 9)  return idx;
     else if (idx <= 18) return (idx - 9) * 10;
@@ -303,58 +342,64 @@ static void check_save_tmvs(const Dav2dRefmvsDSPContext *const c) {
 
     report("save_tmvs");
 }
+#endif
 
 static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
-    ALIGN_STK_64(refmvs_block, c_buf, 32 * 32,);
-    ALIGN_STK_64(refmvs_block, a_buf, 32 * 32,);
-    refmvs_block *c_dst[32];
-    refmvs_block *a_dst[32];
-    const size_t stride = 32 * sizeof(refmvs_block);
+    ALIGN_STK_64(refmvs_block, c_s_dst, 64 * 128,);
+    ALIGN_STK_64(refmvs_block, a_s_dst, 64 * 128,);
+    ALIGN_STK_64(refmvs_block, s_src, 1,);
+    refmvs_temporal_block c_t_dst[32 * 64], a_t_dst[32 * 64];
+    refmvs_temporal_block t_src;
 
-    for (int i = 0; i < 32; i++) {
-        c_dst[i] = c_buf + 32 * i;
-        a_dst[i] = a_buf + 32 * i;
-    }
+    declare_func(void, refmvs_block *s_dst, refmvs_block *s_src,
+                 refmvs_temporal_block *t_dst, ptrdiff_t t_stride,
+                 refmvs_temporal_block *t_src, int bw4, int bh4);
 
-    declare_func(void, refmvs_block **rr, const refmvs_block *rmv,
-                 int bx4, int bw4, int bh4);
+    for (int t = 0; t < 2; t++) {
+        for (int w = 1; w <= 64; w *= 2) {
+            if (check_func(c->splat_mv, "splat_%s_mv_w%d",
+                           t ? "spatialtemporal" : "spatial", w * 4))
+            {
+                const int h_min = w <= 16 ? 1 : 16;
+                const int h_max = w < 16 ? 16 : 64;
+                for (int h = h_min; h <= h_max; h *= 2) {
+                    s_src[0].ref.ref[0] = (rnd() & 7) - 1;
+                    s_src[0].ref.ref[1] = s_src[0].ref.ref[0] == -1 ? -1 : (rnd() & 7) - 1;
+                    for (int n = 0; n < 2; n++) {
+                        if (s_src[0].ref.ref[n] == -1) {
+                            s_src[0].mv[n].y = INVALID_MV;
+                        } else {
+                            s_src[0].mv[n].y = gen_mv(17, 3);
+                            s_src[0].mv[n].x = gen_mv(17, 3);
+                        }
+                    }
+                    s_src[0].mf = rnd() & 0xfe;
+                    s_src[0].bs = bs_from_bwh4(w, h);
+                    s_src[0].bx4 = rnd() & 0xffff;
+                    s_src[0].by4 = rnd() & 0xffff;
 
-    for (int w = 1; w <= 32; w *= 2) {
-        if (check_func(c->splat_mv, "splat_mv_w%d", w)) {
-            const int h_min = imax(w / 4, 1);
-            const int h_max = imin(w * 4, 32);
-            const int w_uint32 = w * sizeof(refmvs_block) / sizeof(uint32_t);
-            for (int h = h_min; h <= h_max; h *= 2) {
-                const int offset = (int) ((unsigned) w * rnd()) & 31;
-                union {
-                    refmvs_block rmv;
-                    uint32_t u32[3];
-                } ALIGN(tmp, 16);
-                tmp.u32[0] = rnd();
-                tmp.u32[1] = rnd();
-                tmp.u32[2] = rnd();
+                    t_src.ref.pair = s_src[0].ref.pair;
+                    t_src.mv.n = rnd();
 
-                call_ref(c_dst, &tmp.rmv, offset, w, h);
-                call_new(a_dst, &tmp.rmv, offset, w, h);
-                checkasm_check(uint32_t, (uint32_t*)(c_buf + offset), stride,
-                                         (uint32_t*)(a_buf + offset), stride,
-                                         w_uint32, h, "dst");
+                    call_ref(c_s_dst, s_src, t ? c_t_dst : NULL, 64, &t_src, w, h);
+                    call_new(a_s_dst, s_src, t ? a_t_dst : NULL, 64, &t_src, w, h);
 
-                bench_new(a_dst, &tmp.rmv, 0, w, h);
+                    if (check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, 0)) fail();
+                    if (t && check_temporal_mv(c_t_dst, 64, a_t_dst, 64, w, h)) fail();
+
+                    if (w == h) {
+                        bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 64, &t_src, w, h);
+                    }
+                }
             }
         }
     }
     report("splat_mv");
 }
-#endif
 
 void checkasm_check_refmvs(void) {
     Dav2dRefmvsDSPContext c;
     dav2d_refmvs_dsp_init(&c);
 
-#if 0
-    //check_load_tmvs(&c); // FIME: causes integer overflows, disable until investigated
-    check_save_tmvs(&c);
     check_splat_mv(&c);
-#endif
 }
