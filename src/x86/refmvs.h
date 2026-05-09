@@ -28,39 +28,14 @@
 #include "src/cpu.h"
 #include "src/refmvs.h"
 
-//decl_load_tmvs_fn(dav2d_load_tmvs_sse4);
-
-decl_save_tmvs_fn(dav2d_save_tmvs_ssse3);
-decl_save_tmvs_fn(dav2d_save_tmvs_avx2);
-decl_save_tmvs_fn(dav2d_save_tmvs_avx512icl);
-
-decl_splat_mv_fn(dav2d_splat_mv_sse2);
 decl_splat_mv_fn(dav2d_splat_mv_avx2);
-decl_splat_mv_fn(dav2d_splat_mv_avx512icl);
 
 static ALWAYS_INLINE void refmvs_dsp_init_x86(Dav2dRefmvsDSPContext *const c) {
-    const unsigned flags = dav2d_get_cpu_flags();
-
-    if (!(flags & DAV2D_X86_CPU_FLAG_SSE2)) return;
-
-    c->splat_mv = dav2d_splat_mv_sse2;
-
-    if (!(flags & DAV2D_X86_CPU_FLAG_SSSE3)) return;
-
-    c->save_tmvs = dav2d_save_tmvs_ssse3;
-
-    if (!(flags & DAV2D_X86_CPU_FLAG_SSE41)) return;
 #if ARCH_X86_64
-    //c->load_tmvs = dav2d_load_tmvs_sse4;
+    const unsigned flags = dav2d_get_cpu_flags();
 
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
-    c->save_tmvs = dav2d_save_tmvs_avx2;
     c->splat_mv = dav2d_splat_mv_avx2;
-
-    if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
-
-    c->save_tmvs = dav2d_save_tmvs_avx512icl;
-    c->splat_mv = dav2d_splat_mv_avx512icl;
 #endif
 }

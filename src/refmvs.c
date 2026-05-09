@@ -2472,30 +2472,17 @@ static void splat_comp_wedgemv_c(refmvs_block *s_dst, refmvs_block *const s_src,
     } while (bh4 > 0);
 }
 
-#if HAVE_ASM && 0
-#if ARCH_AARCH64 || ARCH_ARM
-#include "src/arm/refmvs.h"
-#elif ARCH_LOONGARCH64
-#include "src/loongarch/refmvs.h"
-#elif ARCH_X86
+#if HAVE_ASM && ARCH_X86
 #include "src/x86/refmvs.h"
 #endif
-#endif
 
-COLD void dav2d_refmvs_dsp_init(Dav2dRefmvsDSPContext *const c)
-{
+COLD void dav2d_refmvs_dsp_init(Dav2dRefmvsDSPContext *const c) {
     c->splat_mv = splat_mv_c;
     c->splat_warpmv = splat_warpmv_c;
     c->splat_comp_warpmv = splat_comp_warpmv_c;
     c->splat_comp_wedgemv = splat_comp_wedgemv_c;
 
-#if HAVE_ASM && 0
-#if ARCH_AARCH64 || ARCH_ARM
-    refmvs_dsp_init_arm(c);
-#elif ARCH_LOONGARCH64
-    refmvs_dsp_init_loongarch(c);
-#elif ARCH_X86
+#if HAVE_ASM && ARCH_X86
     refmvs_dsp_init_x86(c);
-#endif
 #endif
 }

@@ -258,8 +258,5 @@ void dav2d_refmvs_find(const refmvs_tile *rt, refmvs_candidate mvstack[6],
                        enum BlockSize bs, int skip_mode, int by4, int bx4);
 
 void dav2d_refmvs_dsp_init(Dav2dRefmvsDSPContext *dsp);
-void dav2d_refmvs_dsp_init_arm(Dav2dRefmvsDSPContext *dsp);
-void dav2d_refmvs_dsp_init_loongarch(Dav2dRefmvsDSPContext *dsp);
-void dav2d_refmvs_dsp_init_x86(Dav2dRefmvsDSPContext *dsp);
 
 #endif /* DAV2D_SRC_REF_MVS_H */
