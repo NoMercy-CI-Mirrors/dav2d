@@ -561,7 +561,6 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     s_src.ref.ref[1] = -1;
     s_src.mv[1].y = INVALID_MV;
     s_src.bs = bs;
-    s_src.subpel_filter = b->filter;
     if (b->motion_mode > MM_INTERINTRA ||
         (b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
          f->frame_hdr->gmv.m[b->ref.ref[0]].type > DAV2D_WM_TYPE_TRANSLATION))
@@ -645,7 +644,6 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     s_src.ref.ref[0] = t_src.ref.ref[t_swap] = b->ref.ref[0];
     s_src.ref.ref[1] = t_src.ref.ref[!t_swap] = b->ref.ref[1];
     s_src.bs = bs;
-    s_src.subpel_filter = b->filter;
     s_src.mf = b->cwp_idx << 2;
     const uint8_t *const mask = b->comp_type == COMP_INTER_WEDGE ?
         WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx) : NULL;
