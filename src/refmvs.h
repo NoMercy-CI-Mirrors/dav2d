@@ -78,8 +78,7 @@ typedef struct refmvs_block {
     uint8_t bs;
     int8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2-7: cwp_idx
     uint8_t ox4, oy4; // distance to top/left coordinates (in 4px units) of this block
-    int8_t warp_type;
-    // 1 byte gap
+    // 2 byte gap
     union mv lmv[2]; // 2dmv for warp blocks (see #1146; mf & 2)
     int32_t m[6]; // warp matrix
 } ALIGN(refmvs_block, 64);
@@ -142,7 +141,6 @@ typedef struct refmvs_tile {
     } bank;
     struct {
         int32_t mat[7][4][6];
-        int8_t type[7][4]; // see #834
         uint8_t hits, size[7], idx[7];
     } warp;
 } refmvs_tile;
@@ -164,7 +162,7 @@ typedef decl_splat_mv_fn(*splat_mv_fn);
 void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
             refmvs_temporal_block *t_src, int64_t mvy, int64_t mvx, \
-            const Dav2dWarpedMotionParams *const matrix, int bw4, int bh4)
+            const int32_t *const matrix, int bw4, int bh4)
 typedef decl_splat_warpmv_fn(*splat_warpmv_fn);
 
 #define decl_splat_comp_warpmv_fn(name) \
@@ -172,8 +170,7 @@ void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
             refmvs_temporal_block *t_src, \
             int64_t mvy1, int64_t mvx1, int64_t mvy2, int64_t mvx2, \
-            const Dav2dWarpedMotionParams *const wm1, \
-            const Dav2dWarpedMotionParams *const wm2, \
+            const int32_t *const matrix1, const int32_t *const matrix2, \
             int bw4, int bh4, int t_swap, const uint8_t *wedge, int w_mask)
 typedef decl_splat_comp_warpmv_fn(*splat_comp_warpmv_fn);
 
@@ -253,12 +250,12 @@ void dav2d_refmvs_reset_sb(refmvs_tile *rt, int by, int bx);
 void dav2d_refmvs_bank_update(refmvs_tile *rt, enum BlockSize bs, int by, int bx);
 void dav2d_refmvs_bank_add(refmvs_tile *rt, enum BlockSize bs, int by, int bx,
                            const Av2Block *b);
-int dav2d_refmvs_warp_add(refmvs_tile *rt, const Dav2dWarpedMotionParams *const m,
+int dav2d_refmvs_warp_add(refmvs_tile *rt, const int32_t *const m,
                           DB_ONLY(int by4, int bx4) int ref);
 
 // call for each block
 void dav2d_refmvs_find(const refmvs_tile *rt, refmvs_candidate mvstack[6],
-                       int32_t (*warp)[7], int *cnt, const union refpair ref,
+                       int32_t (*warp)[6], int *cnt, const union refpair ref,
                        enum BlockSize bs, int skip_mode, int by4, int bx4);
 
 void dav2d_refmvs_dsp_init(Dav2dRefmvsDSPContext *dsp);

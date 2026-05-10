@@ -513,12 +513,11 @@ static int model_from_corners(DB_ARGS(const refmvs_frame *const rf, const int by
 #undef reduce
     mat[2] += 0x10000;
     mat[5] += 0x10000;
-    mat[6] = DAV2D_WM_TYPE_AFFINE;
 
-    DEBUG_REFMV_printf("MFC[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d "
+    DEBUG_REFMV_printf("MFC[%d]: [ %d, %d | %d, %d, %d, %d ] "
                        "from tl=y:%d,x:%d,bl=y:%d,x:%d,tr=y:%d,x:%d\n",
                        idx, mat[0], mat[1], mat[2], mat[3], mat[4], mat[5],
-                       mat[6], topleft_mv.y, topleft_mv.x, bottomleft_mv.y,
+                       topleft_mv.y, topleft_mv.x, bottomleft_mv.y,
                        bottomleft_mv.x, topright_mv.y, topright_mv.x);
 
     return 1;
@@ -529,7 +528,6 @@ static ALWAYS_INLINE mv get_warpmv_proj(const refmvs_block *const r,
                                         const int minx, const int maxx,
                                         const int miny, const int maxy)
 {
-    if (r->warp_type <= 0) return (mv) { .n = 0 }; // see #834
     const int xc = (r->m[2] - (1 << 16)) * x + r->m[3] * y + r->m[0];
     const int yc = (r->m[5] - (1 << 16)) * y + r->m[4] * x + r->m[1];
     union mv res = (mv) {
@@ -561,7 +559,7 @@ static ALWAYS_INLINE mv get_warpmv_proj(const refmvs_block *const r,
  */
 
 void dav2d_refmvs_find(const refmvs_tile *const rt,
-                       refmvs_candidate mvstack[6], int32_t (*const warp)[7],
+                       refmvs_candidate mvstack[6], int32_t (*const warp)[6],
                        int *const cnt, const union refpair ref,
                        const enum BlockSize bs, const int skip_mode,
                        const int by4, const int bx4)
@@ -697,14 +695,11 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
     const ptrdiff_t bms_8x8y = ((by4 + bh4 - 1) & (rf->sbsz - 1)) >> 1;
     const ptrdiff_t left_8x8x = (bx4 - 1) >> 1;
     if (bml) {
-        if (warp && bml->mf & 2 && bml->ref.ref[0] == ref.ref[0] &&
-            bml->warp_type != DAV2D_WM_TYPE_INVALID)
-        {
+        if (warp && bml->mf & 2 && bml->ref.ref[0] == ref.ref[0]) {
 #define add_matrix(var) do { \
-            DEBUG_REFMV_printf("Spatial[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d from %s\n", \
+            DEBUG_REFMV_printf("Spatial[%d]: [ %d, %d | %d, %d, %d, %d ] from %s\n", \
                                cnt[1], var->m[0], var->m[1], var->m[2], \
-                               var->m[3], var->m[4], var->m[5], var->warp_type, #var); \
-            warp[cnt[1]][6] = var->warp_type; \
+                               var->m[3], var->m[4], var->m[5], #var); \
             memcpy(warp[cnt[1]++], var->m, sizeof(int32_t) * 6); \
 } while (0)
             add_matrix(bml);
@@ -718,9 +713,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
     const ptrdiff_t top_8x8y = by4 & (rf->sbsz - 1) ?
         ((by4 - 1) & (rf->sbsz - 1)) >> 1 : -1;
     if (rmt) {
-        if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0] &&
-            rmt->warp_type != DAV2D_WM_TYPE_INVALID)
-        {
+        if (warp && rmt->mf & 2 && rmt->ref.ref[0] == ref.ref[0]) {
             add_matrix(rmt);
         }
         const int xpos = abw4 - (1 << is_sb_boundary) - x_off;
@@ -733,9 +726,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
     const refmvs_block *tml = NULL;
     if (have_left && bh4 > 1) {
         tml = &rt->r[(by4 & 63) * 128 + ((bx4 - 1) & 127)];
-        if (warp && tml->mf & 2 && tml->ref.ref[0] == ref.ref[0] &&
-            tml->warp_type != DAV2D_WM_TYPE_INVALID)
-        {
+        if (warp && tml->mf & 2 && tml->ref.ref[0] == ref.ref[0]) {
             add_matrix(tml);
         }
         add_spatial_candidate(0, -1,
@@ -744,9 +735,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
 
     // left-most top
     if (lmt) {
-        if (warp && cnt[1] < 4 && lmt->mf & 2 && lmt->ref.ref[0] == ref.ref[0] &&
-            lmt->warp_type != DAV2D_WM_TYPE_INVALID)
-        {
+        if (warp && cnt[1] < 4 && lmt->mf & 2 && lmt->ref.ref[0] == ref.ref[0]) {
             add_matrix(lmt);
         }
         const int xpos = -x_off;
@@ -759,9 +748,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
         by4 + bh4 < rt->tile_row.end)
     {
         const refmvs_block *const bl = &rt->r[((by4 + bh4) & 63) * 128 + ((bx4 - 1) & 127)];
-        if (warp && cnt[1] < 4 && bl->mf & 2 && bl->ref.ref[0] == ref.ref[0] &&
-            bl->warp_type != DAV2D_WM_TYPE_INVALID)
-        {
+        if (warp && cnt[1] < 4 && bl->mf & 2 && bl->ref.ref[0] == ref.ref[0]) {
             add_matrix(bl);
         }
         add_spatial_candidate(bh4, -1,
@@ -772,9 +759,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
 
     // top-right
     if (tr) {
-        if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0] &&
-            tr->warp_type != DAV2D_WM_TYPE_INVALID)
-        {
+        if (warp && cnt[1] < 4 && tr->mf & 2 && tr->ref.ref[0] == ref.ref[0]) {
             add_matrix(tr);
         }
         const int xpos = abw4 - x_off;
@@ -808,9 +793,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
     // top-left
     DEBUG_REFMV_printf("Extra Spatial MVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
     if (tl) {
-        if (warp && cnt[1] < 4 && tl->mf & 2 && tl->ref.ref[0] == ref.ref[0] &&
-            tl->warp_type != DAV2D_WM_TYPE_INVALID)
-        {
+        if (warp && cnt[1] < 4 && tl->mf & 2 && tl->ref.ref[0] == ref.ref[0]) {
             add_matrix(tl);
         }
         const int xpos = -(1 << is_sb_boundary) - x_off;
@@ -1023,31 +1006,28 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
         for (int n = 0; n < sz && cnt[1] < 4; n++) {
             const int32_t *const mat =
                 rt->warp.mat[ref.ref[0]][(start - n) & 3];
-            warp[cnt[1]][6] = rt->warp.type[ref.ref[0]][(start - n) & 3];
-            DEBUG_REFMV_printf("Bank[%d/%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
+            DEBUG_REFMV_printf("Bank[%d/%d]: [ %d, %d | %d, %d, %d, %d ]\n",
                                n, cnt[1], mat[0], mat[1], mat[2],
-                               mat[3], mat[4], mat[5], warp[cnt[1]][6]);
+                               mat[3], mat[4], mat[5]);
             memcpy(warp[cnt[1]++], mat, sizeof(int32_t) * 6);
         }
 
         DEBUG_REFMV_printf("Warp gmv [%d|%d]\n", *cnt, cnt[1]);
         if (cnt[1] < 4) {
             const int32_t *const mat = rf->frm_hdr->gmv.m[ref.ref[0]].matrix;
-            warp[cnt[1]][6] = rf->frm_hdr->gmv.m[ref.ref[0]].type;
-            DEBUG_REFMV_printf("GMV[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
+            DEBUG_REFMV_printf("GMV[%d]: [ %d, %d | %d, %d, %d, %d ]\n",
                                cnt[1], mat[0], mat[1], mat[2],
-                               mat[3], mat[4], mat[5], warp[cnt[1]][6]);
+                               mat[3], mat[4], mat[5]);
             memcpy(warp[cnt[1]++], mat, sizeof(int32_t) * 6);
         }
 
         DEBUG_REFMV_printf("Warp defaults [%d|%d]\n", *cnt, cnt[1]);
         for (int n = 0; n < 2; n++) {
             if (cnt[1] >= 4) break;
-            warp[cnt[1]][6] = dav2d_default_wm_params.type;
             const int32_t *const mat = dav2d_default_wm_params.matrix;
-            DEBUG_REFMV_printf("Defaults[%d]: [ %d, %d | %d, %d, %d, %d ],t=%d\n",
+            DEBUG_REFMV_printf("Defaults[%d]: [ %d, %d | %d, %d, %d, %d ]\n",
                                cnt[1], mat[0], mat[1], mat[2],
-                               mat[3], mat[4], mat[5], warp[cnt[1]][6]);
+                               mat[3], mat[4], mat[5]);
             memcpy(warp[cnt[1]++], mat, sizeof(int32_t) * 6);
 #undef add_matrix
         }
@@ -1155,9 +1135,8 @@ static void debug_warpbank(const refmvs_tile *const rt, const int ref,
     const int start = idx + sz - 1;
     for (int n = 0; n < sz; n++) {
         const int32_t *const m = rt->warp.mat[ref][(start - n) & 3];
-        DEBUG_REFMV_printf("refbank[%d/%d,r=%d]: %d,%d,%d,%d,%d,%d,t=%d\n",
-                           n, sz, ref, m[0], m[1], m[2], m[3], m[4], m[5],
-                           rt->warp.type[ref][(start - n) & 3]);
+        DEBUG_REFMV_printf("refbank[%d/%d,r=%d]: %d,%d,%d,%d,%d,%d\n",
+                           n, sz, ref, m[0], m[1], m[2], m[3], m[4], m[5]);
     }
 }
 #else
@@ -1165,7 +1144,7 @@ static void debug_warpbank(const refmvs_tile *const rt, const int ref,
 #endif
 
 int dav2d_refmvs_warp_add(refmvs_tile *const rt,
-                          const Dav2dWarpedMotionParams *const mat,
+                          const int32_t *const matrix,
                           DB_ONLY(const int by4, const int bx4)
                           const int ref)
 {
@@ -1180,39 +1159,35 @@ int dav2d_refmvs_warp_add(refmvs_tile *const rt,
     int n;
     for (n = 0; n < sz; n++) {
         const int32_t *const m = &rt->warp.mat[ref][(idx + n) & 3][2];
-        if (!memcmp(m, &mat->matrix[2], sizeof(int32_t) * 4))
+        if (!memcmp(m, &matrix[2], sizeof(int32_t) * 4))
             break;
     }
     if (n < sz) {
         const int to = sz == 4 ? (idx - 1) & 3 : sz - 1, from = (idx + n) & 3;
         DEBUG_REFMV_printf("warprefbank: reordering %d to %d [%d,%d,%d,%d,%d,%d]\n",
                            from, to,
-                           mat->matrix[0], mat->matrix[1], mat->matrix[2],
-                           mat->matrix[3], mat->matrix[4], mat->matrix[5]);
+                           matrix[0], matrix[1], matrix[2],
+                           matrix[3], matrix[4], matrix[5]);
         if (from != to) {
             int32_t bak[6];
             memcpy(bak, rt->warp.mat[ref][from], sizeof(int32_t) * 6);
-            const int bak_type = rt->warp.type[ref][from];
             for (int n1 = from, n2 = (n1 + 1) & 3; n1 != to;
                  n1 = n2, n2 = (n2 + 1) & 3)
             {
                 memcpy(rt->warp.mat[ref][n1], rt->warp.mat[ref][n2],
                        sizeof(int32_t) * 6);
-                rt->warp.type[ref][n1] = rt->warp.type[ref][n2];
             }
             memcpy(rt->warp.mat[ref][to], bak, sizeof(int32_t) * 6);
-            rt->warp.type[ref][to] = bak_type;
         }
         debug_warpbank(rt, ref, by4, bx4);
         return 0;
     }
     const int tgt = sz == 4 ? rt->warp.idx[ref]++ & 3 : rt->warp.size[ref]++;
-    memcpy(rt->warp.mat[ref][tgt], mat->matrix, sizeof(int32_t) * 6);
-    rt->warp.type[ref][tgt] = mat->type;
+    memcpy(rt->warp.mat[ref][tgt], matrix, sizeof(int32_t) * 6);
     DEBUG_REFMV_printf("warprefbank: adding at %d|%d [%d,%d,%d,%d,%d,%d]\n",
                        rt->warp.size[ref], rt->warp.idx[ref],
-                       mat->matrix[0], mat->matrix[1], mat->matrix[2],
-                       mat->matrix[3], mat->matrix[4], mat->matrix[5]);
+                       matrix[0], matrix[1], matrix[2],
+                       matrix[3], matrix[4], matrix[5]);
     debug_warpbank(rt, ref, by4, bx4);
     return 0;
 }
@@ -1365,14 +1340,8 @@ void dav2d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
             refmvs_bank_add(rt, DB_ONLY(by, x) ref,
                             r->mf & 2 ? r->lmv : r->mv, r->mf >> 2);
         }
-        if (r->mf & 2) {
-            Dav2dWarpedMotionParams wmp;
-            wmp.type = r->warp_type;
-            if (wmp.type != DAV2D_WM_TYPE_INVALID) {
-                memcpy(wmp.matrix, r->m, sizeof(int32_t) * 6);
-                dav2d_refmvs_warp_add(rt, &wmp, DB_ONLY(by, x) r->ref.ref[0]);
-            }
-        }
+        if (r->mf & 2)
+            dav2d_refmvs_warp_add(rt, r->m, DB_ONLY(by, x) r->ref.ref[0]);
         if (++hits == 4) break;
     }
 }
@@ -2350,7 +2319,7 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                            refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
                            refmvs_temporal_block *const t_src,
                            int64_t mvy, int64_t mvx,
-                           const Dav2dWarpedMotionParams *const mat,
+                           const int32_t *const matrix,
                            const int bw4, int bh4)
 {
     assert(bw4 > 1 && bh4 > 1);
@@ -2385,11 +2354,11 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 t_dst[x >> 1].ref.pair = t_src->mv.n == INVALID_TRAJ * 0x10001U ?
                                           -1 : t_src->ref.pair;
             }
-            mvxi += (mat->matrix[2] - 0x10000) * 8;
-            mvyi += mat->matrix[4] * 8;
+            mvxi += (matrix[2] - 0x10000) * 8;
+            mvyi += matrix[4] * 8;
         }
-        mvx += mat->matrix[3] * 8;
-        mvy += (mat->matrix[5] - 0x10000) * 8;
+        mvx += matrix[3] * 8;
+        mvy += (matrix[5] - 0x10000) * 8;
         s_dst += 2 * 128;
         if (t_dst) t_dst += t_stride;
         s_src->oy4 += 2;
@@ -2401,8 +2370,8 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                 refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
                                 refmvs_temporal_block *t_src, int64_t mvy1, int64_t mvx1,
                                 int64_t mvy2, int64_t mvx2,
-                                const Dav2dWarpedMotionParams *const wm1,
-                                const Dav2dWarpedMotionParams *const wm2,
+                                const int32_t *const matrix1,
+                                const int32_t *const matrix2,
                                 const int bw4, int bh4, const int t_swap,
                                 const uint8_t *mask, const int w_swap)
 {
@@ -2463,15 +2432,15 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                     }
                 }
             }
-            mvxi1 += (wm1->matrix[2] - 0x10000) * 8;
-            mvyi1 += wm1->matrix[4] * 8;
-            mvxi2 += (wm2->matrix[2] - 0x10000) * 8;
-            mvyi2 += wm2->matrix[4] * 8;
+            mvxi1 += (matrix1[2] - 0x10000) * 8;
+            mvyi1 += matrix1[4] * 8;
+            mvxi2 += (matrix2[2] - 0x10000) * 8;
+            mvyi2 += matrix2[4] * 8;
         }
-        mvx1 += wm1->matrix[3] * 8;
-        mvy1 += (wm1->matrix[5] - 0x10000) * 8;
-        mvx2 += wm2->matrix[3] * 8;
-        mvy2 += (wm2->matrix[5] - 0x10000) * 8;
+        mvx1 += matrix1[3] * 8;
+        mvy1 += (matrix1[5] - 0x10000) * 8;
+        mvx2 += matrix2[3] * 8;
+        mvy2 += (matrix2[5] - 0x10000) * 8;
         if (mask) mask += bw4 >> 1;
         s_dst += 2 * 128;
         if (t_dst) t_dst += t_stride;

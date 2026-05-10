@@ -344,10 +344,7 @@ static void extend_warpmv(Dav2dTaskContext *const t,
     int32_t *const m = wmp->matrix;
 
     if (r->mf & 2) {
-        if (r->warp_type == DAV2D_WM_TYPE_INVALID)
-            memcpy(m, &dav2d_default_wm_params.matrix, sizeof(*m) * 6);
-        else
-            memcpy(m, r->m, sizeof(*m) * 6);
+        memcpy(m, r->m, sizeof(*m) * 6);
     } else if (r->mf & 1) {
         memcpy(m, t->f->frame_hdr->gmv.m[b->ref.ref[0]].matrix, sizeof(*m) * 6);
     } else {
@@ -528,7 +525,7 @@ static void debug_warp_matrix(const int depth,
                               const Av2Block *const b, const int r)
 {
 #define signabs(v) v < 0 ? '-' : ' ', abs(v)
-    DEBUG_BLOCK_printf("%*s[ %c%x, %c%x | %c%x, %c%x, %c%x, %c%x ],t=%d "
+    DEBUG_BLOCK_printf("%*s[ %c%x, %c%x | %c%x, %c%x, %c%x, %c%x ] "
                        "mv=y:%d,x:%d\n", depth, "",
                        signabs(t->warpmv[r].matrix[0]),
                        signabs(t->warpmv[r].matrix[1]),
@@ -536,7 +533,7 @@ static void debug_warp_matrix(const int depth,
                        signabs(t->warpmv[r].matrix[3]),
                        signabs(t->warpmv[r].matrix[4]),
                        signabs(t->warpmv[r].matrix[5]),
-                       t->warpmv[r].type, b->mv[r].y, b->mv[r].x);
+                       b->mv[r].y, b->mv[r].x);
 #undef signabs
 }
 #else
@@ -573,7 +570,6 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
             s_src.mf = 2;
             wm = &t->warpmv[0];
             memcpy(s_src.m, wm->matrix, sizeof(int32_t) * 6);
-            s_src.warp_type = wm->type;
         } else {
             s_src.mv[0] = b->mv[0];
             s_src.mf = 1;
@@ -585,7 +581,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
         const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 + mat[1] +
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
         f->c->refmvs_dsp.splat_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
-                                      mvy, mvx, wm, bw4, bh4);
+                                      mvy, mvx, wm->matrix, bw4, bh4);
     } else {
         s_src.mv[0] = b->mv[0];
         s_src.mf = b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1;
@@ -660,7 +656,6 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
             wm1 = &t->warpmv[0];
             wm2 = &t->warpmv[1];
             memcpy(s_src.m, wm1->matrix, sizeof(int32_t) * 6);
-            s_src.warp_type = wm1->type;
         } else {
             COPY2MV(s_src.mv, b->mv);
             s_src.mf |= 1;
@@ -680,7 +675,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
         // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
         f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
                                            mvy1, mvx1, mvy2, mvx2,
-                                           wm1, wm2, bw4, bh4, t_swap,
+                                           wm1->matrix, wm2->matrix, bw4, bh4, t_swap,
                                            mask, mask ? b->wedge_sign ^ t_swap : 0);
     } else {
         COPY2MV(s_src.mv, b->mv);
@@ -1073,7 +1068,7 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                       bw4, bh4, f->bw, f->bh, f->frame_hdr);
             } else {
                 refmvs_candidate mvstack[6];
-                int32_t warp[4][7];
+                int32_t warp[4][6];
                 int n_mvs[2];
                 dav2d_refmvs_find(&t->rt, mvstack,
                                   b->ref.ref[0] != TIP_FRAME && b->inter_mode > NEWMV ?
@@ -1090,10 +1085,10 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                mvstack[n].y_off, mvstack[n].x_off);
                     if (b->ref.ref[0] != TIP_FRAME && b->inter_mode > NEWMV)
                         for (int n = 0; n < n_mvs[1]; n++)
-                            printf("%*swarp[%d/%d]: %d, %d, %d, %d, %d, %d, t=%d\n",
+                            printf("%*swarp[%d/%d]: %d, %d, %d, %d, %d, %d\n",
                                    depth + 1, "", n, n_mvs[1],
                                    warp[n][0], warp[n][1], warp[n][2],
-                                   warp[n][3], warp[n][4], warp[n][5], warp[n][6]);
+                                   warp[n][3], warp[n][4], warp[n][5]);
                 }
 #endif
 
@@ -1311,10 +1306,10 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (b->motion_mode > MM_INTERINTRA) {
             int res = 0;
             if (t->warpmv[0].type != DAV2D_WM_TYPE_INVALID)
-                res = dav2d_refmvs_warp_add(&t->rt, t->warpmv,
+                res = dav2d_refmvs_warp_add(&t->rt, t->warpmv[0].matrix,
                                             DB_ONLY(t->by, t->bx) b->ref.ref[0]);
             if (!res && is_comp && t->warpmv[1].type != DAV2D_WM_TYPE_INVALID)
-                dav2d_refmvs_warp_add(&t->rt, &t->warpmv[1],
+                dav2d_refmvs_warp_add(&t->rt, t->warpmv[1].matrix,
                                       DB_ONLY(t->by, t->bx) b->ref.ref[1]);
         }
         if (b->ref.ref[1] != -1) {
