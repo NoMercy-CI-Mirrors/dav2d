@@ -4941,9 +4941,9 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         prefilter_data_size_y = prefilter_data_size_uv = 0;
         f->prefilter_data_full_frame = 1;
     } else if (f->frame_hdr->allow_intrabc) {
-        const int bh_align7 = (f->bh + 7) & ~7;
+        const int bh_align7 = (f->bh + 15) & ~15;
         prefilter_data_size_y = f->cur.p.stride[0] * bh_align7 * 4;
-        const int bh_align15 = (f->bh + 15) & ~15;
+        const int bh_align15 = (f->bh + 31) & ~31;
         prefilter_data_size_uv = f->cur.p.stride[1] * bh_align15 * 4 >> f->ss_ver;
         f->prefilter_data_full_frame = 1;
     } else {
