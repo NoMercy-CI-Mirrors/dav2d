@@ -77,8 +77,7 @@ typedef struct refmvs_block {
     union refpair ref;
     uint8_t bs;
     int8_t mf; // bits: 0: globalmv, 1: warp[not gmv], 2-7: cwp_idx
-    uint8_t ox4, oy4; // distance to top/left coordinates (in 4px units) of this block
-    // 2 byte gap
+    uint16_t by4, bx4; // top/left coordinates (in 4px units) of this block
     union mv lmv[2]; // 2dmv for warp blocks (see #1146; mf & 2)
     int32_t m[6]; // warp matrix
 } ALIGN(refmvs_block, 64);

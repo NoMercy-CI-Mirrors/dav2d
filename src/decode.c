@@ -245,12 +245,11 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
     int have_topleft = 0;
     int have_topright = 0;
     const int is_not_sb_boundary = t->by & (f->sb_step - 1);
-    int init_odd;
     if (have_top) {
         if (is_not_sb_boundary) {
             ra = &t->rt.r[((t->by - 1) & 63) * 128];
             const refmvs_block *r2 = &ra[(t->bx & 127)];
-            int off = -r2->ox4;
+            int off = r2->bx4 - t->bx;
             have_topleft = !off;
             do {
                 add_sample(off, 0, 1, -1, &r2[off]);
@@ -260,20 +259,20 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
         } else {
             ra = t->rt.ra;
             const refmvs_block *r2 = &ra[t->bx >> 1];
-            init_odd = t->bx & 1;
             have_topleft = 1;
             // if the block pointed to by our rounded-down top/left coordinate
             // doesn't intersect with us, skip to the next one. This block will
             // instead be handled later on as a top/left candidate.
-            int off = bs(r2)[0] <= r2->ox4 + init_odd;
+            int off = r2->bx4 + bs(r2)[0] <= t->bx;
             // at the top/right edge, we want to include blocks if they
             // intersect with us. Otherwise, they will be handled as top/right
             // candidates further down.
             const int tr_ext = (t->bx + bw4) & (f->sb_step - 1) &&
-                               (ra[(t->bx + bw4) >> 1].ox4 || init_odd);
+                               t->bx + bw4 < t->ts->tiling.col_end &&
+                               ra[(t->bx + bw4) >> 1].bx4 < t->bx + bw4;
             do {
-                const int off8 = (t->bx + off) >> 1, odd = (t->bx + off) & 1;
-                const int ioff = off - ra[off8].ox4 - odd;
+                const int off8 = (t->bx + off) >> 1;
+                const int ioff = ra[off8].bx4 - t->bx;
                 add_sample(ioff, 0, 1, -1, &ra[off8]);
                 // the +1 prevents us from re-iterating over the same block
                 // multiple times. Since we round down in the indexing a few
@@ -292,7 +291,7 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
 
     if (np < 8 && have_left) {
         const refmvs_block *r2 = &r[(t->bx - 1) & 127];
-        int off = -r2->oy4;
+        int off = r2->by4 - t->by;
         have_topleft &= !off;
         do {
             add_sample(0, off, -1, 1, &r2[off * 128]);
@@ -310,12 +309,12 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
         if (np < 8 && have_topleft) { // top/left
             const refmvs_block *const r2 = t->bx & (f->sb_step - 1) ?
                                            &ra[(t->bx - 1) >> 1] : &t->rt.ra_tl;
-            if (dav2d_block_dimensions[r2->bs][0] + init_odd == r2->ox4 + 2)
+            if (dav2d_block_dimensions[r2->bs][0] + r2->bx4 == t->bx)
                 add_sample(0, 0, -1, -1, r2);
         }
         if (np < 8 && have_topright) { // top/right
             const refmvs_block *const r2 = &ra[(t->bx + bw4 + 1) >> 1];
-            if (r2->ox4 == init_odd)
+            if (r2->bx4 == t->bx + bw4)
                 add_sample(bw4, 0, 1, -1, r2);
         }
     }
@@ -558,6 +557,8 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     s_src.ref.ref[1] = -1;
     s_src.mv[1].y = INVALID_MV;
     s_src.bs = bs;
+    s_src.by4 = t->by;
+    s_src.bx4 = t->bx;
     if (b->motion_mode > MM_INTERINTRA ||
         (b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
          f->frame_hdr->gmv.m[b->ref.ref[0]].type > DAV2D_WM_TYPE_TRANSLATION))
@@ -605,6 +606,8 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
         .mv[0] = b->mv[0],
         .mv[1].y = INVALID_MV,
         .bs = bs,
+        .by4 = t->by,
+        .bx4 = t->bx,
         .mf = 0,
     };
     const ptrdiff_t t_stride = f->rf.rp_stride;
@@ -640,6 +643,8 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     s_src.ref.ref[0] = t_src.ref.ref[t_swap] = b->ref.ref[0];
     s_src.ref.ref[1] = t_src.ref.ref[!t_swap] = b->ref.ref[1];
     s_src.bs = bs;
+    s_src.by4 = t->by;
+    s_src.bx4 = t->bx;
     s_src.mf = b->cwp_idx << 2;
     const uint8_t *const mask = b->comp_type == COMP_INTER_WEDGE ?
         WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx) : NULL;
@@ -715,6 +720,8 @@ static inline void splat_intraref(const Dav2dContext *const c,
         .mv[0].y = INVALID_MV,
         .mv[1].y = INVALID_MV,
         .bs = bs,
+        .by4 = t->by,
+        .bx4 = t->bx,
         .mf = 0,
     };
     const ptrdiff_t t_stride = f->rf.rp_stride;
