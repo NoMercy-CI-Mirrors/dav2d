@@ -51,7 +51,8 @@ static const char *const dpcm_names[] = {
 
 static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
                           const enum TxfmType txtp, const int sw, const int sh,
-                          const int subsh, int *const max_eob, const int coef_max)
+                          const int subsh, int *const max_eob, const int dpcm,
+                          const int coef_max)
 {
     /* Generate topleft coefficients such that the return value (being the
      * coefficient scantable index for the eob token) guarantees that only
@@ -82,7 +83,10 @@ static int generate_coefs(coef *coeff, const enum RectTxfmSize tx,
         if (!eob && (rcx > sub_low || rcy > sub_low))
             eob = n; /* lower boundary */
 
-        coeff[rc] = (rnd() & coef_max) - coef_sign;
+        if ((dpcm == 1 && !rcx) || (dpcm == 2 && !rcy))
+            coeff[rc] = coef_max >> 1; // test dpcm overflow in the first row/col
+        else
+            coeff[rc] = (rnd() & coef_max) - coef_sign;
     }
     *max_eob = n - 1;
 
@@ -225,7 +229,7 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
                 {
                     int max_eob;
                     const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,
-                                                   subsh, &max_eob, coef_max);
+                                                   subsh, &max_eob, dpcm, coef_max);
                     memcpy(coeff[1], coeff[0], sizeof(*coeff));
 
                     CLEAR_PIXEL_RECT(c_dst);
