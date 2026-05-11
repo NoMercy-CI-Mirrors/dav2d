@@ -1277,8 +1277,8 @@ ALIGN function_align
     vpblendd             m9, m11, 0x30
     punpcklbw            m8, m10
     punpcklbw            m9, m10
-    paddw                m0, m8
-    paddw                m1, m9
+    paddsw               m0, m8
+    paddsw               m1, m9
     packuswb             m0, m1
     vextracti128        xm1, m0, 1
     movq       [dstq+dsq*0], xm0
@@ -1979,13 +1979,13 @@ ALIGN function_align
     pshufhw             xm9, xm1, q3333
     vpermq               m8, m8, q1133
     vpermq               m9, m9, q1133
-    paddw                m0, m8
-    paddw                m1, m9
+    paddsw               m0, m8
+    paddsw               m1, m9
 .write_16x2:
     pmovzxbw             m8, [dstq+dsq*0]
     pmovzxbw             m9, [dstq+dsq*1]
-    paddw                m8, m0
-    paddw                m9, m1
+    paddsw               m8, m0
+    paddsw               m9, m1
     packuswb             m8, m9
     vpermq               m8, m8, q3120
     movu         [dstq+dsq*0], xm8
@@ -2456,28 +2456,28 @@ ALIGN function_align
     jmp m(inv_txfm_add_8x4_8bpc).write_8x4_hdpcm
 .write_8x16_vdpcm:
     punpcklqdq           m8, m10, m0
-    paddw                m1, m0
+    paddsw               m1, m0
     shufpd               m9, m0, m1, 0x05
-    paddw                m2, m1
-    paddw                m0, m8
+    paddsw               m2, m1
+    paddsw               m0, m8
     shufpd               m8, m1, m2, 0x05
-    paddw                m3, m2
-    paddw                m1, m9
+    paddsw               m3, m2
+    paddsw               m1, m9
     shufpd               m9, m2, m3, 0x05
-    paddw                m4, m3
-    paddw                m2, m8
+    paddsw               m4, m3
+    paddsw               m2, m8
     shufpd               m8, m3, m4, 0x05
-    paddw                m5, m4
-    paddw                m3, m9
+    paddsw               m5, m4
+    paddsw               m3, m9
     shufpd               m9, m4, m5, 0x05
-    paddw                m6, m5
-    paddw                m4, m8
+    paddsw               m6, m5
+    paddsw               m4, m8
     shufpd               m8, m5, m6, 0x05
-    paddw                m7, m6
-    paddw                m5, m9
+    paddsw               m7, m6
+    paddsw               m5, m9
     shufpd               m9, m6, m7, 0x05
-    paddw                m6, m8
-    paddw                m7, m9
+    paddsw               m6, m8
+    paddsw               m7, m9
 .write_8x16:
     call m(inv_txfm_add_8x8_8bpc).write_8x8
     vpermq               m0, m4, q3120
@@ -4549,8 +4549,8 @@ ALIGN function_align
     pshufb               m8, m0, m11
     paddw                m5, m9
     pshufb               m9, m1, m11
-    paddw                m4, m8
-    paddw                m5, m9
+    paddsw               m4, m8
+    paddsw               m5, m9
     pshufb              xm8, xm4, xm11
     pshufb              xm9, xm5, xm11
     vinserti128          m8, m10, xm8, 1
@@ -4993,7 +4993,7 @@ ALIGN function_align
     call m(inv_txfm_add_8x16_8bpc).write_8x16_vdpcm
     punpckhqdq           m8, m7, m10
     call .pass2_identity_load_round_bottomhalf
-    paddw                m0, m8
+    paddsw               m0, m8
     call m(inv_txfm_add_8x16_8bpc).write_8x16_vdpcm
     jmp m(inv_txfm_add_32x8_8bpc).pass2_end
 .pass2_identity_load_round_bottomhalf:
