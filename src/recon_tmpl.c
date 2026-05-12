@@ -2629,7 +2629,7 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 for (int x = 0; x < 48; x++) {
                     cf[scan_out[mapping[x]]] = sums[x];
                 }
-                eob = (uint8_t[]){ 63, 119, 231 }[idx];
+                eob = 35;
             } else {
                 const int8_t *kernel = &dav2d_stx_4x4_kernel[set][type][0][0];
                 coef sums[16];
@@ -2640,7 +2640,25 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 for (int x = 0; x < 16; x++) {
                     cf[scan_out[x]] = sums[x];
                 }
-                eob = (uint8_t[]){ 15, 15, 51, 99 }[idx];
+                // if we take the example of the 8x4/4x8, the result of the stx
+                // looks like this:
+                // x x x x 0 0 0 0
+                // x x x x 0 0 0 0
+                // x x x x 0 0 0 0
+                // x x x x 0 0 0 0
+                // where x is a non-zero coefficient, and 0 is a zero coefficient.
+                // We now have two choices to update eob:
+                // x x x x x x x 0 (A: 21) vs. (B: 9) x x x x 0 0 0 0
+                // x x x x x x 0 0                    x x x 0 0 0 0 0
+                // x x x x x 0 0 0                    x x 0 0 0 0 0 0
+                // x x x x 0 0 0 0                    x 0 0 0 0 0 0 0
+                // we use eob as a way to signal the itx how many columns in the
+                // first itx-1d are non-zero, and how many coeffs per col/row are
+                // non-zero in either itx-1d. If we don't change this config per-
+                // row/col, then - although (A) is more theoretically correct -
+                // it makes more sense to signal (B), inform the itx that the
+                // right half is zero, and allow it to take a faster path.
+                eob = 9;
             }
             if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                 coef_dump(cf, imin(t_dim->h, 8) * 4,
