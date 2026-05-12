@@ -32,7 +32,6 @@
 
 #include "src/levels.h"
 
-EXTERN const uint8_t dav2d_stx_scan_orders_8x8[TX_32X32][2][64];
 EXTERN const uint8_t dav2d_coeff8x8_mapping_idx[33];
 EXTERN const uint8_t dav2d_coeff8x8_mapping[3][48];
 EXTERN const int8_t dav2d_stx_4x4_kernel[14][3][8][16];

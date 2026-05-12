@@ -30,19 +30,19 @@
 
 #include "common/bitdepth.h"
 
-#define decl_stx_fn(name) \
-void (name)(coef *cf_out, const coef *cf, const int8_t *kernel, int stride, \
-            int eob HIGHBD_DECL_SUFFIX)
-typedef decl_stx_fn(*stx_fn);
-
 #define decl_stx4_fn(name) \
 void (name)(coef *cf, ptrdiff_t stride, int transpose, const int8_t *kernel, \
             int eob HIGHBD_DECL_SUFFIX)
 typedef decl_stx4_fn(*stx4_fn);
 
+#define decl_stx8_fn(name) \
+void (name)(coef *cf, ptrdiff_t stride, int transpose, int map_idx, \
+            const int8_t *kernel, int eob HIGHBD_DECL_SUFFIX)
+typedef decl_stx8_fn(*stx8_fn);
+
 typedef struct Dav2dStxDSPContext {
-    stx_fn stxfm;
     stx4_fn stxfm4;
+    stx8_fn stxfm8;
 } Dav2dStxDSPContext;
 
 bitfn_decls(void dav2d_stx_dsp_init, Dav2dStxDSPContext *c);

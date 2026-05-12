@@ -75,7 +75,40 @@ static void stxfm4_c(coef *const cf, const ptrdiff_t stride,
     }
 }
 
+static void stxfm8_c(coef *const cf, const ptrdiff_t stride,
+                     const int transpose, const int map_idx,
+                     const int8_t *const kernel, const int eob
+                     HIGHBD_DECL_SUFFIX)
+{
+    assert(stride >= 8 && stride <= 32 && !(stride & (stride - 1)));
+    coef sums[48];
+    stxfm_c(sums, cf, kernel, 48, eob HIGHBD_TAIL_SUFFIX);
+    // for the write-out, an avx512 (or similar) implementation supporting
+    // wide shuffles could write-out an 8x8 block using a inverse scan table
+    // generated from dav2d_coeff8x8_mapping[]. We don't do that here since
+    // it would increase the loop count below from 48 -> 64.
+    memset(cf, 0, 32 * sizeof(coef));
+    const uint8_t *mapping = dav2d_coeff8x8_mapping[map_idx];
+    if (!transpose) {
+        for (int n = 0; n < 48; n++) {
+            const int rc = mapping[n], x = rc & 7, y = rc >> 3;
+            cf[x * stride + y] = sums[n];
+        }
+    } else if (stride > 8) {
+        for (int n = 0; n < 48; n++) {
+            const int rc = mapping[n], x = rc & 7, y = rc >> 3;
+            cf[y * stride + x] = sums[n];
+        }
+    } else {
+        for (int n = 0; n < 48; n++) {
+            const int rc = mapping[n];
+            assert((unsigned) rc < 64U);
+            cf[rc] = sums[n];
+        }
+    }
+}
+
 COLD void bitfn(dav2d_stx_dsp_init)(Dav2dStxDSPContext *const c) {
-    c->stxfm = stxfm_c;
     c->stxfm4 = stxfm4_c;
+    c->stxfm8 = stxfm8_c;
 }

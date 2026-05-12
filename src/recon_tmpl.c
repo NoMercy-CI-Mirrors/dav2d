@@ -2619,18 +2619,10 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             const int set = (stx >> 2) & 15;
             const ptrdiff_t cf_stride = imin(4 * t_dim->h, 32);
             if (tw >= 8 && th >= 8) {
-                const int8_t *kernel = &dav2d_stx_8x8_kernel[set][type][0][0];
-                coef sums[48];
-                dsp->stx.stxfm(sums, cf, kernel, 48, eob HIGHBD_CALL_SUFFIX);
-                memset(cf, 0, 32 * sizeof(coef));
-                // Subtract 1 to map {8,16,32} to idx {0,1,2}
-                const int idx = imin(t_dim->lh, 3) - 1;
-                const uint8_t *scan_out = dav2d_stx_scan_orders_8x8[idx][transpose];
+                const int8_t *kernel = dav2d_stx_8x8_kernel[set][type][0];
                 const int map_idx = dav2d_coeff8x8_mapping_idx[set * 3 + type];
-                const uint8_t *mapping = dav2d_coeff8x8_mapping[map_idx];
-                for (int x = 0; x < 48; x++) {
-                    cf[scan_out[mapping[x]]] = sums[x];
-                }
+                dsp->stx.stxfm8(cf, cf_stride, transpose, map_idx, kernel, eob
+                                HIGHBD_CALL_SUFFIX);
                 eob = 35;
             } else {
                 const int8_t *kernel = dav2d_stx_4x4_kernel[set][type][0];
