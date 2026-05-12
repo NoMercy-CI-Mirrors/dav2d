@@ -108,7 +108,19 @@ static void stxfm8_c(coef *const cf, const ptrdiff_t stride,
     }
 }
 
+#if HAVE_ASM
+#if ARCH_X86
+#include "src/x86/stx.h"
+#endif
+#endif
+
 COLD void bitfn(dav2d_stx_dsp_init)(Dav2dStxDSPContext *const c) {
     c->stxfm4 = stxfm4_c;
     c->stxfm8 = stxfm8_c;
+
+#if HAVE_ASM
+#if ARCH_X86
+    stx_dsp_init_x86(c);
+#endif
+#endif
 }
