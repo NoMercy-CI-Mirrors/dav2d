@@ -2617,6 +2617,7 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             const int transpose = b->intrabc || !b->intra || !((mask >> b->y_mode) & 1);
             const int type = (stx & 3) - 1;
             const int set = (stx >> 2) & 15;
+            const ptrdiff_t cf_stride = imin(4 * t_dim->h, 32);
             if (tw >= 8 && th >= 8) {
                 const int8_t *kernel = &dav2d_stx_8x8_kernel[set][type][0][0];
                 coef sums[48];
@@ -2632,15 +2633,9 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 }
                 eob = 35;
             } else {
-                const int8_t *kernel = &dav2d_stx_4x4_kernel[set][type][0][0];
-                coef sums[16];
-                dsp->stx.stxfm(sums, cf, kernel, 16, eob HIGHBD_CALL_SUFFIX);
-                const int idx = imin(t_dim->lh, 3);
-                const uint8_t *scan_out = dav2d_stx_scan_orders_4x4[idx][transpose];
-                memset(&cf[4], 0, 4 * sizeof(coef));
-                for (int x = 0; x < 16; x++) {
-                    cf[scan_out[x]] = sums[x];
-                }
+                const int8_t *kernel = dav2d_stx_4x4_kernel[set][type][0];
+                dsp->stx.stxfm4(cf, cf_stride, transpose, kernel, eob
+                                HIGHBD_CALL_SUFFIX);
                 // if we take the example of the 8x4/4x8, the result of the stx
                 // looks like this:
                 // x x x x 0 0 0 0

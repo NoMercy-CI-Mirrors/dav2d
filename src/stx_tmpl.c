@@ -36,11 +36,11 @@
 #include "src/stx_tables.h"
 #include "src/tables.h"
 
-static void stxfm_c(coef *const cf_out,
-                    const coef *const cf,
-                    const int8_t *kernel,
-                    const int sz,
-                    const int eob HIGHBD_DECL_SUFFIX)
+static NOINLINE void stxfm_c(coef *const cf_out,
+                             const coef *const cf,
+                             const int8_t *kernel,
+                             const int sz,
+                             const int eob HIGHBD_DECL_SUFFIX)
 {
     assert(sz == 16 || sz == 48);
     assert(eob >= 0 && eob < (sz == 16 ? 8 : 32));
@@ -56,6 +56,26 @@ static void stxfm_c(coef *const cf_out,
     }
 }
 
+static void stxfm4_c(coef *const cf, const ptrdiff_t stride,
+                     const int transpose, const int8_t *const kernel,
+                     const int eob HIGHBD_DECL_SUFFIX)
+{
+    assert(stride >= 4 && stride <= 32 && !(stride & (stride - 1)));
+    coef sums[16];
+    stxfm_c(sums, cf, kernel, 16, eob HIGHBD_TAIL_SUFFIX);
+    memset(&cf[4], 0, 4 * sizeof(coef));
+    if (transpose) {
+        for (int y = 0; y < 4; y++)
+            for (int x = 0; x < 4; x++)
+                cf[y * stride + x] = sums[y * 4 + x];
+    } else {
+        for (int y = 0; y < 4; y++)
+            for (int x = 0; x < 4; x++)
+                cf[x * stride + y] = sums[y * 4 + x];
+    }
+}
+
 COLD void bitfn(dav2d_stx_dsp_init)(Dav2dStxDSPContext *const c) {
     c->stxfm = stxfm_c;
+    c->stxfm4 = stxfm4_c;
 }
