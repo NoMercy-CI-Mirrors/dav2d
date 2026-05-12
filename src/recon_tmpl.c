@@ -2625,7 +2625,8 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 // Subtract 1 to map {8,16,32} to idx {0,1,2}
                 const int idx = imin(t_dim->lh, 3) - 1;
                 const uint8_t *scan_out = dav2d_stx_scan_orders_8x8[idx][transpose];
-                const uint8_t *mapping = dav2d_coeff8x8_mapping[set * 3 + type];
+                const int map_idx = dav2d_coeff8x8_mapping_idx[set * 3 + type];
+                const uint8_t *mapping = dav2d_coeff8x8_mapping[map_idx];
                 for (int x = 0; x < 48; x++) {
                     cf[scan_out[mapping[x]]] = sums[x];
                 }
