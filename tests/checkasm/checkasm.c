@@ -47,6 +47,7 @@ static const CheckasmTest tests[] = {
     { "itx_8bpc", checkasm_check_itx_8bpc },
     { "looprestoration_8bpc", checkasm_check_looprestoration_8bpc },
     { "mc_8bpc", checkasm_check_mc_8bpc },
+    { "stx_8bpc", checkasm_check_stx_8bpc },
 #endif
 #if CONFIG_16BPC
     { "cdef_16bpc", checkasm_check_cdef_16bpc },
@@ -56,6 +57,7 @@ static const CheckasmTest tests[] = {
     { "itx_16bpc", checkasm_check_itx_16bpc },
     { "looprestoration_16bpc", checkasm_check_looprestoration_16bpc },
     { "mc_16bpc", checkasm_check_mc_16bpc },
+    { "stx_16bpc", checkasm_check_stx_16bpc },
 #endif
     { 0 }
 };

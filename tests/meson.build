@@ -57,6 +57,7 @@ if is_asm_enabled and checkasm_dependency.found()
         'checkasm/itx.c',
         'checkasm/looprestoration.c',
         'checkasm/mc.c',
+        'checkasm/stx.c',
     )
 
     checkasm_bitdepth_objs = []

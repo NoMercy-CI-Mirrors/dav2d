@@ -51,6 +51,7 @@ decl_check_bitfns(void checkasm_check_itx);
 decl_check_bitfns(void checkasm_check_deblock);
 decl_check_bitfns(void checkasm_check_looprestoration);
 decl_check_bitfns(void checkasm_check_mc);
+decl_check_bitfns(void checkasm_check_stx);
 
 #ifdef BITDEPTH
     #define checkasm_check_impl_pixel checkasm_check_impl(PIXEL_TYPE)
