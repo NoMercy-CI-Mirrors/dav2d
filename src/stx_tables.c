@@ -456,7 +456,7 @@ const int8_t ALIGN(dav2d_stx_4x4_kernel[14][3][8][16], 16) = {
     },
 };
 
-const int8_t dav2d_stx_8x8_kernel[11][3][32][48] = {
+const int8_t ALIGN(dav2d_stx_8x8_kernel[11][3][32][48], 32) = {
     {
         {
             { 103, -44, -48,  -9, -12,  -6,  -4,  19,  24,  -2,  -2,   4,
