@@ -182,6 +182,7 @@ if is_asm_enabled
                 'x86/ipred_avx512.asm',
                 'x86/loopfilter_avx512.asm',
                 'x86/mc_avx512.asm',
+                'x86/stx_avx512.asm',
                 'x86/filmgrain_avx2.asm',
                 'x86/ipred_avx2.asm',
                 'x86/cfl_avx2.asm',
