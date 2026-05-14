@@ -2307,8 +2307,13 @@ static void splat_mv_c(refmvs_block *s_dst, refmvs_block *const s_src,
 static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                            refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
                            refmvs_temporal_block *const t_src, const int bw4, int bh4,
-                           int64_t mvy, int64_t mvx, const int32_t *const matrix)
+                           const int32_t *const matrix)
 {
+    const int bx = s_src->bx4, by = s_src->by4;
+    int64_t mvx = (int64_t) (matrix[2] - 0x10000) * (bx + 1) * 4 +
+                  (int64_t) matrix[3] * (by + 1) * 4 + matrix[0];
+    int64_t mvy = (int64_t) matrix[4] * (bx + 1) * 4 + matrix[1] +
+                  (int64_t) (matrix[5] - 0x10000) * (by + 1) * 4;
     assert(bw4 > 1 && bh4 > 1);
     do {
         int64_t mvxi = mvx, mvyi = mvy;
@@ -2349,12 +2354,22 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
 static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                 refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
                                 refmvs_temporal_block *t_src, const int bw4, int bh4,
-                                int64_t mvy1, int64_t mvx1, int64_t mvy2, int64_t mvx2,
                                 const int32_t *const matrix1,
                                 const int32_t *const matrix2, const int t_swap,
                                 const uint8_t *mask, const int w_swap)
 {
+    const int bx = s_src->bx4, by = s_src->by4;
+    int64_t mvx1 = (int64_t) (matrix1[2] - 0x10000) * (bx + 1) * 4 +
+                   (int64_t) matrix1[3] * (by + 1) * 4 + matrix1[0];
+    int64_t mvy1 = (int64_t) matrix1[4] * (bx + 1) * 4 + matrix1[1] +
+                   (int64_t) (matrix1[5] - 0x10000) * (by + 1) * 4;
+    int64_t mvx2 = (int64_t) (matrix2[2] - 0x10000) * (bx + 1) * 4 +
+                   (int64_t) matrix2[3] * (by + 1) * 4 + matrix2[0];
+    int64_t mvy2 = (int64_t) matrix2[4] * (bx + 1) * 4 + matrix2[1] +
+                   (int64_t) (matrix2[5] - 0x10000) * (by + 1) * 4;
+
     assert(bw4 > 1 && bh4 > 1);
+    assert(!mask || (bw4 <= 16 && bh4 <= 16));
     do {
         int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
         for (int x = 0; x < bw4; x += 2) {
@@ -2391,6 +2406,7 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
             if (t_dst) {
                 if (t_src->mv.mv[0].n == INVALID_TRAJ) {
                     if (t_src->mv.mv[1].n == INVALID_TRAJ) {
+                        t_dst[x >> 1].mv.n = INVALID_TRAJ * 0x10001U;
                         t_dst[x >> 1].ref.pair = -1;
                     } else {
                         t_dst[x >> 1].mv.n = t_src->mv.mv[1].n * 0x10001U;

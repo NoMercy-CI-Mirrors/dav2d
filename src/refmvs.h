@@ -161,14 +161,13 @@ typedef decl_splat_mv_fn(*splat_mv_fn);
 void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
             refmvs_temporal_block *t_src, int bw4, int bh4, \
-            int64_t mvy, int64_t mvx, const int32_t *const matrix)
+            const int32_t *const matrix)
 typedef decl_splat_warpmv_fn(*splat_warpmv_fn);
 
 #define decl_splat_comp_warpmv_fn(name) \
 void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
             refmvs_temporal_block *t_src, int bw4, int bh4, \
-            int64_t mvy1, int64_t mvx1, int64_t mvy2, int64_t mvx2, \
             const int32_t *const matrix1, const int32_t *const matrix2, \
             int t_swap, const uint8_t *wedge, int w_mask)
 typedef decl_splat_comp_warpmv_fn(*splat_comp_warpmv_fn);

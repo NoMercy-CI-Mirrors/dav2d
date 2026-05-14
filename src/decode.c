@@ -564,25 +564,20 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
          f->frame_hdr->gmv.m[b->ref.ref[0]].type > DAV2D_WM_TYPE_TRANSLATION))
     {
         assert(bw4 > 1 && bh4 > 1);
-        const Dav2dWarpedMotionParams *wm;
+        const int32_t *mat;
         if (b->motion_mode > MM_INTERINTRA) {
             s_src.lmv[0] = b->mv[0];
             s_src.lmv[1].y = INVALID_MV;
             s_src.mf = 2;
-            wm = &t->warpmv[0];
-            memcpy(s_src.m, wm->matrix, sizeof(int32_t) * 6);
+            mat = t->warpmv[0].matrix;
+            memcpy(s_src.m, mat, sizeof(int32_t) * 6);
         } else {
             s_src.mv[0] = b->mv[0];
             s_src.mf = 1;
-            wm = &f->frame_hdr->gmv.m[b->ref.ref[0]];
+            mat = f->frame_hdr->gmv.m[b->ref.ref[0]].matrix;
         }
-        const int32_t *const mat = wm->matrix;
-        const int64_t mvx = (int64_t) (mat[2] - 0x10000) * (t->bx + 1) * 4 +
-                            (int64_t) mat[3] * (t->by + 1) * 4 + mat[0];
-        const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 + mat[1] +
-                            (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
         f->c->refmvs_dsp.splat_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
-                                      bw4, bh4, mvy, mvx, wm->matrix);
+                                      bw4, bh4, mat);
     } else {
         s_src.mv[0] = b->mv[0];
         s_src.mf = b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1;
@@ -654,34 +649,22 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
           f->frame_hdr->gmv.m[b->ref.ref[1]].type > DAV2D_WM_TYPE_TRANSLATION)))
     {
         assert(bw4 > 1 && bh4 > 1);
-        const Dav2dWarpedMotionParams *wm1, *wm2;
+        const int32_t *mat1, *mat2;
         if (b->motion_mode > MM_INTERINTRA) {
             COPY2MV(s_src.lmv, b->mv);
             s_src.mf |= 2;
-            wm1 = &t->warpmv[0];
-            wm2 = &t->warpmv[1];
-            memcpy(s_src.m, wm1->matrix, sizeof(int32_t) * 6);
+            mat1 = t->warpmv[0].matrix;
+            mat2 = t->warpmv[1].matrix;
+            memcpy(s_src.m, mat1, sizeof(int32_t) * 6);
         } else {
             COPY2MV(s_src.mv, b->mv);
             s_src.mf |= 1;
-            wm1 = &f->frame_hdr->gmv.m[b->ref.ref[0]];
-            wm2 = &f->frame_hdr->gmv.m[b->ref.ref[1]];
+            mat1 = f->frame_hdr->gmv.m[b->ref.ref[0]].matrix;
+            mat2 = f->frame_hdr->gmv.m[b->ref.ref[1]].matrix;
         }
-        const int32_t *const mat1 = wm1->matrix;
-        const int32_t *const mat2 = wm2->matrix;
-        const int64_t mvx1 = (int64_t) (mat1[2] - 0x10000) * (t->bx + 1) * 4 +
-                             (int64_t) mat1[3] * (t->by + 1) * 4 + mat1[0];
-        const int64_t mvy1 = (int64_t) mat1[4] * (t->bx + 1) * 4 + mat1[1] +
-                             (int64_t) (mat1[5] - 0x10000) * (t->by + 1) * 4;
-        const int64_t mvx2 = (int64_t) (mat2[2] - 0x10000) * (t->bx + 1) * 4 +
-                             (int64_t) mat2[3] * (t->by + 1) * 4 + mat2[0];
-        const int64_t mvy2 = (int64_t) mat2[4] * (t->bx + 1) * 4 + mat2[1] +
-                             (int64_t) (mat2[5] - 0x10000) * (t->by + 1) * 4;
-        // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
         f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
-                                           bw4, bh4, mvy1, mvx1, mvy2, mvx2,
-                                           wm1->matrix, wm2->matrix, t_swap,
-                                           mask, mask ? b->wedge_sign ^ t_swap : 0);
+                                           bw4, bh4, mat1, mat2, t_swap, mask,
+                                           mask ? b->wedge_sign ^ t_swap : 0);
     } else {
         COPY2MV(s_src.mv, b->mv);
         s_src.mf |= b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1;
