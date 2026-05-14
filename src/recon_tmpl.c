@@ -459,7 +459,9 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             *txtp = DCT_DCT;
         } else if (b->fsc) {
             *txtp = IDTX;
-        } else if (!eob /* dc-only */ || tx == (enum RectTxfmSize)TX_32X32) {
+        } else if (!eob /* dc-only */ || tx == (enum RectTxfmSize)TX_32X32 ||
+                   f->frame_hdr->reduced_txtp_set == 2 /* ext_tx_set_dct_idtx */)
+        {
             *txtp = DCT_DCT;
         } else if (t_dim->max >= TX_32X32 /* {64,32}x{16,8,4} */) {
             // long64/32
@@ -469,9 +471,6 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             const int short_idx = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                                       ts->cdf.m.txtp_intra_short_1d[t_dim->min], 3);
             *txtp = txtp_long_tbl[long_dct][t_dim->w < t_dim->h][short_idx];
-        } else if (f->frame_hdr->reduced_txtp_set == 2) {
-            // ext_tx_set_dct_idtx
-            *txtp = DCT_DCT;
         } else {
             // ext_new_tx_set
             const int sz_ctx = (t_dim->lw + t_dim->lh) >> 1;
