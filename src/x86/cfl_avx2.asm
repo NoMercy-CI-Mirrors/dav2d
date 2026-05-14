@@ -679,10 +679,10 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
 .top.f0.w32:
     mova                   xm6, [ytop0q+32]
     mova                  xm10, [ytop0q+48]
-    mova                   xm5, [utopq+16]
-    mova                   xm3, [utopq+ 0]
-    mova                    m2, [ytop0q]
-    mova                    m4, [ytop1q]
+    movu                   xm5, [utopq+16]
+    movu                   xm3, [utopq+ 0]
+    movu                    m2, [ytop0q]
+    movu                    m4, [ytop1q]
     vinserti128             m6, [ytop1q+32], 1
     vinserti128            m10, [ytop1q+48], 1
     vinserti128             m5, [vtopq+16], 1
@@ -852,8 +852,8 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
 .top.f1.w16:
     vbroadcasti128         m12, [base+lshuf8]
     movu                   xm3, [utopq]
-    mova                   xm2, [ytop0q+ 0]
-    mova                   xm4, [ytop0q+16]
+    movu                   xm2, [ytop0q+ 0]
+    movu                   xm4, [ytop0q+16]
     vinserti128             m2, [ytop1q+ 0], 1
     vinserti128             m4, [ytop1q+16], 1
     vinserti128             m3, [vtopq], 1
@@ -882,7 +882,7 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
     mova                   xm3, [ytop0q+16]
     mova                   xm4, [ytop0q+32]
     mova                   xm6, [ytop0q+48]
-    mova                   xm5, [utopq+16]
+    movu                   xm5, [utopq+16]
     vinserti128             m2, [ytop1q+ 0], 1
     vinserti128             m3, [ytop1q+16], 1
     vinserti128             m4, [ytop1q+32], 1
@@ -897,7 +897,7 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
     psrlw                  m10, m15, 8
     REPX         {pand x, m10}, m11, m12, m13
     paddw                   m2, m3
-    mova                   xm3, [utopq+ 0]
+    movu                   xm3, [utopq+ 0]
     vinserti128             m3, [vtopq+ 0], 1
     paddw                   m2, m11
     paddw                   m4, m12
@@ -1142,8 +1142,8 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
  INIT_YMM avx2
     movu                    m4, [ytopaq]
     movu                    m6, [ytop1q]
-    mova                   xm2, [ytop0q+ 0]
-    mova                  xm12, [ytop0q+16]
+    movu                   xm2, [ytop0q+ 0]
+    movu                  xm12, [ytop0q+16]
     movu                   xm3, [utopq]
     vinserti128             m3, [vtopq], 1
     psrlw                  m13, m15, 8
@@ -1175,7 +1175,7 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
     mova                   xm5, [ytop0q+48]
     mova                   xm6, [ytopaq+32]
     mova                  xm10, [ytopaq+48]
-    mova                   xm2, [utopq+16]
+    movu                   xm2, [utopq+16]
     vinserti128             m6, [ytop1q+32], 1
     vinserti128            m10, [ytop1q+48], 1
     vinserti128             m2, [vtopq+16], 1
@@ -1190,8 +1190,8 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
     paddw                   m4, m6
     paddw                   m5, m10
     mova                  xm10, [ytop0q]
-    mova                   m11, [ytopaq]
-    mova                   m12, [ytop1q]
+    movu                   m11, [ytopaq]
+    movu                   m12, [ytop1q]
     test                 wpadd, wpadd
     jnz .top.f2.w32.pad
 .top.f2.w32.acc:
@@ -1202,7 +1202,7 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
     REPX        {pand x,  m13}, m11, m12
     REPX        {pand x, xm13}, xm6, xm5
     paddw                  m11, m12
-    mova                  xm12, [utopq]
+    movu                  xm12, [utopq]
     vinserti128            m12, [vtopq], 1
     paddw                   m4, m11
     vextracti128          xm11, m4, 1
@@ -1570,7 +1570,7 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
     jmp .ret
 .pred_uv.w32.wpad:
     pshufb                  m2, m11
-    mova         [udstq+t0-16], xm2
+    movu         [udstq+t0-16], xm2
     vextracti128 [vdstq+t0-16], m2, 1
     mov                     t3, t4
     cmp                  wpadd, 15
@@ -1578,7 +1578,7 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
     psrldq                  m2, 15
     pxor                    m7, m7
     pshufb                  m2, m7
-    mova            [udstq+t0], xm2
+    movu            [udstq+t0], xm2
     vextracti128    [vdstq+t0], m2, 1
     jmp .pred_uv.w32.next_row
 .pred_uv.w32:
@@ -1598,7 +1598,7 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
     add                    t0d, 16
     cmp                    t0d, wd
     ja .pred_uv.w32.wpad
-    mova         [udstq+t0-16], xm2
+    movu         [udstq+t0-16], xm2
     vextracti128 [vdstq+t0-16], m2, 1
     jb .pred_uv.w32.loop
 .pred_uv.w32.next_row:
@@ -1919,13 +1919,13 @@ cglobal cfl_explicit_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, \
     pxor                   xm7, xm7
     vbroadcasti128          m3, [ysrcq+ystrideq*0+ 0]
     vbroadcasti128          m2, [ysrcq+ystrideq*0+16]
-    mova                    m6, [ysrcq+ystrideq*1]      ; b
+    movu                    m6, [ysrcq+ystrideq*1]      ; b
     palignr                 m4, m2, m3, 15
     palignr                xm5, xm3, xm15, 15           ; l low
     mova                  xm15, xm2
     vpblendd                m3, m2, 0xf0                ; c/r
     vpblendd                m5, m4, 0xf0                ; l
-    mova                    m2, [ysrcq+t2]              ; t
+    movu                    m2, [ysrcq+t2]              ; t
     pmaddubsw               m3, m14
     pcmpeqw                 m7, m7
     psrlw                   m7, 8

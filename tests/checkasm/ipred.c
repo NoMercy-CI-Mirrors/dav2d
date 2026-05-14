@@ -215,7 +215,7 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                         flags |= (alpha_v * (1 << CFL_ALPHA_V_SHIFT)) & CFL_ALPHA_V_MASK;
                                     }
 
-                                    const int unaligned_offset = imax(w / 2, 4);
+                                    const int unaligned_offset = imax(w / 4, 4);
                                     c_y = c_y0 + (unaligned_offset << ss_hor);
                                     a_y = a_y0 + (unaligned_offset << ss_hor);
                                     c_u = c_u0 + unaligned_offset;
