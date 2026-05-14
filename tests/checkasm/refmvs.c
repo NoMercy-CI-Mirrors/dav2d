@@ -418,6 +418,87 @@ static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
     report("splat_warpmv");
 }
 
+static void check_splat_comp_warpmv(const Dav2dRefmvsDSPContext *const c) {
+    ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
+    refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
+    ALIGN_STK_64(refmvs_block, s_src, 1,);
+    ALIGN_STK_64(refmvs_temporal_block, c_t_dst, 32 * 32,);
+    ALIGN_STK_64(refmvs_temporal_block, a_t_dst, 32 * 32,);
+    refmvs_temporal_block t_src;
+
+    declare_func(void, refmvs_block *s_dst, refmvs_block *s_src,
+                 refmvs_temporal_block *t_dst, ptrdiff_t t_stride,
+                 refmvs_temporal_block *t_src, int bw4, int bh4,
+                 const int32_t *matrix1, const int32_t *matrix2,
+                 intptr_t t_swap, const uint8_t *wedge, intptr_t w_mask);
+
+    for (int g = 0; g < 2; g++)
+        for (int t = 0; t < 2; t++) {
+            for (int w = 2; w <= 64; w *= 2) {
+                if (check_func(c->splat_comp_warpmv, "splat_%s_comp_warp%smv_w%d",
+                               t ? "spatialtemporal" : "spatial",
+                               g ? "global" : "", w * 4))
+                {
+                    const int h_min = w <= 16 ? 2 : w >> 1;
+                    const int h_max = w < 16 ? 16 : imin(w * 2, 64);
+                    for (int h = h_min; h <= h_max; h *= 2) {
+                        const int t_swap = rnd() & 1;
+                        const int wide = rnd() & 1;
+
+                        s_src[0].ref.ref[0] = t_src.ref.ref[t_swap] = rnd() % 7;
+                        s_src[0].ref.ref[1] = t_src.ref.ref[!t_swap] = rnd() % 7;
+                        for (int n = 0; n < 2; n++) {
+                            // increase chance that quantized temporal MV is invalid
+                            s_src[0].mv[n].y = wide ? gen_mv(8, 12) : gen_mv(17, 3);
+                            s_src[0].mv[n].x = gen_mv(17, 3);
+                        }
+                        if (!g) {
+                            COPY2MV(s_src[0].lmv, s_src[0].mv);
+                        }
+                        s_src[0].mf = (rnd() & 0xfc) | (!g << 1) | g;
+                        s_src[0].bs = bs_from_bwh4(w, h);
+                        s_src[0].bx4 = rnd() & (0xffff >> (!wide * 8));
+                        s_src[0].by4 = rnd() & (0xffff >> (!wide * 8));
+                        const int widx = rnd() % 68;
+                        const uint8_t *const mask = w <= 16 && h <= 16 && rnd() & 1 ?
+                            WEDGE_TMVP(s_src[0].bs, w, h, widx) : NULL;
+                        const int w_swap = mask && rnd() & 1;
+
+                        int32_t matrix[6], *const mat[2] = { s_src[0].m, matrix };
+                        const int range = 0x3ff >> (!wide * 4);
+                        const int bias = 0x1ff >> (!wide * 4);
+                        for (int n = 0; n < 2; n++) {
+                            mat[n][0] = s_src[0].mv[n].x * (1 << 13);
+                            mat[n][1] = s_src[0].mv[n].y * (1 << 13);
+                            mat[n][2] = (((rnd() % range) - bias) * (1 << 6)) | 0x10000;
+                            mat[n][3] =  ((rnd() % range) - bias) * (1 << 6);
+                            mat[n][4] =  ((rnd() % range) - bias) * (1 << 6);
+                            mat[n][5] = (((rnd() % range) - bias) * (1 << 6)) | 0x10000;
+                        }
+
+                        const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
+
+                        call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src,
+                                 w, h, mat[0], mat[1], t_swap, mask, w_swap);
+                        call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src,
+                                 w, h, mat[0], mat[1], t_swap, mask, w_swap);
+
+                        if (!check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, !g) && t) {
+                            check_temporal_mv(&c_t_dst[t_off], 32,
+                                              &a_t_dst[t_off], 32, w, h);
+                        }
+
+                        if (w == h) {
+                            bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 32, &t_src,
+                                      w, h, mat[0], mat[1], t_swap, mask, w_swap);
+                        }
+                    }
+                }
+            }
+        }
+    report("splat_comp_warpmv");
+}
+
 static void check_splat_comp_wedgemv(const Dav2dRefmvsDSPContext *const c) {
     ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
     refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
@@ -484,5 +565,6 @@ void checkasm_check_refmvs(void) {
 
     check_splat_mv(&c);
     check_splat_warpmv(&c);
+    check_splat_comp_warpmv(&c);
     check_splat_comp_wedgemv(&c);
 }
