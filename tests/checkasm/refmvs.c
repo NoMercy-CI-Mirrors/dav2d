@@ -347,6 +347,77 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
     report("splat_mv");
 }
 
+static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
+    ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
+    refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
+    ALIGN_STK_64(refmvs_block, s_src, 1,);
+    ALIGN_STK_64(refmvs_temporal_block, c_t_dst, 32 * 32,);
+    ALIGN_STK_64(refmvs_temporal_block, a_t_dst, 32 * 32,);
+    refmvs_temporal_block t_src;
+
+    declare_func(void, refmvs_block *s_dst, refmvs_block *s_src,
+                 refmvs_temporal_block *t_dst, ptrdiff_t t_stride,
+                 refmvs_temporal_block *t_src, int bw4, int bh4,
+                 const int32_t *matrix);
+
+    for (int g = 0; g < 2; g++)
+        for (int t = 0; t < 2; t++) {
+            for (int w = 2; w <= 64; w *= 2) {
+                if (check_func(c->splat_warpmv, "splat_%s_warp%smv_w%d",
+                               t ? "spatialtemporal" : "spatial",
+                               g ? "global" : "", w * 4))
+                {
+                    const int h_min = w <= 16 ? 2 : w >> 1;
+                    const int h_max = w < 16 ? 16 : imin(w * 2, 64);
+                    for (int h = h_min; h <= h_max; h *= 2) {
+                        const int wide = rnd() & 1;
+                        s_src[0].ref.ref[0] = rnd() % 7;
+                        t_src.ref.pair = 0x101 * s_src[0].ref.ref[0];
+                        s_src[0].ref.ref[1] = -1;
+                        // increase chance that quantized temporal MV is invalid
+                        s_src[0].mv[0].y = wide ? gen_mv(8, 12) : gen_mv(17, 3);
+                        s_src[0].mv[0].x = gen_mv(17, 3);
+                        s_src[0].mv[1].y = INVALID_MV;
+                        if (!g) {
+                            COPY2MV(s_src[0].lmv, s_src[0].mv);
+                        }
+                        s_src[0].mf = (rnd() & 0xfc) | (!g << 1) | g;
+                        s_src[0].bs = bs_from_bwh4(w, h);
+                        s_src[0].bx4 = rnd() & (0xffff >> (!wide * 8));
+                        s_src[0].by4 = rnd() & (0xffff >> (!wide * 8));
+                        int32_t *const mat = s_src[0].m;
+                        mat[0] = s_src[0].mv[0].x * (1 << 13);
+                        mat[1] = s_src[0].mv[0].y * (1 << 13);
+                        const int range = 0x3ff >> (!wide * 4);
+                        const int bias = 0x1ff >> (!wide * 4);
+                        mat[2] = (((rnd() % range) - bias) * (1 << 6)) | 0x10000;
+                        mat[3] =  ((rnd() % range) - bias) * (1 << 6);
+                        mat[4] =  ((rnd() % range) - bias) * (1 << 6);
+                        mat[5] = (((rnd() % range) - bias) * (1 << 6)) | 0x10000;
+
+                        const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
+
+                        call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src,
+                                 w, h, mat);
+                        call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src,
+                                 w, h, mat);
+
+                        if (!check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, !g) && t) {
+                            check_temporal_mv(&c_t_dst[t_off], 32,
+                                              &a_t_dst[t_off], 32, w, h);
+                        }
+
+                        if (w == h) {
+                            bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 32, &t_src,
+                                      w, h, mat);
+                        }
+                    }
+                }
+            }
+        }
+    report("splat_warpmv");
+}
+
 static void check_splat_comp_wedgemv(const Dav2dRefmvsDSPContext *const c) {
     ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
     refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
@@ -412,5 +483,6 @@ void checkasm_check_refmvs(void) {
     dav2d_refmvs_dsp_init(&c);
 
     check_splat_mv(&c);
+    check_splat_warpmv(&c);
     check_splat_comp_wedgemv(&c);
 }
