@@ -2355,8 +2355,8 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                 refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
                                 refmvs_temporal_block *t_src, const int bw4, int bh4,
                                 const int32_t *const matrix1,
-                                const int32_t *const matrix2, const int t_swap,
-                                const uint8_t *mask, const int w_swap)
+                                const int32_t *const matrix2, const intptr_t t_swap,
+                                const uint8_t *mask, const intptr_t w_swap)
 {
     const int bx = s_src->bx4, by = s_src->by4;
     int64_t mvx1 = (int64_t) (matrix1[2] - 0x10000) * (bx + 1) * 4 +
@@ -2441,7 +2441,7 @@ static void splat_comp_wedgemv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                  refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
                                  refmvs_temporal_block *const t_src,
                                  const int bw4, int bh4, const uint8_t *mask,
-                                 const int w_swap)
+                                 const intptr_t w_swap)
 {
     assert(bw4 > 1 && bh4 > 1 && mask);
     do {
