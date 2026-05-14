@@ -27,6 +27,7 @@
 #include "tests/checkasm/internal.h"
 #include "common/attributes.h"
 #include "src/refmvs.h"
+#include "src/wedge.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,7 +61,8 @@ static int check_spatial_mv(const refmvs_block *a, const ptrdiff_t as,
             if (memcmp(&a[y * as + x], &b[y * bs + x],
                        is_warp ? sizeof(refmvs_block) : offsetof(refmvs_block, lmv)))
             {
-                printf("spatial %dx%d,y4=%d,x4=%d\n", w * 4, h * 4, y, x);
+                if (fail())
+                    printf("spatial %dx%d,y4=%d,x4=%d\n", w * 4, h * 4, y, x);
                 return 1;
             }
     return 0;
@@ -74,7 +76,17 @@ static int check_temporal_mv(const refmvs_temporal_block *a, const ptrdiff_t as,
     for (int y = 0; y < th; y++)
         for (int x = 0; x < tw; x++)
             if (memcmp(&a[y * as + x], &b[y * bs + x], sizeof(refmvs_temporal_block))) {
-                fprintf(stderr, "temporal %dx%d,y8=%d,x8=%d\n", w, h, y, x);
+                if (fail()) {
+                    fprintf(stderr, "temporal %dx%d,y8=%d,x8=%d\n", w, h, y, x);
+                    fprintf(stderr, "c: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d\n",
+                            a[y * as + x].mv.mv[0].y, a[y * as + x].mv.mv[0].x,
+                            a[y * as + x].mv.mv[1].y, a[y * as + x].mv.mv[1].x,
+                            a[y * as + x].ref.ref[0], a[y * as + x].ref.ref[1]);
+                    fprintf(stderr, "simd: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d\n",
+                            b[y * bs + x].mv.mv[0].y, b[y * bs + x].mv.mv[0].x,
+                            b[y * bs + x].mv.mv[1].y, b[y * bs + x].mv.mv[1].x,
+                            b[y * bs + x].ref.ref[0], b[y * bs + x].ref.ref[1]);
+                }
                 return 1;
             }
     return 0;
@@ -282,8 +294,8 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
             if (check_func(c->splat_mv, "splat_%s_mv_w%d",
                            t ? "spatialtemporal" : "spatial", w * 4))
             {
-                const int h_min = w <= 16 ? 1 : 16;
-                const int h_max = w < 16 ? 16 : 64;
+                const int h_min = w <= 16 ? 1 : w >> 1;
+                const int h_max = w < 16 ? 16 : imin(w * 2, 64);
                 for (int h = h_min; h <= h_max; h *= 2) {
                     s_src[0].ref.ref[0] = (rnd() & 7) - 1;
                     s_src[0].ref.ref[1] = s_src[0].ref.ref[0] == -1 ? -1 : (rnd() & 7) - 1;
@@ -295,23 +307,34 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
                             s_src[0].mv[n].x = gen_mv(17, 3);
                         }
                     }
-                    s_src[0].mf = rnd() & 0xfe;
+                    s_src[0].mf = rnd() & 0xfd;
                     s_src[0].bs = bs_from_bwh4(w, h);
                     s_src[0].bx4 = rnd() & 0xffff;
                     s_src[0].by4 = rnd() & 0xffff;
 
-                    t_src.ref.pair = s_src[0].ref.pair;
-                    t_src.mv.n = rnd();
+                    t_src.mv.mv[0] = quantize_mv(s_src[0].mv[0]);
+                    t_src.mv.mv[1] = quantize_mv(s_src[0].mv[1]);
+                    if (t_src.mv.mv[0].n == INVALID_TRAJ) {
+                        if (t_src.mv.mv[1].n == INVALID_TRAJ) {
+                            t_src.ref.pair = -1;
+                        } else {
+                            t_src.mv.mv[0] = t_src.mv.mv[1];
+                            t_src.ref.ref[0] = t_src.ref.ref[1];
+                        }
+                    } else if (t_src.mv.mv[1].n == INVALID_TRAJ) {
+                        t_src.mv.mv[1] = t_src.mv.mv[0];
+                        t_src.ref.ref[1] = t_src.ref.ref[0];
+                    } else {
+                        t_src.ref.pair = s_src[0].ref.pair;
+                    }
                     const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
                     call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src, w, h);
                     call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src, w, h);
 
-                    if (check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, 0) ||
-                        (t && check_temporal_mv(&c_t_dst[t_off], 32,
-                                                &a_t_dst[t_off], 32, w, h)))
-                    {
-                        fail();
+                    if (!check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, 0) && t) {
+                        check_temporal_mv(&c_t_dst[t_off], 32,
+                                          &a_t_dst[t_off], 32, w, h);
                     }
 
                     if (w == h) {
@@ -324,9 +347,70 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
     report("splat_mv");
 }
 
+static void check_splat_comp_wedgemv(const Dav2dRefmvsDSPContext *const c) {
+    ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
+    refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
+    ALIGN_STK_64(refmvs_block, s_src, 1,);
+    ALIGN_STK_64(refmvs_temporal_block, c_t_dst, 32 * 32,);
+    ALIGN_STK_64(refmvs_temporal_block, a_t_dst, 32 * 32,);
+    refmvs_temporal_block t_src;
+
+    declare_func(void, refmvs_block *s_dst, refmvs_block *s_src,
+                 refmvs_temporal_block *t_dst, ptrdiff_t t_stride,
+                 refmvs_temporal_block *t_src, int bw4, int bh4,
+                 const uint8_t *wedge, intptr_t w_mask);
+
+    for (int t = 0; t < 2; t++) {
+        for (int w = 2; w <= 16; w *= 2) {
+            if (check_func(c->splat_comp_wedgemv, "splat_%s_comp_wedgemv_w%d",
+                           t ? "spatialtemporal" : "spatial", w * 4))
+            {
+                for (int h = 2; h <= 16; h *= 2) {
+                    s_src[0].ref.ref[0] = rnd() % 7;
+                    s_src[0].ref.ref[1] = rnd() % 7;
+                    for (int n = 0; n < 2; n++) {
+                        // increase chance that quantized temporal MV is invalid
+                        s_src[0].mv[n].y = rnd() & 1 ? gen_mv(8, 12) : gen_mv(17, 3);
+                        s_src[0].mv[n].x = gen_mv(17, 3);
+                    }
+                    s_src[0].mf = rnd() & 0xfd;
+                    s_src[0].bs = bs_from_bwh4(w, h);
+                    s_src[0].bx4 = rnd() & 0xffff;
+                    s_src[0].by4 = rnd() & 0xffff;
+                    const int widx = rnd() % 68;
+                    const uint8_t *const mask = WEDGE_TMVP(s_src[0].bs, w, h, widx);
+                    const int w_swap = rnd() & 1;
+
+                    t_src.ref.pair = s_src[0].ref.pair;
+                    t_src.mv.mv[0] = quantize_mv(s_src[0].mv[0]);
+                    t_src.mv.mv[1] = quantize_mv(s_src[0].mv[1]);
+                    const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
+
+                    call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src,
+                             w, h, mask, w_swap);
+                    call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src,
+                             w, h, mask, w_swap);
+
+                    if (!check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, 0) && t) {
+                        check_temporal_mv(&c_t_dst[t_off], 32,
+                                          &a_t_dst[t_off], 32, w, h);
+                    }
+
+                    if (w == h) {
+                        bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 32, &t_src,
+                                  w, h, mask, w_swap);
+                    }
+                }
+            }
+        }
+    }
+    report("splat_comp_wedgemv");
+}
+
 void checkasm_check_refmvs(void) {
     Dav2dRefmvsDSPContext c;
     dav2d_refmvs_dsp_init(&c);
 
     check_splat_mv(&c);
+    check_splat_comp_wedgemv(&c);
 }

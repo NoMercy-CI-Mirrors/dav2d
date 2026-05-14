@@ -2443,7 +2443,7 @@ static void splat_comp_wedgemv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                  const int bw4, int bh4, const uint8_t *mask,
                                  const intptr_t w_swap)
 {
-    assert(bw4 > 1 && bh4 > 1 && mask);
+    assert(bw4 > 1 && bh4 > 1 && bw4 <= 16 && bh4 <= 16 && mask);
     do {
         for (int x = 0; x < bw4; x += 2) {
             if (x >= bw4 - 3)
