@@ -345,10 +345,11 @@ static void check_save_tmvs(const Dav2dRefmvsDSPContext *const c) {
 #endif
 
 static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
-    ALIGN_STK_64(refmvs_block, c_s_dst, 64 * 128,);
-    ALIGN_STK_64(refmvs_block, a_s_dst, 64 * 128,);
+    ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
+    refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
     ALIGN_STK_64(refmvs_block, s_src, 1,);
-    refmvs_temporal_block c_t_dst[32 * 64], a_t_dst[32 * 64];
+    ALIGN_STK_64(refmvs_temporal_block, c_t_dst, 32 * 32,);
+    ALIGN_STK_64(refmvs_temporal_block, a_t_dst, 32 * 32,);
     refmvs_temporal_block t_src;
 
     declare_func(void, refmvs_block *s_dst, refmvs_block *s_src,
@@ -380,15 +381,20 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
 
                     t_src.ref.pair = s_src[0].ref.pair;
                     t_src.mv.n = rnd();
+                    const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
-                    call_ref(c_s_dst, s_src, t ? c_t_dst : NULL, 64, &t_src, w, h);
-                    call_new(a_s_dst, s_src, t ? a_t_dst : NULL, 64, &t_src, w, h);
+                    call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src, w, h);
+                    call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src, w, h);
 
-                    if (check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, 0)) fail();
-                    if (t && check_temporal_mv(c_t_dst, 64, a_t_dst, 64, w, h)) fail();
+                    if (check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, 0) ||
+                        (t && check_temporal_mv(&c_t_dst[t_off], 32,
+                                                &a_t_dst[t_off], 32, w, h)))
+                    {
+                        fail();
+                    }
 
                     if (w == h) {
-                        bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 64, &t_src, w, h);
+                        bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 32, &t_src, w, h);
                     }
                 }
             }
