@@ -582,7 +582,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
         const int64_t mvy = (int64_t) mat[4] * (t->bx + 1) * 4 + mat[1] +
                             (int64_t) (mat[5] - 0x10000) * (t->by + 1) * 4;
         f->c->refmvs_dsp.splat_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
-                                      mvy, mvx, wm->matrix, bw4, bh4);
+                                      bw4, bh4, mvy, mvx, wm->matrix);
     } else {
         s_src.mv[0] = b->mv[0];
         s_src.mf = b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1;
@@ -679,8 +679,8 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
                              (int64_t) (mat2[5] - 0x10000) * (t->by + 1) * 4;
         // FIXME for compound-warp_causal-newmv^2, do we need a 2nd matrix?
         f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
-                                           mvy1, mvx1, mvy2, mvx2,
-                                           wm1->matrix, wm2->matrix, bw4, bh4, t_swap,
+                                           bw4, bh4, mvy1, mvx1, mvy2, mvx2,
+                                           wm1->matrix, wm2->matrix, t_swap,
                                            mask, mask ? b->wedge_sign ^ t_swap : 0);
     } else {
         COPY2MV(s_src.mv, b->mv);

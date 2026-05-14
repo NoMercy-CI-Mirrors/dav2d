@@ -2306,10 +2306,8 @@ static void splat_mv_c(refmvs_block *s_dst, refmvs_block *const s_src,
 
 static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                            refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
-                           refmvs_temporal_block *const t_src,
-                           int64_t mvy, int64_t mvx,
-                           const int32_t *const matrix,
-                           const int bw4, int bh4)
+                           refmvs_temporal_block *const t_src, const int bw4, int bh4,
+                           int64_t mvy, int64_t mvx, const int32_t *const matrix)
 {
     assert(bw4 > 1 && bh4 > 1);
     do {
@@ -2350,11 +2348,10 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
 
 static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                 refmvs_temporal_block *t_dst, const ptrdiff_t t_stride,
-                                refmvs_temporal_block *t_src, int64_t mvy1, int64_t mvx1,
-                                int64_t mvy2, int64_t mvx2,
+                                refmvs_temporal_block *t_src, const int bw4, int bh4,
+                                int64_t mvy1, int64_t mvx1, int64_t mvy2, int64_t mvx2,
                                 const int32_t *const matrix1,
-                                const int32_t *const matrix2,
-                                const int bw4, int bh4, const int t_swap,
+                                const int32_t *const matrix2, const int t_swap,
                                 const uint8_t *mask, const int w_swap)
 {
     assert(bw4 > 1 && bh4 > 1);
