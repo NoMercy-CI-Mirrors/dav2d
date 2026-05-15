@@ -107,7 +107,6 @@ if is_asm_enabled
                     'arm/64/cdef.S',
                     'arm/64/filmgrain.S',
                     'arm/64/ipred.S',
-                    'arm/64/loopfilter.S',
                     'arm/64/mc.S',
                     'arm/64/mc_dotprod.S',
                 )
@@ -119,7 +118,6 @@ if is_asm_enabled
                     'arm/64/filmgrain16.S',
                     'arm/64/ipred16.S',
                     'arm/64/itx16.S',
-                    'arm/64/loopfilter16.S',
                     'arm/64/mc16.S',
                     'arm/64/mc16_sve.S',
                 )
@@ -137,7 +135,6 @@ if is_asm_enabled
                     'arm/32/cdef.S',
                     'arm/32/filmgrain.S',
                     'arm/32/ipred.S',
-                    'arm/32/loopfilter.S',
                     'arm/32/mc.S',
                 )
             endif
@@ -148,7 +145,6 @@ if is_asm_enabled
                     'arm/32/filmgrain16.S',
                     'arm/32/ipred16.S',
                     'arm/32/itx16.S',
-                    'arm/32/loopfilter16.S',
                     'arm/32/mc16.S',
                 )
             endif
@@ -180,7 +176,6 @@ if is_asm_enabled
                 'x86/cdef_avx512.asm',
                 'x86/filmgrain_avx512.asm',
                 'x86/ipred_avx512.asm',
-                'x86/loopfilter_avx512.asm',
                 'x86/mc_avx512.asm',
                 'x86/stx_avx512.asm',
                 'x86/filmgrain_avx2.asm',
@@ -192,7 +187,6 @@ if is_asm_enabled
                 'x86/stx_avx2.asm',
                 'x86/filmgrain_sse.asm',
                 'x86/ipred_sse.asm',
-                'x86/loopfilter_sse.asm',
                 'x86/mc_sse.asm',
             )
         endif
@@ -202,17 +196,14 @@ if is_asm_enabled
                 'x86/cdef16_avx512.asm',
                 'x86/filmgrain16_avx512.asm',
                 'x86/ipred16_avx512.asm',
-                'x86/loopfilter16_avx512.asm',
                 'x86/mc16_avx512.asm',
                 'x86/cdef16_avx2.asm',
                 'x86/filmgrain16_avx2.asm',
                 'x86/ipred16_avx2.asm',
-                'x86/loopfilter16_avx2.asm',
                 'x86/mc16_avx2.asm',
                 'x86/cdef16_sse.asm',
                 'x86/filmgrain16_sse.asm',
                 'x86/ipred16_sse.asm',
-                'x86/loopfilter16_sse.asm',
                 'x86/mc16_sse.asm',
             )
         endif
@@ -228,7 +219,6 @@ if is_asm_enabled
             'loongarch/cdef.S',
             'loongarch/ipred.S',
             'loongarch/mc.S',
-            'loongarch/loopfilter.S',
             'loongarch/msac.S',
             'loongarch/refmvs.S',
             'loongarch/itx.S',
@@ -245,7 +235,6 @@ if is_asm_enabled
         arch_flags += {'pwr9': ['-mcpu=power9', '-DDAV2D_PWR9']}
         libdav2d_arch_tmpl_sources += {'pwr9': files(
 #            'ppc/itx_tmpl.c',
-#            'ppc/loopfilter_tmpl.c',
 #            'ppc/mc_tmpl.c',
         )}
     elif host_machine.cpu_family().startswith('riscv')
