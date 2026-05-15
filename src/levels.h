@@ -271,7 +271,7 @@ enum CompInterType {
 
 typedef union mv {
     struct {
-        int32_t y, x;
+        int32_t x, y;
     };
     uint64_t n;
 } mv;
