@@ -176,7 +176,7 @@ if is_asm_enabled
                 'x86/cdef_avx512.asm',
                 'x86/filmgrain_avx512.asm',
                 'x86/ipred_avx512.asm',
-                'x86/mc_avx512.asm',
+#                'x86/mc_avx512.asm',
                 'x86/stx_avx512.asm',
                 'x86/filmgrain_avx2.asm',
                 'x86/ipred_avx2.asm',
@@ -187,7 +187,7 @@ if is_asm_enabled
                 'x86/stx_avx2.asm',
                 'x86/filmgrain_sse.asm',
                 'x86/ipred_sse.asm',
-                'x86/mc_sse.asm',
+#                'x86/mc_sse.asm',
             )
         endif
 
@@ -196,7 +196,7 @@ if is_asm_enabled
                 'x86/cdef16_avx512.asm',
                 'x86/filmgrain16_avx512.asm',
                 'x86/ipred16_avx512.asm',
-                'x86/mc16_avx512.asm',
+#                'x86/mc16_avx512.asm',
                 'x86/cdef16_avx2.asm',
                 'x86/filmgrain16_avx2.asm',
                 'x86/ipred16_avx2.asm',
@@ -204,7 +204,7 @@ if is_asm_enabled
                 'x86/cdef16_sse.asm',
                 'x86/filmgrain16_sse.asm',
                 'x86/ipred16_sse.asm',
-                'x86/mc16_sse.asm',
+#                'x86/mc16_sse.asm',
             )
         endif
 
@@ -218,7 +218,7 @@ if is_asm_enabled
         libdav2d_sources_asm = files(
             'loongarch/cdef.S',
             'loongarch/ipred.S',
-            'loongarch/mc.S',
+#            'loongarch/mc.S',
             'loongarch/msac.S',
             'loongarch/refmvs.S',
             'loongarch/itx.S',
