@@ -51,20 +51,39 @@ static inline int gen_mv(const int total_bits, int spel_bits) {
     return rnd() & 1 ? -bits : bits;
 }
 
+static void dump_spatial_mv(const char *const tag, const refmvs_block *const a,
+                            const int is_warp)
+{
+    fprintf(stderr, "%s: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d|bs=%d|mf=%d|bx4=%d,by4=%d",
+            tag, a->mv[0].y, a->mv[0].x, a->mv[1].y, a->mv[1].x,
+            a->ref.ref[0], a->ref.ref[1], a->bs, a->mf, a->bx4, a->by4);
+    if (is_warp)
+        fprintf(stderr, "|lmv0=y:%d,x:%d|lmv1=y:%d,x:%d|mat=%d,%d,%d,%d,%d,%d",
+                a->lmv[0].y, a->lmv[0].x, a->lmv[1].y, a->lmv[1].x,
+                a->m[0], a->m[1], a->m[2], a->m[3], a->m[4], a->m[5]);
+    fprintf(stderr, "\n");
+}
+
 static int check_spatial_mv(const refmvs_block *a, const ptrdiff_t as,
                             const refmvs_block *b, const ptrdiff_t bs,
                             const int w, const int h, const int is_warp)
 {
-    for (int y = 0; y < h; y++)
+    for (int y = 0; y < h; y++) {
         // only the right-most 3 columns are filled in, except for the last line
         for (int x = (y + 1 == h ? 0 : imax(w - 3, 0)); x < w; x++)
-            if (memcmp(&a[y * as + x], &b[y * bs + x],
+            if (memcmp(&a[x], &b[x],
                        is_warp ? sizeof(refmvs_block) : offsetof(refmvs_block, lmv)))
             {
-                if (fail())
-                    printf("spatial %dx%d,y4=%d,x4=%d\n", w * 4, h * 4, y, x);
+                if (fail()) {
+                    fprintf(stderr, "spatial %dx%d,y4=%d,x4=%d\n", w * 4, h * 4, y, x);
+                    dump_spatial_mv("c", &a[x], is_warp);
+                    dump_spatial_mv("s", &b[x], is_warp);
+                }
                 return 1;
             }
+        a += as;
+        b += bs;
+    }
     return 0;
 }
 
@@ -73,22 +92,25 @@ static int check_temporal_mv(const refmvs_temporal_block *a, const ptrdiff_t as,
                              const int w, const int h)
 {
     const int th = (h + 1) >> 1, tw = (w + 1) >> 1;
-    for (int y = 0; y < th; y++)
+    for (int y = 0; y < th; y++) {
         for (int x = 0; x < tw; x++)
-            if (memcmp(&a[y * as + x], &b[y * bs + x], sizeof(refmvs_temporal_block))) {
+            if (memcmp(&a[x], &b[x], sizeof(refmvs_temporal_block))) {
                 if (fail()) {
                     fprintf(stderr, "temporal %dx%d,y8=%d,x8=%d\n", w, h, y, x);
                     fprintf(stderr, "c: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d\n",
-                            a[y * as + x].mv.mv[0].y, a[y * as + x].mv.mv[0].x,
-                            a[y * as + x].mv.mv[1].y, a[y * as + x].mv.mv[1].x,
-                            a[y * as + x].ref.ref[0], a[y * as + x].ref.ref[1]);
-                    fprintf(stderr, "simd: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d\n",
-                            b[y * bs + x].mv.mv[0].y, b[y * bs + x].mv.mv[0].x,
-                            b[y * bs + x].mv.mv[1].y, b[y * bs + x].mv.mv[1].x,
-                            b[y * bs + x].ref.ref[0], b[y * bs + x].ref.ref[1]);
+                            a[x].mv.mv[0].y, a[x].mv.mv[0].x,
+                            a[x].mv.mv[1].y, a[x].mv.mv[1].x,
+                            a[x].ref.ref[0], a[x].ref.ref[1]);
+                    fprintf(stderr, "s: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d\n",
+                            b[x].mv.mv[0].y, b[x].mv.mv[0].x,
+                            b[x].mv.mv[1].y, b[x].mv.mv[1].x,
+                            b[x].ref.ref[0], b[x].ref.ref[1]);
                 }
                 return 1;
             }
+        a += as;
+        b += bs;
+    }
     return 0;
 }
 
