@@ -99,7 +99,6 @@ if is_asm_enabled
                 # itx.S is used for both 8 and 16 bpc.
                 'arm/64/itx.S',
                 'arm/64/msac.S',
-                'arm/64/refmvs.S',
             )
 
             if dav2d_bitdepths.contains('8')
@@ -127,7 +126,6 @@ if is_asm_enabled
                 # itx.S is used for both 8 and 16 bpc.
                 'arm/32/itx.S',
                 'arm/32/msac.S',
-                'arm/32/refmvs.S',
             )
 
             if dav2d_bitdepths.contains('8')
@@ -220,7 +218,6 @@ if is_asm_enabled
             'loongarch/ipred.S',
 #            'loongarch/mc.S',
             'loongarch/msac.S',
-            'loongarch/refmvs.S',
         )
         libdav2d_asm_objs += libdav2d_sources_asm
     elif host_machine.cpu() == 'ppc64le'
