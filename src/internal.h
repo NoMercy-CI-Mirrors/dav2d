@@ -132,9 +132,6 @@ struct Dav2dContext {
     int dpb_in, dpb_out, dpb_sz, dpb_poc, drain;
     atomic_int flush_mem, *flush;
     struct {
-#if 0
-        Dav2dThreadPicture *out_delayed;
-#endif
         unsigned next;
     } frame_thread;
 

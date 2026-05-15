@@ -249,15 +249,6 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
     }
     c->task_thread.n_passes = 1 + (c->n_tc > 1) + (c->n_fc > 1);
 
-#if 0
-    if (c->n_fc > 1) {
-        const size_t out_delayed_sz = sizeof(*c->frame_thread.out_delayed) * c->n_fc;
-        c->frame_thread.out_delayed =
-            dav2d_malloc(ALLOC_THREAD_CTX, out_delayed_sz);
-        if (!c->frame_thread.out_delayed) goto error;
-        memset(c->frame_thread.out_delayed, 0, out_delayed_sz);
-    }
-#endif
     c->dpb_sz = c->n_fc + 16;
     c->dpb = dav2d_malloc(ALLOC_THREAD_CTX, sizeof(*c->dpb) * c->dpb_sz);
     if (!c->dpb) goto error;
@@ -628,12 +619,6 @@ void dav2d_flush(Dav2dContext *const c) {
             f->task_thread.retval = 0;
             f->task_thread.error = 0;
             f->frame_thread.scheduled = 0;
-#if 0
-            Dav2dThreadPicture *out_delayed = &c->frame_thread.out_delayed[next];
-            if (out_delayed->p.frame_hdr) {
-                dav2d_thread_picture_unref(out_delayed);
-            }
-#endif
         }
         c->frame_thread.next = 0;
     }
@@ -710,14 +695,6 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
         dav2d_free_aligned(f->lf.lr_line_buf);
     }
     dav2d_free_aligned(c->fc);
-#if 0
-    if (c->n_fc > 1 && c->frame_thread.out_delayed) {
-        for (unsigned n = 0; n < c->n_fc; n++)
-            if (c->frame_thread.out_delayed[n].p.frame_hdr)
-                dav2d_thread_picture_unref(&c->frame_thread.out_delayed[n]);
-        dav2d_free(c->frame_thread.out_delayed);
-    }
-#endif
     for (int n = 0; n < c->n_tile_data; n++)
         dav2d_data_unref_internal(&c->tile[n].data);
     dav2d_free(c->tile);

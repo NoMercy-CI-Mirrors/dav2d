@@ -5221,10 +5221,6 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     Dav2dFrameContext *f;
     int res = -1;
 
-#if 0
-    // wait for c->out_delayed[next] and move into c->out if visible
-    Dav2dThreadPicture *out_delayed;
-#endif
     if (c->n_fc > 1) {
         pthread_mutex_lock(&c->task_thread.lock);
         const unsigned next = c->frame_thread.next++;
@@ -5235,11 +5231,6 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         while (f->n_tile_data != 0)
             pthread_cond_wait(&f->task_thread.cond,
                               &c->task_thread.lock);
-        // FIXME forward error code for frame to dpb->res
-#if 0
-        out_delayed = &c->frame_thread.out_delayed[next];
-        if (out_delayed->p.data[0] || atomic_load(&f->task_thread.error)) {
-#endif
         if (f->frame_thread.scheduled) {
             unsigned first = atomic_load(&c->task_thread.first);
             if (first + 1U < c->n_fc)
@@ -5251,23 +5242,12 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             if (c->task_thread.cur && c->task_thread.cur < c->n_fc)
                 c->task_thread.cur--;
         }
+        // FIXME forward error code for frame to dpb->res
 #if 0
         const int error = f->task_thread.retval;
         if (error) {
             f->task_thread.retval = 0;
             c->cached_error = error;
-            dav2d_data_props_copy(&c->cached_error_props, &out_delayed->p.m);
-            dav2d_thread_picture_unref(out_delayed);
-        } else if (out_delayed->p.data[0]) {
-            const unsigned progress = atomic_load_explicit(&out_delayed->progress[2],
-                                                           memory_order_relaxed);
-            if ((out_delayed->visible || c->output_invisible_frames) &&
-                progress != FRAME_ERROR)
-            {
-                dav2d_thread_picture_ref(&c->out, out_delayed);
-                c->event_flags |= dav2d_picture_get_event_flags(out_delayed);
-            }
-            dav2d_thread_picture_unref(out_delayed);
         }
 #endif
     } else {
