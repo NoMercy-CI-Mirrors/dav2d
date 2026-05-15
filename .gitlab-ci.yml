@@ -156,7 +156,7 @@ build-debian:
           ninja -C build
         - |
           echo "[CI] Running AVM vs DAV2D MD5 regression test"
-          time tests/test-md5.sh build/tools/dav2d
+          time meson test -C build
 
 build-debian-static:
     extends: .debian-amd64-common
@@ -210,8 +210,7 @@ build-debian-avx:
                             --werror
         - ninja -C build
         - cd build
-        - time meson test -v --suite checkasm
-        - time ../tests/test-md5.sh tools/dav2d
+        - time meson test -v
 
 build-debian-avx512:
     extends: .debian-amd64-common
@@ -225,8 +224,7 @@ build-debian-avx512:
                             --werror
         - ninja -C build
         - cd build
-        - time meson test -v --suite checkasm
-        - time ../tests/test-md5.sh tools/dav2d
+        - time meson test -v
 
 build-debian-clang:
     extends: .debian-amd64-common
@@ -242,6 +240,11 @@ build-debian-clang:
 
 build-win:
     extends: .debian-amd64-common
+    # GCC 15.2 miscompiles dav2d when vectorization is enabled (as it is
+    # by default), see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=122793.
+    # This is fixed in future 15.x releases.
+    variables:
+        CFLAGS: '-fno-tree-vectorize'
     script:
         - wineserver -p && wine wineboot
         - meson setup build --buildtype release
@@ -304,7 +307,6 @@ build-debian-aarch64:
                             --werror
         - ninja -C build
         - meson test -v -C build
-        - time tests/test-md5.sh build/tools/dav2d
 
 build-debian-aarch64-clang-5:
     extends: .debian-aarch64-common
@@ -316,7 +318,6 @@ build-debian-aarch64-clang-5:
                             --werror
         - ninja -C build
         - meson test -v -C build
-        - time tests/test-md5.sh build/tools/dav2d
 
 build-debian-aarch64-clang:
     extends: .debian-amd64-common
@@ -357,7 +358,6 @@ build-debian-armv7:
                                     --werror
         - ninja -C build
         - meson test -v -C build
-        - time tests/test-md5.sh build/tools/dav2d
 
 build-debian-armv7-clang-5:
     extends: .debian-armv7-common
@@ -369,7 +369,6 @@ build-debian-armv7-clang-5:
                                     --werror
         - ninja -C build
         - meson test -v -C build
-        - time tests/test-md5.sh build/tools/dav2d
 
 build-debian-ppc64le:
     extends: .debian-ppc64le-common
@@ -391,7 +390,7 @@ build-debian-wasm:
                             --default-library static
                             --cross-file package/crossfiles/${CROSSFILE}.meson
         - ninja -C build
-        - meson test -v -C build
+        - meson test -v -C build --no-suite media
     parallel:
       matrix:
         - CROSSFILE: [wasm32, wasm64]
@@ -438,8 +437,9 @@ test-debian-asan:
         - ninja -C build
         - cd build
         - exit_code=0
-        - time meson test -v -t 3 --suite checkasm || exit_code=$((exit_code + $?))
-        - time ../tests/test-md5.sh tools/dav2d
+        - time meson test -v --setup=sanitizer --suite checkasm || exit_code=$((exit_code + $?))
+        - time meson test -v --setup=sanitizer --suite media --test-args "--cpumask 0" || exit_code=$((exit_code + $?))
+        - time meson test -v --setup=sanitizer --suite media --test-args "--cpumask 0xff" || exit_code=$((exit_code + $?))
         - if [ $exit_code -ne 0 ]; then exit $exit_code; fi
 
 test-debian-msan:
@@ -460,8 +460,8 @@ test-debian-msan:
         - ninja -C build
         - cd build
         - exit_code=0
-        - time meson test -v -t 3 || exit_code=$((exit_code + $?))
-        - time ../tests/test-md5.sh tools/dav2d
+        - time meson test -v --setup=sanitizer || exit_code=$((exit_code + $?))
+        - time meson test -v --setup=sanitizer --suite media --test-args "--frametimes /dev/null" || exit_code=$((exit_code + $?))
         - if [ $exit_code -ne 0 ]; then exit $exit_code; fi
 
 test-debian-ubsan:
@@ -480,8 +480,7 @@ test-debian-ubsan:
                             -Db_lundef=false
                             -Denable_asm=false
         - ninja -C build
-        - cd build && time meson test -v -t 3
-        - time ../tests/test-md5.sh tools/dav2d
+        - cd build && time meson test -v --setup=sanitizer
 
 test-debian-tsan:
     extends:
@@ -499,12 +498,17 @@ test-debian-tsan:
                             -Db_lundef=false
         - ninja -C build
         - cd build
-        - time OPTIONS="--threads=2 --framedelay=1" ../tests/test-md5.sh tools/dav2d
-        - time OPTIONS="--threads=2 --framedelay=2" ../tests/test-md5.sh tools/dav2d
+        - time meson test -v --setup=sanitizer --suite media --test-args "--threads 2 --framedelay 1"             || exit_code=$((exit_code + $?))
+        - time meson test -v --setup=sanitizer --suite media --test-args "--threads 2 --framedelay 2"             || exit_code=$((exit_code + $?))
 
 test-win64:
     extends: .debian-amd64-common
     stage: test
+    # GCC 15.2 miscompiles dav2d when vectorization is enabled (as it is
+    # by default), see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=122793.
+    # This is fixed in future 15.x releases.
+    variables:
+        CFLAGS: '-fno-tree-vectorize'
     script:
         - wineserver -p && wine wineboot
         - meson setup build --buildtype release
