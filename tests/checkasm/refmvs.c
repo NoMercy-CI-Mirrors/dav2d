@@ -302,6 +302,7 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
                     for (int n = 0; n < 2; n++) {
                         if (s_src[0].ref.ref[n] == -1) {
                             s_src[0].mv[n].y = INVALID_MV;
+                            s_src[0].mv[n].x = 0;
                         } else {
                             s_src[0].mv[n].y = gen_mv(17, 3);
                             s_src[0].mv[n].x = gen_mv(17, 3);
@@ -378,6 +379,7 @@ static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
                         s_src[0].mv[0].y = wide ? gen_mv(8, 12) : gen_mv(17, 3);
                         s_src[0].mv[0].x = gen_mv(17, 3);
                         s_src[0].mv[1].y = INVALID_MV;
+                        s_src[0].mv[1].x = 0;
                         if (!g) {
                             COPY2MV(s_src[0].lmv, s_src[0].mv);
                         }
