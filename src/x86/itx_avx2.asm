@@ -1671,11 +1671,10 @@ ALIGN function_align
     pxor                m10, m10
     pmulhrsw             m0, m4
     pmulhrsw             m1, m4
-    test               eobd, eobd
+    test               eobd, 0x80000100
     jl .pass2_identity_fast
     pmulhrsw             m2, m4
     pmulhrsw             m3, m4
-    test               eobd, 0x100
     jnz .hdpcm
     test               eobd, 0x200
     jnz .vdpcm
@@ -2424,10 +2423,9 @@ ALIGN function_align
     REPX   {pmulhrsw x, m8}, m0, m1, m2, m3
     lea                  r6, [dsq*3]
     pxor                m10, m10
-    test               eobd, eobd
+    test               eobd, 0x80000100
     jl .pass2_identity_fast
     REPX   {pmulhrsw x, m8}, m4, m5, m6, m7
-    test               eobd, 0x100
     jnz .hdpcm
     test               eobd, 0x200
     jnz .vdpcm
@@ -4973,15 +4971,14 @@ ALIGN function_align
     REPX  {pmulhrsw x, m12}, m0, m1, m2, m3, m4, m5, m6, m7
     lea                  r6, [dsq*3]
     pxor                m10, m10
-    test               eobd, eobd
-    jl .pass2_identity_fast
     test               eobd, 0x100
     jnz .hdpcm
     test               eobd, 0x200
     jnz .vdpcm
     call m(inv_txfm_add_8x16_8bpc).write_8x16
+    test               eobd, eobd
+    jl m(inv_txfm_add_32x8_8bpc).pass2_end
     call .pass2_identity_load_round_bottomhalf
-.pass2_identity_fast:
     call m(inv_txfm_add_8x16_8bpc).write_8x16
     jmp m(inv_txfm_add_32x8_8bpc).pass2_end
 .hdpcm:
