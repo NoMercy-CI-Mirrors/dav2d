@@ -221,7 +221,6 @@ if is_asm_enabled
 #            'loongarch/mc.S',
             'loongarch/msac.S',
             'loongarch/refmvs.S',
-            'loongarch/itx.S',
         )
         libdav2d_asm_objs += libdav2d_sources_asm
     elif host_machine.cpu() == 'ppc64le'
@@ -234,7 +233,6 @@ if is_asm_enabled
         )}
         arch_flags += {'pwr9': ['-mcpu=power9', '-DDAV2D_PWR9']}
         libdav2d_arch_tmpl_sources += {'pwr9': files(
-#            'ppc/itx_tmpl.c',
 #            'ppc/mc_tmpl.c',
         )}
     elif host_machine.cpu_family().startswith('riscv')
@@ -251,7 +249,6 @@ if is_asm_enabled
                 libdav2d_sources += files(
                     'riscv/64/cdef.S',
                     'riscv/64/ipred.S',
-                    'riscv/64/itx.S',
                     'riscv/64/mc.S',
                 )
             endif
