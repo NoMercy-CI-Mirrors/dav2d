@@ -28,7 +28,6 @@
 
 SECTION_RODATA
 
-filter_shuf:   db  6,  7,  8,  9, 10, 11, 12, 13, 14, 15,  4,  5,  2,  3, -1, -1
 pal_pred_shuf: db  0,  2,  4,  6,  8, 10, 12, 14,  1,  3,  5,  7,  9, 11, 13, 15
 z_base_inc:    dw   0*64,   1*64,   2*64,   3*64,   4*64,   5*64,   6*64,   7*64
 z_base_inc_z2: dw   7*64,   6*64,   5*64,   4*64,   3*64,   2*64,   1*64,   0*64
@@ -59,7 +58,6 @@ pw_m2048: times 4 dw -2048
 pw_m1536: times 4 dw -1536
 pw_m1024: times 4 dw -1024
 pw_m512:  times 4 dw -512
-pw_1:     times 4 dw 1
 pw_2:     times 4 dw 2
 pw_3:     times 4 dw 3
 pw_62:    times 4 dw 62
@@ -84,24 +82,28 @@ pw_2048:  times 4 dw 2048
 %define ipred_dc_splat_16bpc_ssse3_table (ipred_dc_16bpc_ssse3_table + 10*4)
 %define ipred_dc_128_16bpc_ssse3_table   (ipred_dc_16bpc_ssse3_table + 15*4)
 
+%if 0
 JMP_TABLE ipred_dc_left_16bpc,    ssse3, h4, h8, h16, h32, h64
+%endif
 JMP_TABLE ipred_dc_16bpc,         ssse3, h4, h8, h16, h32, h64, w4, w8, w16, w32, w64, \
                                          s4-10*4, s8-10*4, s16-10*4, s32-10*4, s64-10*4, \
                                          s4-15*4, s8-15*4, s16c-15*4, s32c-15*4, s64-15*4
+%if 0
 JMP_TABLE ipred_h_16bpc,          ssse3, w4, w8, w16, w32, w64
 JMP_TABLE ipred_z1_16bpc,         ssse3, w4, w8, w16, w32, w64
 JMP_TABLE ipred_z2_16bpc,         ssse3, w4, w8, w16, w32, w64
 JMP_TABLE ipred_z3_16bpc,         ssse3, h4, h8, h16, h32, h64
+%endif
 JMP_TABLE pal_pred_16bpc,         ssse3, w4, w8, w16, w32, w64
 
 cextern smooth_weights_1d_16bpc
 cextern smooth_weights_2d_16bpc
 cextern dr_intra_derivative
-cextern filter_intra_taps
 
 SECTION .text
 
 INIT_XMM ssse3
+%if 0
 cglobal ipred_dc_top_16bpc, 3, 7, 6, dst, stride, tl, w, h
     LEA                  r5, ipred_dc_left_16bpc_ssse3_table
     movd                 m4, wm
@@ -169,6 +171,7 @@ cglobal ipred_dc_left_16bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     pshuflw              m0, m0, q0000
     punpcklqdq           m0, m0
     jmp                  wq
+%endif
 
 cglobal ipred_dc_16bpc, 4, 7, 6, dst, stride, tl, w, h, stride3
     movifnidn            hd, hm
@@ -434,6 +437,7 @@ cglobal ipred_dc_128_16bpc, 2, 7, 6, dst, stride, tl, w, h, stride3
     lea            stride3q, [strideq*3]
     jmp                  wq
 
+%if 0
 cglobal ipred_v_16bpc, 4, 7, 6, dst, stride, tl, w, h, stride3
     LEA                  r5, ipred_dc_splat_16bpc_ssse3_table
     movifnidn            hd, hm
@@ -556,6 +560,7 @@ cglobal ipred_h_16bpc, 3, 6, 4, dst, stride, tl, w, h, stride3
     dec                  hd
     jg .w64
     RET
+%endif
 
 cglobal ipred_paeth_16bpc, 4, 6, 8, dst, stride, tl, w, h, left
 %define base r5-ipred_paeth_16bpc_ssse3_table
@@ -641,6 +646,7 @@ cglobal ipred_paeth_16bpc, 4, 6, 8, dst, stride, tl, w, h, left
 %endif
     RET
 
+%if 0
 %if ARCH_X86_64
 DECLARE_REG_TMP 7
 %else
@@ -3029,149 +3035,7 @@ cglobal ipred_z3_16bpc, 4, 7, 8, -16*18, dst, stride, tl, w, h, angle, dy
     mova       [tlq+r5*2+2], m1
     neg                 r4d
     ret
-
-%if ARCH_X86_64
-cglobal ipred_filter_16bpc, 4, 7, 16, dst, stride, tl, w, h, filter
-%else
-cglobal ipred_filter_16bpc, 4, 7, 8, -16*8, dst, stride, tl, w, h, filter
-%define  m8 [esp+16*0]
-%define  m9 [esp+16*1]
-%define m10 [esp+16*2]
-%define m11 [esp+16*3]
-%define m12 [esp+16*4]
-%define m13 [esp+16*5]
-%define m14 [esp+16*6]
-%define m15 [esp+16*7]
 %endif
-%define base r6-$$
-    movifnidn            hd, hm
-    movd                 m6, r8m     ; bitdepth_max
-%ifidn filterd, filterm
-    movzx           filterd, filterb
-%else
-    movzx           filterd, byte filterm
-%endif
-    LEA                  r6, $$
-    shl             filterd, 6
-    movu                 m0, [tlq-6] ; __ l1 l0 tl t0 t1 t2 t3
-    mova                 m1, [base+filter_intra_taps+filterq+16*0]
-    mova                 m2, [base+filter_intra_taps+filterq+16*1]
-    mova                 m3, [base+filter_intra_taps+filterq+16*2]
-    mova                 m4, [base+filter_intra_taps+filterq+16*3]
-    pxor                 m5, m5
-%if ARCH_X86_64
-    punpcklbw            m8, m5, m1  ; place 8-bit coefficients in the upper
-    punpckhbw            m9, m5, m1  ; half of each 16-bit word to avoid
-    punpcklbw           m10, m5, m2  ; having to perform sign-extension.
-    punpckhbw           m11, m5, m2
-    punpcklbw           m12, m5, m3
-    punpckhbw           m13, m5, m3
-    punpcklbw           m14, m5, m4
-    punpckhbw           m15, m5, m4
-%else
-    punpcklbw            m7, m5, m1
-    mova                 m8, m7
-    punpckhbw            m7, m5, m1
-    mova                 m9, m7
-    punpcklbw            m7, m5, m2
-    mova                m10, m7
-    punpckhbw            m7, m5, m2
-    mova                m11, m7
-    punpcklbw            m7, m5, m3
-    mova                m12, m7
-    punpckhbw            m7, m5, m3
-    mova                m13, m7
-    punpcklbw            m7, m5, m4
-    mova                m14, m7
-    punpckhbw            m7, m5, m4
-    mova                m15, m7
-%endif
-    mova                 m7, [base+filter_shuf]
-    add                  hd, hd
-    mov                  r5, dstq
-    pshuflw              m6, m6, q0000
-    mov                  r6, tlq
-    punpcklqdq           m6, m6
-    sub                 tlq, hq
-.left_loop:
-    pshufb               m0, m7      ; tl t0 t1 t2 t3 l0 l1 __
-    pshufd               m1, m0, q0000
-    pmaddwd              m2, m8, m1
-    pmaddwd              m1, m9
-    pshufd               m4, m0, q1111
-    pmaddwd              m3, m10, m4
-    pmaddwd              m4, m11
-    paddd                m2, m3
-    paddd                m1, m4
-    pshufd               m4, m0, q2222
-    pmaddwd              m3, m12, m4
-    pmaddwd              m4, m13
-    paddd                m2, m3
-    paddd                m1, m4
-    pshufd               m3, m0, q3333
-    pmaddwd              m0, m14, m3
-    pmaddwd              m3, m15
-    paddd                m0, m2
-    paddd                m1, m3
-    psrad                m0, 11     ; x >> 3
-    psrad                m1, 11
-    packssdw             m0, m1
-    pmaxsw               m0, m5
-    pavgw                m0, m5     ; (x + 8) >> 4
-    pminsw               m0, m6
-    movq   [dstq+strideq*0], m0
-    movhps [dstq+strideq*1], m0
-    movlps               m0, [tlq+hq-10]
-    lea                dstq, [dstq+strideq*2]
-    sub                  hd, 2*2
-    jg .left_loop
-    sub                  wd, 4
-    jz .end
-    sub                 tld, r6d     ; -h*2
-    sub                  r6, r5      ; tl-dst
-.right_loop0:
-    add                  r5, 8
-    mov                  hd, tld
-    movu                 m0, [r5+r6] ; tl t0 t1 t2 t3 __ __ __
-    mov                dstq, r5
-.right_loop:
-    pshufd               m2, m0, q0000
-    pmaddwd              m1, m8, m2
-    pmaddwd              m2, m9
-    pshufd               m4, m0, q1111
-    pmaddwd              m3, m10, m4
-    pmaddwd              m4, m11
-    pinsrw               m0, [dstq+strideq*0-2], 5
-    paddd                m1, m3
-    paddd                m2, m4
-    pshufd               m0, m0, q2222
-    movddup              m4, [dstq+strideq*1-8]
-    pmaddwd              m3, m12, m0
-    pmaddwd              m0, m13
-    paddd                m1, m3
-    paddd                m0, m2
-    pshuflw              m2, m4, q3333
-    punpcklwd            m2, m5
-    pmaddwd              m3, m14, m2
-    pmaddwd              m2, m15
-    paddd                m1, m3
-    paddd                m0, m2
-    psrad                m1, 11
-    psrad                m0, 11
-    packssdw             m0, m1
-    pmaxsw               m0, m5
-    pavgw                m0, m5
-    pminsw               m0, m6
-    movhps [dstq+strideq*0], m0
-    movq   [dstq+strideq*1], m0
-    palignr              m0, m4, 14
-    lea                dstq, [dstq+strideq*2]
-    add                  hd, 2*2
-    jl .right_loop
-    sub                  wd, 4
-    jg .right_loop0
-.end:
-    RET
 
 cglobal pal_pred_16bpc, 4, 5, 6, dst, stride, pal, idx, w, h
 %define base r2-pal_pred_16bpc_ssse3_table

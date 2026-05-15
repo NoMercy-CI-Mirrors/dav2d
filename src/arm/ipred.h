@@ -37,7 +37,7 @@ decl_angular_ipred_fn(BF(dav2d_ipred_paeth, neon));
 decl_angular_ipred_fn(BF(dav2d_ipred_smooth, neon));
 decl_angular_ipred_fn(BF(dav2d_ipred_smooth_v, neon));
 decl_angular_ipred_fn(BF(dav2d_ipred_smooth_h, neon));
-decl_angular_ipred_fn(BF(dav2d_ipred_filter, neon));
+decl_angular_ipred_fn(BF(dav2d_ipred_dip, neon));
 
 decl_pal_pred_fn(BF(dav2d_pal_pred, neon));
 
@@ -309,7 +309,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_arm(Dav2dIntraPredDSPContext *cons
     c->intra_pred[Z1_PRED]       = ipred_z1_neon;
     c->intra_pred[Z2_PRED]       = ipred_z2_neon;
     c->intra_pred[Z3_PRED]       = ipred_z3_neon;
-    //c->intra_pred[DIP_PRED]   = BF(dav2d_ipred_dip, neon);
+    c->intra_pred[DIP_PRED]      = BF(dav2d_ipred_dip, neon);
 
     c->cfl_pred[DC_PRED]         = BF(dav2d_ipred_cfl, neon);
     c->cfl_pred[DC_128_PRED]     = BF(dav2d_ipred_cfl_128, neon);

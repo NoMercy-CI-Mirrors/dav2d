@@ -63,8 +63,6 @@ z_upsample2:      db  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  8,  8,
 z_transpose4:     db  8, 12,  0,  4,  9, 13,  1,  5, 10, 14,  2,  6, 11, 15,  3,  7
 z3_shuf:          db  1,  0,  2,  1,  3,  2,  4,  3,  5,  4,  6,  5,  7,  6,  8,  7
 z3_shuf_h4:       db  4,  3,  3,  2,  2,  1,  1,  0, 12, 11, 11, 10, 10,  9,  9,  8
-filter_shuf1:     db  3,  4,  3,  4,  5,  6,  5,  6,  7,  2,  7,  2,  1, -1,  1, -1
-filter_shuf2:     db  3,  4,  3,  4,  5,  6,  5,  6,  7, 11,  7, 11, 15, -1, 15, -1
 z_filter_wh4:     db  7,  7, 19,  7,
 z_filter_wh8:     db 19, 19, 11, 19, 11, 15, 15, 15, 23, 23, 23, 23, 39, 39, 39, 39
 pd_32768:         dd 32768
@@ -93,7 +91,6 @@ z_filter_k:       times  4 db  0, 16
                   times  4 db 16, 16
                   times  4 db  0,  0
                   times  4 db  0,  0
-pw_8:             times  8 db  8,  0
 pb_3:             times 16 db 3
 pb_16:            times 16 db 16
 pw_62:            times  8 dw 62
@@ -101,8 +98,6 @@ pw_64:            times  8 dw 64
 pw_256:           times  8 dw 256
 pw_512:           times  8 dw 512
 pw_m256:          times  8 dw -256
-pb_2:             times  8 db 2
-pb_4:             times  8 db 4
 pb_8:             times  8 db 8
 pb_128:           times  8 db 128
 pb_m16:           times  8 db -16
@@ -123,25 +118,31 @@ pb_127_m127:      times  4 db 127, -127
 
 %define ipred_dc_splat_ssse3_table (ipred_dc_ssse3_table + 10*4)
 
+%if 0
 JMP_TABLE ipred_h,          ssse3, w4, w8, w16, w32, w64
+%endif
 JMP_TABLE ipred_dc,         ssse3, h4, h8, h16, h32, h64, w4, w8, w16, w32, w64, \
                                 s4-10*4, s8-10*4, s16-10*4, s32-10*4, s64-10*4
+%if 0
 JMP_TABLE ipred_dc_left,    ssse3, h4, h8, h16, h32, h64
 JMP_TABLE ipred_smooth,     ssse3, w4, w8, w16, w32, w64
 JMP_TABLE ipred_smooth_v,   ssse3, w4, w8, w16, w32, w64
 JMP_TABLE ipred_smooth_h,   ssse3, w4, w8, w16, w32, w64
+%endif
 JMP_TABLE ipred_paeth,      ssse3, w4, w8, w16, w32, w64
+%if 0
 JMP_TABLE ipred_z1,         ssse3, w4, w8, w16, w32, w64
 JMP_TABLE ipred_z2,         ssse3, w4, w8, w16, w32, w64
 JMP_TABLE ipred_z3,         ssse3, h4, h8, h16, h32, h64
+%endif
 JMP_TABLE pal_pred,         ssse3, w4, w8, w16, w32, w64
-JMP_TABLE ipred_filter,     ssse3, w4, w8, w16, w32
 
 cextern dr_intra_derivative
-cextern filter_intra_taps
 
 SECTION .text
 
+INIT_XMM ssse3
+%if 0
 ;---------------------------------------------------------------------------------------
 ;int dav2d_ipred_h_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
@@ -193,7 +194,6 @@ SECTION .text
     RET
 %endmacro
 
-INIT_XMM ssse3
 cglobal ipred_h_8bpc, 3, 6, 2, dst, stride, tl, w, h, stride3
     LEA                          r5, ipred_h_ssse3_table
     tzcnt                        wd, wm
@@ -229,6 +229,7 @@ cglobal ipred_v_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     add                  wq, r5
     lea            stride3q, [strideq*3]
     jmp                  wq
+%endif
 
 ;---------------------------------------------------------------------------------------
 ;int dav2d_ipred_dc_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
@@ -472,6 +473,7 @@ ALIGN function_align
     jg .s64
     RET
 
+%if 0
 ;---------------------------------------------------------------------------------------
 ;int dav2d_ipred_dc_left_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
@@ -521,6 +523,7 @@ cglobal ipred_dc_left_8bpc, 3, 7, 6, dst, stride, tl, w, h, stride3
     mova                 m2, m0
     mova                 m3, m0
     jmp                  wq
+%endif
 
 ;---------------------------------------------------------------------------------------
 ;int dav2d_ipred_dc_128_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
@@ -539,6 +542,7 @@ cglobal ipred_dc_128_8bpc, 2, 7, 6, dst, stride, tl, w, h, stride3
     lea            stride3q, [strideq*3]
     jmp                  wq
 
+%if 0
 ;---------------------------------------------------------------------------------------
 ;int dav2d_ipred_dc_top_ssse3(pixel *dst, const ptrdiff_t stride, const pixel *const topleft,
 ;                                    const int width, const int height, const int a);
@@ -3468,6 +3472,7 @@ cglobal ipred_z3_8bpc, 4, 7, 8, -16*10, dst, stride, tl, w, h, angle, dy
     sub              org_wd, 8
     jg .end_transpose_loop
     RET
+%endif
 
 ;-------------------------------------------------------------------------------
 ;int dav2d_pal_pred_ssse3(pixel *dst, ptrdiff_t stride, const pixel *pal,
@@ -3746,198 +3751,4 @@ ALIGN function_align
     add                dstq, strideq
     dec                  hd
     jg .w64_loop
-    RET
-
-
-%macro FILTER 4  ;dst, src, tmp, shuf
-%ifnum %4
-    pshufb               m%2, m%4
-%else
-    pshufb               m%2, %4
-%endif
-    pshufd               m%1, m%2, q0000           ;p0 p1
-    pmaddubsw            m%1, m2
-    pshufd               m%3, m%2, q1111           ;p2 p3
-    pmaddubsw            m%3, m3
-    paddw                m%1, [base+pw_8]
-    paddw                m%1, m%3
-    pshufd               m%3, m%2, q2222           ;p4 p5
-    pmaddubsw            m%3, m4
-    paddw                m%1, m%3
-    pshufd               m%3, m%2, q3333           ;p6 __
-    pmaddubsw            m%3, m5
-    paddw                m%1, m%3
-    psraw                m%1, 4
-    packuswb             m%1, m%1
-%endmacro
-
-cglobal ipred_filter_8bpc, 3, 7, 8, dst, stride, tl, w, h, filter
-%define base r6-$$
-    LEA                   r6, $$
-    tzcnt                 wd, wm
-%ifidn filterd, filterm
-    movzx            filterd, filterb
-%else
-    movzx            filterd, byte filterm
-%endif
-    shl              filterd, 6
-    lea              filterq, [base+filter_intra_taps+filterq]
-    movq                  m0, [tlq-3]                     ;_ 6 5 0 1 2 3 4
-    movsxd                wq, [base+ipred_filter_ssse3_table+wq*4]
-    mova                  m2, [filterq+16*0]
-    mova                  m3, [filterq+16*1]
-    mova                  m4, [filterq+16*2]
-    mova                  m5, [filterq+16*3]
-    lea                   wq, [base+ipred_filter_ssse3_table+wq]
-    mov                   hd, hm
-    jmp                   wq
-.w4:
-    mova                  m1, [base+filter_shuf1]
-    sub                  tlq, 3
-    sub                  tlq, hq
-    jmp .w4_loop_start
-.w4_loop:
-    movd                  m0, [tlq+hq]
-    punpckldq             m0, m6
-    lea                 dstq, [dstq+strideq*2]
-.w4_loop_start:
-    FILTER                 6, 0, 7, 1
-    movd    [dstq+strideq*0], m6
-    pshuflw               m6, m6, q1032
-    movd    [dstq+strideq*1], m6
-    sub                   hd, 2
-    jg .w4_loop
-    RET
-
-ALIGN function_align
-.w8:
-    movq                  m6, [tlq+1]                   ;_ _ _ 0 1 2 3 4
-    sub                  tlq, 5
-    sub                  tlq, hq
-
-.w8_loop:
-    FILTER                 7, 0, 1, [base+filter_shuf1]
-    punpcklqdq            m6, m7                        ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    FILTER                 0, 6, 1, [base+filter_shuf2]
-
-    punpckldq             m6, m7, m0
-    movq    [dstq+strideq*0], m6
-    punpckhqdq            m6, m6
-    movq    [dstq+strideq*1], m6
-
-    movd                  m0, [tlq+hq]                  ;_ 6 5 0
-    punpckldq             m0, m6                        ;_ 6 5 0 1 2 3 4
-
-    lea                 dstq, [dstq+strideq*2]
-    sub                   hd, 2
-    jg .w8_loop
-    RET
-
-ALIGN function_align
-.w16:
-    movu                  m6, [tlq+1]                   ;top row
-    sub                  tlq, 5
-    sub                  tlq, hq
-
-.w16_loop:
-    FILTER                 7, 0, 1, [base+filter_shuf1]
-    punpcklqdq            m0, m6, m7                    ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd    [dstq+strideq*0], m7
-    psrlq                 m7, 32
-    palignr               m7, m6, 4
-
-    FILTER                 6, 0, 1, [base+filter_shuf2]
-    punpcklqdq            m0, m7, m6                    ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd  [dstq+4+strideq*0], m6
-    psrlq                 m6, 32
-    palignr               m6, m7, 4
-
-    FILTER                 7, 0, 1, [base+filter_shuf2]
-    punpcklqdq            m0, m6, m7                    ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd  [dstq+8+strideq*0], m7
-    psrlq                 m7, 32
-    palignr               m7, m6, 4
-
-    FILTER                 6, 0, 1, [base+filter_shuf2]
-    movd [dstq+12+strideq*0], m6
-    psrlq                 m6, 32
-    palignr               m6, m7, 4
-    mova    [dstq+strideq*1], m6
-
-    movd                  m0, [tlq+hq]                  ;_ 6 5 0
-    punpckldq             m0, m6                        ;_ 6 5 0 1 2 3 4
-
-    lea                 dstq, [dstq+strideq*2]
-    sub                   hd, 2
-    jg .w16_loop
-    RET
-
-ALIGN function_align
-.w32:
-    movu                  m6, [tlq+1]                   ;top row
-    lea              filterq, [tlq+17]
-    sub                  tlq, 5
-    sub                  tlq, hq
-
-.w32_loop:
-    FILTER                 7, 0, 1, [base+filter_shuf1]
-    punpcklqdq            m0, m6, m7                    ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd    [dstq+strideq*0], m7
-    psrlq                 m7, 32
-    palignr               m7, m6, 4
-
-    FILTER                 6, 0, 1, [base+filter_shuf2]
-    punpcklqdq            m0, m7, m6                    ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd  [dstq+4+strideq*0], m6
-    psrlq                 m6, 32
-    palignr               m6, m7, 4
-
-    FILTER                 7, 0, 1, [base+filter_shuf2]
-    punpcklqdq            m0, m6, m7                    ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd  [dstq+8+strideq*0], m7
-    psrlq                 m7, 32
-    palignr               m7, m6, 4
-
-    FILTER                 6, 0, 1, [base+filter_shuf2]
-    movu                  m1, [filterq]
-    punpckldq             m0, m7, m1                    ;_ _ _ 0 1 2 3 4 _ _ _ _ _ _ _ _
-    punpcklqdq            m0, m6                        ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd [dstq+12+strideq*0], m6
-    psrlq                 m6, 32
-    palignr               m6, m7, 4
-    mova    [dstq+strideq*1], m6
-
-    mova                  m6, m1
-
-    FILTER                 7, 0, 6, [base+filter_shuf2]
-    punpcklqdq            m0, m1, m7                    ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd [dstq+16+strideq*0], m7
-    psrlq                 m7, 32
-    palignr               m7, m1, 4
-
-    FILTER                 6, 0, 1, [base+filter_shuf2]
-    punpcklqdq            m0, m7, m6                    ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd [dstq+20+strideq*0], m6
-    psrlq                 m6, 32
-    palignr               m6, m7, 4
-
-    FILTER                 7, 0, 1, [base+filter_shuf2]
-    punpcklqdq            m0, m6, m7                    ;_ _ _ 0 1 2 3 4 _ _ _ 5 _ _ _ 6
-    movd [dstq+24+strideq*0], m7
-    psrlq                 m7, 32
-    palignr               m7, m6, 4
-
-    FILTER                 6, 0, 1, [base+filter_shuf2]
-    movd [dstq+28+strideq*0], m6
-    psrlq                 m6, 32
-    palignr               m6, m7, 4
-    mova [dstq+16+strideq*1], m6
-
-    mova                  m6, [dstq+strideq*1]
-    movd                  m0, [tlq+hq]                  ;_ 6 5 0
-    punpckldq             m0, m6                        ;_ 6 5 0 1 2 3 4
-    lea              filterq, [dstq+16+strideq*1]
-    lea                 dstq, [dstq+strideq*2]
-    sub                   hd, 2
-    jg .w32_loop
     RET
