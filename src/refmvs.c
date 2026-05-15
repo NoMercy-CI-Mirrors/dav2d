@@ -2310,18 +2310,19 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                            const int32_t *const matrix)
 {
     const int bx = s_src->bx4, by = s_src->by4;
-    int64_t mvx = (int64_t) (matrix[2] - 0x10000) * (bx + 1) * 4 +
-                  (int64_t) matrix[3] * (by + 1) * 4 + matrix[0];
-    int64_t mvy = (int64_t) matrix[4] * (bx + 1) * 4 + matrix[1] +
-                  (int64_t) (matrix[5] - 0x10000) * (by + 1) * 4;
+    assert(!((matrix[0] | matrix[1]) & 3));
+    int mvx = (matrix[2] - 0x10000) * (bx + 1) +
+              matrix[3] * (by + 1) + (matrix[0] >> 2);
+    int mvy = matrix[4] * (bx + 1) + (matrix[1] >> 2) +
+              (matrix[5] - 0x10000) * (by + 1);
     assert(bw4 > 1 && bh4 > 1);
     do {
-        int64_t mvxi = mvx, mvyi = mvy;
+        int mvxi = mvx, mvyi = mvy;
         for (int x = 0; x < bw4; x += 2) {
             const union mv warpmv = (union mv) {
-                .y = iclip(apply_sign64((llabs(mvyi) + 4096) >> 13, mvyi),
+                .y = iclip(apply_sign((abs(mvyi) + 1024) >> 11, mvyi),
                            -0xffff, 0xffff),
-                .x = iclip(apply_sign64((llabs(mvxi) + 4096) >> 13, mvxi),
+                .x = iclip(apply_sign((abs(mvxi) + 1024) >> 11, mvxi),
                            -0xffff, 0xffff),
             };
             if (s_src->mf & 2)
@@ -2340,11 +2341,11 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 t_dst[x >> 1].ref.pair = t_src->mv.n == INVALID_TRAJ * 0x10001U ?
                                           -1 : t_src->ref.pair;
             }
-            mvxi += (matrix[2] - 0x10000) * 8;
-            mvyi += matrix[4] * 8;
+            mvxi += (matrix[2] - 0x10000) * 2;
+            mvyi += matrix[4] * 2;
         }
-        mvx += matrix[3] * 8;
-        mvy += (matrix[5] - 0x10000) * 8;
+        mvx += matrix[3] * 2;
+        mvy += (matrix[5] - 0x10000) * 2;
         s_dst += 2 * 128;
         if (t_dst) t_dst += t_stride;
         bh4 -= 2;
@@ -2359,33 +2360,35 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                                 const uint8_t *mask, const intptr_t w_swap)
 {
     const int bx = s_src->bx4, by = s_src->by4;
-    int64_t mvx1 = (int64_t) (matrix1[2] - 0x10000) * (bx + 1) * 4 +
-                   (int64_t) matrix1[3] * (by + 1) * 4 + matrix1[0];
-    int64_t mvy1 = (int64_t) matrix1[4] * (bx + 1) * 4 + matrix1[1] +
-                   (int64_t) (matrix1[5] - 0x10000) * (by + 1) * 4;
-    int64_t mvx2 = (int64_t) (matrix2[2] - 0x10000) * (bx + 1) * 4 +
-                   (int64_t) matrix2[3] * (by + 1) * 4 + matrix2[0];
-    int64_t mvy2 = (int64_t) matrix2[4] * (bx + 1) * 4 + matrix2[1] +
-                   (int64_t) (matrix2[5] - 0x10000) * (by + 1) * 4;
+    assert(!((matrix1[0] | matrix1[1]) & 3));
+    assert(!((matrix2[0] | matrix2[1]) & 3));
+    int mvx1 = (matrix1[2] - 0x10000) * (bx + 1) +
+               matrix1[3] * (by + 1) + (matrix1[0] >> 2);
+    int mvy1 = matrix1[4] * (bx + 1) + (matrix1[1] >> 2) +
+               (matrix1[5] - 0x10000) * (by + 1);
+    int mvx2 = (matrix2[2] - 0x10000) * (bx + 1) +
+               matrix2[3] * (by + 1) + (matrix2[0] >> 2);
+    int mvy2 = matrix2[4] * (bx + 1) + (matrix2[1] >> 2) +
+               (matrix2[5] - 0x10000) * (by + 1);
 
     assert(bw4 > 1 && bh4 > 1);
     assert(!mask || (bw4 <= 16 && bh4 <= 16));
     do {
-        int64_t mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
+        int mvxi1 = mvx1, mvyi1 = mvy1, mvxi2 = mvx2, mvyi2 = mvy2;
         for (int x = 0; x < bw4; x += 2) {
             const union mv warpmv1 = (union mv) {
-                .y = iclip(apply_sign64((llabs(mvyi1) + 4096) >> 13, mvyi1),
+                .y = iclip(apply_sign((abs(mvyi1) + 1024) >> 11, mvyi1),
                            -0xffff, 0xffff),
-                .x = iclip(apply_sign64((llabs(mvxi1) + 4096) >> 13, mvxi1),
+                .x = iclip(apply_sign((abs(mvxi1) + 1024) >> 11, mvxi1),
                            -0xffff, 0xffff),
             };
             if (s_src->mf & 2)
                 s_src->mv[0] = warpmv1;
             t_src->mv.mv[t_swap] = quantize_mv(warpmv1);
             const union mv warpmv2 = (union mv) {
-                .y = iclip(apply_sign64((llabs(mvyi2) + 4096) >> 13, mvyi2),
+                .y = iclip(apply_sign((abs(mvyi2) + 1024) >> 11, mvyi2),
                            -0xffff, 0xffff),
-                .x = iclip(apply_sign64((llabs(mvxi2) + 4096) >> 13, mvxi2),
+                .x = iclip(apply_sign((abs(mvxi2) + 1024) >> 11, mvxi2),
                            -0xffff, 0xffff),
             };
             if (s_src->mf & 2)
@@ -2421,15 +2424,15 @@ static void splat_comp_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                     }
                 }
             }
-            mvxi1 += (matrix1[2] - 0x10000) * 8;
-            mvyi1 += matrix1[4] * 8;
-            mvxi2 += (matrix2[2] - 0x10000) * 8;
-            mvyi2 += matrix2[4] * 8;
+            mvxi1 += (matrix1[2] - 0x10000) * 2;
+            mvyi1 += matrix1[4] * 2;
+            mvxi2 += (matrix2[2] - 0x10000) * 2;
+            mvyi2 += matrix2[4] * 2;
         }
-        mvx1 += matrix1[3] * 8;
-        mvy1 += (matrix1[5] - 0x10000) * 8;
-        mvx2 += matrix2[3] * 8;
-        mvy2 += (matrix2[5] - 0x10000) * 8;
+        mvx1 += matrix1[3] * 2;
+        mvy1 += (matrix1[5] - 0x10000) * 2;
+        mvx2 += matrix2[3] * 2;
+        mvy2 += (matrix2[5] - 0x10000) * 2;
         if (mask) mask += bw4 >> 1;
         s_dst += 2 * 128;
         if (t_dst) t_dst += t_stride;
