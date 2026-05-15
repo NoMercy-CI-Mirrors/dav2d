@@ -309,8 +309,8 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
                     }
                     s_src[0].mf = rnd() & 0xfd;
                     s_src[0].bs = bs_from_bwh4(w, h);
-                    s_src[0].bx4 = rnd() & 0xffff;
-                    s_src[0].by4 = rnd() & 0xffff;
+                    s_src[0].bx4 = rnd() % (0x4000 - w);
+                    s_src[0].by4 = rnd() % (0x4000 - h);
 
                     t_src.mv.mv[0] = quantize_mv(s_src[0].mv[0]);
                     t_src.mv.mv[1] = quantize_mv(s_src[0].mv[1]);
@@ -383,8 +383,8 @@ static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
                         }
                         s_src[0].mf = (rnd() & 0xfc) | (!g << 1) | g;
                         s_src[0].bs = bs_from_bwh4(w, h);
-                        s_src[0].bx4 = rnd() & (0xffff >> (!wide * 8));
-                        s_src[0].by4 = rnd() & (0xffff >> (!wide * 8));
+                        s_src[0].bx4 = rnd() % ((0x4000 >> (!wide * 7)) - w);
+                        s_src[0].by4 = rnd() % ((0x4000 >> (!wide * 7)) - h);
                         int32_t *const mat = s_src[0].m;
                         mat[0] = s_src[0].mv[0].x * (1 << 13);
                         mat[1] = s_src[0].mv[0].y * (1 << 13);
@@ -457,8 +457,8 @@ static void check_splat_comp_warpmv(const Dav2dRefmvsDSPContext *const c) {
                         }
                         s_src[0].mf = (rnd() & 0xfc) | (!g << 1) | g;
                         s_src[0].bs = bs_from_bwh4(w, h);
-                        s_src[0].bx4 = rnd() & (0xffff >> (!wide * 8));
-                        s_src[0].by4 = rnd() & (0xffff >> (!wide * 8));
+                        s_src[0].bx4 = rnd() % ((0x4000 >> (!wide * 7)) - w);
+                        s_src[0].by4 = rnd() % ((0x4000 >> (!wide * 7)) - h);
                         const int widx = rnd() % 68;
                         const uint8_t *const mask = w <= 16 && h <= 16 && rnd() & 1 ?
                             WEDGE_TMVP(s_src[0].bs, w, h, widx) : NULL;
@@ -527,8 +527,8 @@ static void check_splat_comp_wedgemv(const Dav2dRefmvsDSPContext *const c) {
                     }
                     s_src[0].mf = rnd() & 0xfd;
                     s_src[0].bs = bs_from_bwh4(w, h);
-                    s_src[0].bx4 = rnd() & 0xffff;
-                    s_src[0].by4 = rnd() & 0xffff;
+                    s_src[0].bx4 = rnd() % (0x4000 - w);
+                    s_src[0].by4 = rnd() % (0x4000 - h);
                     const int widx = rnd() % 68;
                     const uint8_t *const mask = WEDGE_TMVP(s_src[0].bs, w, h, widx);
                     const int w_swap = rnd() & 1;
