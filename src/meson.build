@@ -98,8 +98,6 @@ if is_asm_enabled
         if (host_machine.cpu_family() == 'aarch64' or
             host_machine.cpu() == 'arm64')
             libdav2d_sources_asm = files(
-                # itx.S is used for both 8 and 16 bpc.
-                'arm/64/itx.S',
                 'arm/64/msac.S',
             )
 
@@ -119,15 +117,12 @@ if is_asm_enabled
                     'arm/64/cdef16.S',
                     'arm/64/filmgrain16.S',
                     'arm/64/ipred16.S',
-                    'arm/64/itx16.S',
                     'arm/64/mc16.S',
                     'arm/64/mc16_sve.S',
                 )
             endif
         elif host_machine.cpu_family().startswith('arm')
             libdav2d_sources_asm = files(
-                # itx.S is used for both 8 and 16 bpc.
-                'arm/32/itx.S',
                 'arm/32/msac.S',
             )
 
@@ -145,7 +140,6 @@ if is_asm_enabled
                     'arm/32/cdef16.S',
                     'arm/32/filmgrain16.S',
                     'arm/32/ipred16.S',
-                    'arm/32/itx16.S',
                     'arm/32/mc16.S',
                 )
             endif
