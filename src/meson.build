@@ -55,6 +55,7 @@ libdav2d_sources = files(
     'thread_task.c',
     'warpmv.c',
     'wedge.c',
+    'wiener_tables.c'
 )
 
 # libdav2d bitdepth source files

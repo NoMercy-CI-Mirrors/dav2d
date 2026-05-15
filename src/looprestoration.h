@@ -63,7 +63,7 @@ typedef union WienerParams {
             const int8_t (*user)[18];
             const int16_t (*pretrained)[13];
         } filters;
-        const uint8_t *subclass_lut;
+        const uint8_t *class_lut;
         const uint16_t *noskip_mask;
         int base_q;
     } multi;

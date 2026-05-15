@@ -50,12 +50,14 @@
 #include "src/ref.h"
 #include "src/thread_task.h"
 #include "src/wedge.h"
+#include "src/wiener_tables.h"
 
 static COLD void init_internal(void) {
     dav2d_init_cpu();
     dav2d_init_ibp_weights();
     dav2d_init_ii_wedge_masks();
     dav2d_init_qm_tables();
+    dav2d_init_wiener_classes();
     dav2d_init_thread();
 }
 

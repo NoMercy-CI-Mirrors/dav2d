@@ -50,6 +50,7 @@
 #include "src/thread_task.h"
 #include "src/warpmv.h"
 #include "src/wedge.h"
+#include "src/wiener_tables.h"
 
 static void init_quant_tables(const Dav2dFrameHeader *const frame_hdr,
                               const int qidx, uint32_t (*dq)[3][2])
@@ -92,10 +93,10 @@ static inline void init_wiener(Dav2dFrameContext *const f) {
     if (type == DAV2D_RESTORATION_NS_WIENER || type == DAV2D_RESTORATION_SWITCHABLE) {
         int num_classes_idx = f->frame_hdr->restoration.p[0].ns.num_classes_idx;
         if (num_classes_idx)
-            f->lf.ns_subclass_lut = dav2d_pc_wiener_sub_classify_ns[idx][num_classes_idx - 1];
+            f->lf.ns_subclass_lut = dav2d_user_wiener_class[idx][num_classes_idx - 1];
     }
     if (type == DAV2D_RESTORATION_PC_WIENER || type == DAV2D_RESTORATION_SWITCHABLE) {
-        f->lf.pc_subclass_lut = dav2d_pc_wiener_sub_classify[idx];
+        f->lf.pc_subclass_lut = dav2d_pretrained_wiener_class[idx];
         f->lf.pc_filters = dav2d_pc_wiener_filters[idx];
     }
 }

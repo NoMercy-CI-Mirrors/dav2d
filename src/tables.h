@@ -81,9 +81,6 @@ EXTERN const int8_t dav2d_wiener_ns_filters[64][16];
 EXTERN const int16_t dav2d_pc_wiener_filters[4][64][13];
 EXTERN const int8_t dav2d_ns_wiener_coef_range_y[16][2];
 EXTERN const int8_t dav2d_ns_wiener_coef_range_uv[18][2];
-EXTERN const uint8_t dav2d_pc_weiner_lut_to_class[4096];
-EXTERN const uint8_t dav2d_pc_wiener_sub_classify[4][256];
-EXTERN const uint8_t dav2d_pc_wiener_sub_classify_ns[4][7][256];
 
 EXTERN const int8_t dav2d_mc_subpel_filters[6][15][8];
 EXTERN const int8_t dav2d_ext_warp_filter[63][8];

@@ -36,7 +36,6 @@
 #include "common/intops.h"
 
 #include "src/looprestoration.h"
-#include "src/tables.h"
 #include "src/gdf_tables.h"
 
 // 64 + 6 + 6
@@ -523,7 +522,7 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
                          const int w, int h,
                          const int8_t (*filters_user)[18],
                          const int16_t (*filters_pretrained)[13],
-                         const uint8_t *subclass_lut,
+                         const uint8_t *class_lut,
                          const uint16_t *noskip_mask,
                          const int base_q, const enum LrEdgeFlags edges,
                          const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
@@ -593,9 +592,7 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
         }
         for (int bx = 0; bx < bw; bx++) {
             int lut_idx = get_class_lut_idx(ptrs, noskip_mask, base_q, bx, by, bh, bitdepth_min_8);
-            // TODO: Convert these 2 lookup tables to a  Pre compute a single lookup table ahead of time
-            int cls = dav2d_pc_weiner_lut_to_class[lut_idx];
-            classes[bx] = subclass_lut[cls];
+            classes[bx] = class_lut[lut_idx];
         }
         for (int y = by << 2; y < (by << 2) + 4; y++) {
             if (y + 4 < h) {
@@ -662,7 +659,7 @@ static void ns_wiener_multi_c(pixel *p, const ptrdiff_t stride,
 {
     wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
                  params->multi.filters.user, NULL,
-                 params->multi.subclass_lut, params->multi.noskip_mask,
+                 params->multi.class_lut, params->multi.noskip_mask,
                  params->multi.base_q, edges, ll_mask HIGHBD_TAIL_SUFFIX);
 }
 
@@ -675,7 +672,7 @@ static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
 {
     wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
                  NULL, params->multi.filters.pretrained,
-                 params->multi.subclass_lut, params->multi.noskip_mask,
+                 params->multi.class_lut, params->multi.noskip_mask,
                  params->multi.base_q, edges, ll_mask HIGHBD_TAIL_SUFFIX);
 }
 
