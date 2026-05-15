@@ -152,40 +152,45 @@ cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, tstride, tsrc, bw4, bh4
 
 .spatial:
     mova            m0, [ssrcq]
-    rorx          bw4d, bw4m, 26
     mov           bh4d, bh4m
+    cmp     dword bw4m, 2
+    jg .s3
+    je .s2
+    ; fall-through
+.s1:
+    mova  [sdstq+64*0], m0
+    add          sdstq, 128*64
+    dec           bh4d
+    jg .s1
+    RET
+.s2:
+    mova  [sdstq+64*0], m0
+    mova  [sdstq+64*1], m0
+    add          sdstq, 128*64
+    dec           bh4d
+    jg .s2
+    RET
+.s3:
+    ; fall-through
+    rorx          bw4d, bw4m, 26
     add          sdstq, bw4q
     neg           bw4q
     dec           bh4d
     jz .last_line
-    cmp           bw4q, -64*2
-    jl .s3
-    je .s2
-    ; fall-through
-.s1:
-    mova  [sdstq-64*1], m0
-    add          sdstq, 128*64
-    dec           bh4d
-    jg .s1
-    jmp .last_line
-.s2:
-    mova  [sdstq-64*2], m0
-    mova  [sdstq-64*1], m0
-    add          sdstq, 128*64
-    dec           bh4d
-    jg .s2
-    jmp .last_line
-.s3:
+.s3_loop:
     mova  [sdstq-64*3], m0
     mova  [sdstq-64*2], m0
     mova  [sdstq-64*1], m0
     add          sdstq, 128*64
     dec           bh4d
-    jg .s3
+    jg .s3_loop
     ; fall-through
 .last_line:
-    mova  [sdstq+bw4q], m0
-    add           bw4q, 64
+    mova [sdstq+bw4q+64*0], m0
+    mova [sdstq+bw4q+64*1], m0
+    mova [sdstq+bw4q+64*2], m0
+    mova [sdstq+bw4q+64*3], m0
+    add           bw4q, 64*4
     jl .last_line
     RET
 
