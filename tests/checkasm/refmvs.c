@@ -392,10 +392,10 @@ static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
                         mat[1] = s_src[0].mv[0].y * (1 << 13);
                         const int range = 0x3ff >> (!wide * 4);
                         const int bias = 0x1ff >> (!wide * 4);
-                        mat[2] = (((rnd() % range) - bias) * (1 << 6)) | 0x10000;
+                        mat[2] = (((rnd() % range) - bias) * (1 << 6)) + 0x10000;
                         mat[3] =  ((rnd() % range) - bias) * (1 << 6);
                         mat[4] =  ((rnd() % range) - bias) * (1 << 6);
-                        mat[5] = (((rnd() % range) - bias) * (1 << 6)) | 0x10000;
+                        mat[5] = (((rnd() % range) - bias) * (1 << 6)) + 0x10000;
 
                         const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
@@ -472,10 +472,10 @@ static void check_splat_comp_warpmv(const Dav2dRefmvsDSPContext *const c) {
                         for (int n = 0; n < 2; n++) {
                             mat[n][0] = s_src[0].mv[n].x * (1 << 13);
                             mat[n][1] = s_src[0].mv[n].y * (1 << 13);
-                            mat[n][2] = (((rnd() % range) - bias) * (1 << 6)) | 0x10000;
+                            mat[n][2] = (((rnd() % range) - bias) * (1 << 6)) + 0x10000;
                             mat[n][3] =  ((rnd() % range) - bias) * (1 << 6);
                             mat[n][4] =  ((rnd() % range) - bias) * (1 << 6);
-                            mat[n][5] = (((rnd() % range) - bias) * (1 << 6)) | 0x10000;
+                            mat[n][5] = (((rnd() % range) - bias) * (1 << 6)) + 0x10000;
                         }
 
                         const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
