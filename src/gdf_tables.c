@@ -27,7 +27,7 @@
 
 #include "config.h"
 
-#include "gdf_tables.h"
+#include "src/gdf_tables.h"
 
 const uint16_t dav2d_gdf_alpha[6][6][22][4] = {
     {

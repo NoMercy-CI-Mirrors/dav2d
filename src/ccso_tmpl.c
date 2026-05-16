@@ -27,8 +27,8 @@
 
 #include "config.h"
 
-#include "ccso.h"
-#include "tables.h"
+#include "src/ccso.h"
+#include "src/tables.h"
 
 #include "common/bitdepth.h"
 #include "common/intops.h"

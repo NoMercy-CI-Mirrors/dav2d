@@ -28,9 +28,9 @@
 #ifndef DAV2D_SRC_CCSO_H
 #define DAV2D_SRC_CCSO_H
 
-#include "cdef.h"
-
 #include "common/bitdepth.h"
+
+#include "src/cdef.h"
 
 #define decl_ccso_prep_fn(name) \
 void (name)(uint8_t *dst, ptrdiff_t dst_stride, const pixel *src, ptrdiff_t src_stride, \

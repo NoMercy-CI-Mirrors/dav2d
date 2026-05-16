@@ -30,7 +30,6 @@
 
 #include <stdatomic.h>
 
-#include "ccso.h"
 #include "dav2d/data.h"
 
 typedef struct Dav2dFrameContext Dav2dFrameContext;
@@ -40,6 +39,7 @@ typedef struct Dav2dTask Dav2dTask;
 
 #include "common/attributes.h"
 
+#include "src/ccso.h"
 #include "src/cdef.h"
 #include "src/cdf.h"
 #include "src/data.h"
