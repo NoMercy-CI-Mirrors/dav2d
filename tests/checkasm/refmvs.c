@@ -87,6 +87,14 @@ static int check_spatial_mv(const refmvs_block *a, const ptrdiff_t as,
     return 0;
 }
 
+static void dump_temporal_mv(const char *const tag,
+                             const refmvs_temporal_block *const a)
+{
+    fprintf(stderr, "%s: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d\n",
+            tag, a->mv.mv[0].y, a->mv.mv[0].x, a->mv.mv[1].y, a->mv.mv[1].x,
+            a->ref.ref[0], a->ref.ref[1]);
+}
+
 static int check_temporal_mv(const refmvs_temporal_block *a, const ptrdiff_t as,
                              const refmvs_temporal_block *b, const ptrdiff_t bs,
                              const int w, const int h)
@@ -96,15 +104,9 @@ static int check_temporal_mv(const refmvs_temporal_block *a, const ptrdiff_t as,
         for (int x = 0; x < tw; x++)
             if (memcmp(&a[x], &b[x], sizeof(refmvs_temporal_block))) {
                 if (fail()) {
-                    fprintf(stderr, "temporal %dx%d,y8=%d,x8=%d\n", w, h, y, x);
-                    fprintf(stderr, "c: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d\n",
-                            a[x].mv.mv[0].y, a[x].mv.mv[0].x,
-                            a[x].mv.mv[1].y, a[x].mv.mv[1].x,
-                            a[x].ref.ref[0], a[x].ref.ref[1]);
-                    fprintf(stderr, "s: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d\n",
-                            b[x].mv.mv[0].y, b[x].mv.mv[0].x,
-                            b[x].mv.mv[1].y, b[x].mv.mv[1].x,
-                            b[x].ref.ref[0], b[x].ref.ref[1]);
+                    fprintf(stderr, "temporal %dx%d,y8=%d,x8=%d\n", w * 4, h * 4, y, x);
+                    dump_temporal_mv("c", &a[x]);
+                    dump_temporal_mv("s", &b[x]);
                 }
                 return 1;
             }
