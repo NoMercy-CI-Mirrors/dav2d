@@ -29,6 +29,7 @@
 #include "src/refmvs.h"
 
 decl_splat_mv_fn(dav2d_splat_mv_avx2);
+decl_splat_warpmv_fn(dav2d_splat_warpmv_avx2);
 decl_splat_comp_wedgemv_fn(dav2d_splat_comp_wedgemv_avx2);
 
 static ALWAYS_INLINE void refmvs_dsp_init_x86(Dav2dRefmvsDSPContext *const c) {
@@ -38,6 +39,7 @@ static ALWAYS_INLINE void refmvs_dsp_init_x86(Dav2dRefmvsDSPContext *const c) {
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
     c->splat_mv = dav2d_splat_mv_avx2;
+    c->splat_warpmv = dav2d_splat_warpmv_avx2;
     c->splat_comp_wedgemv = dav2d_splat_comp_wedgemv_avx2;
 #endif
 }
