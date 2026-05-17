@@ -28,6 +28,7 @@
 #ifndef DAV2D_SRC_LOONGARCH_MSAC_H
 #define DAV2D_SRC_LOONGARCH_MSAC_H
 
+#if 0
 unsigned dav2d_msac_decode_symbol_adapt4_lsx(MsacContext *s, uint16_t *cdf,
                                               size_t n_symbols);
 unsigned dav2d_msac_decode_symbol_adapt8_lsx(MsacContext *s, uint16_t *cdf,
@@ -43,5 +44,6 @@ unsigned dav2d_msac_decode_hi_tok_lsx(MsacContext *s, uint16_t *cdf);
 #define dav2d_msac_decode_bool           dav2d_msac_decode_bool_lsx
 #define dav2d_msac_decode_bool_equi      dav2d_msac_decode_bool_equi_lsx
 #define dav2d_msac_decode_hi_tok         dav2d_msac_decode_hi_tok_lsx
+#endif
 
 #endif /* DAV2D_SRC_LOONGARCH_MSAC_H */
