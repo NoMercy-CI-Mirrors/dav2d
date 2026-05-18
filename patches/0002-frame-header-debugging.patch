@@ -1,4 +1,4 @@
-From 2a3b4d48278010d38c4337e318bac998a7e0995e Mon Sep 17 00:00:00 2001
+From e02750be53ff2dfdcec226106ec6514b4df921a3 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Fri, 23 Jan 2026 09:07:44 -0500
 Subject: [PATCH 2/5] Frame header debugging.
@@ -11,7 +11,7 @@ Subject: [PATCH 2/5] Frame header debugging.
  4 files changed, 301 insertions(+), 7 deletions(-)
 
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 4910c427d5..7cd0394751 100644
+index 559a95dc74..7d6fc6ab76 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -3609,6 +3609,11 @@ static AVM_INLINE void setup_qm_params(AV2Decoder *pbi,
@@ -80,7 +80,7 @@ index 4910c427d5..7cd0394751 100644
    }
    cm->cur_frame->film_grain_params = cm->film_grain_params;
  }
-@@ -6633,7 +6657,11 @@ static void read_global_motion_params(WarpedMotionParams *params,
+@@ -6634,7 +6658,11 @@ static void read_global_motion_params(WarpedMotionParams *params,
  
                                        const struct scale_factors *sf,
  
@@ -93,7 +93,7 @@ index 4910c427d5..7cd0394751 100644
    const int precision_loss = get_gm_precision_loss(precision);
    (void)precision_loss;
    TransformationType type = avm_rb_read_bit(rb);
-@@ -6692,6 +6720,14 @@ static void read_global_motion_params(WarpedMotionParams *params,
+@@ -6693,6 +6721,14 @@ static void read_global_motion_params(WarpedMotionParams *params,
                         trans_dec_factor;
    }
  
@@ -108,7 +108,7 @@ index 4910c427d5..7cd0394751 100644
    if (params->wmtype <= AFFINE) {
      av2_reduce_warp_model(params);
      av2_get_shear_params(params
-@@ -6781,7 +6817,11 @@ static AVM_INLINE void read_global_motion(AV2_COMMON *cm,
+@@ -6782,7 +6818,11 @@ static AVM_INLINE void read_global_motion(AV2_COMMON *cm,
  
                                get_ref_scale_factors_const(cm, frame),
  
@@ -121,7 +121,7 @@ index 4910c427d5..7cd0394751 100644
  
      // TODO(sarahparker, debargha): The logic in the commented out code below
      // does not work currently and causes mismatches when resize is on. Fix it
-@@ -7043,6 +7083,14 @@ static INLINE void read_intrabc_params(AV2_COMMON *const cm,
+@@ -7044,6 +7084,14 @@ static INLINE void read_intrabc_params(AV2_COMMON *const cm,
      }
      read_frame_max_bvp_drl_bits(cm, rb);
    }
@@ -136,7 +136,7 @@ index 4910c427d5..7cd0394751 100644
  }
  static INLINE void read_screen_content_params(AV2_COMMON *const cm,
                                                struct avm_read_bit_buffer *rb) {
-@@ -7065,6 +7113,12 @@ static INLINE void read_screen_content_params(AV2_COMMON *const cm,
+@@ -7066,6 +7114,12 @@ static INLINE void read_screen_content_params(AV2_COMMON *const cm,
    } else {
      features->cur_frame_force_integer_mv = 0;
    }
@@ -149,7 +149,7 @@ index 4910c427d5..7cd0394751 100644
  }
  
  static void set_primary_ref_frame_and_ctx(AV2Decoder *pbi) {
-@@ -7424,6 +7478,10 @@ static int read_show_existing_frame(AV2Decoder *pbi, bool is_regular_obu,
+@@ -7425,6 +7479,10 @@ static int read_show_existing_frame(AV2Decoder *pbi, bool is_regular_obu,
    // assign_frame_buffer_p()!
    assert(IMPLIES(cm->derive_sef_order_hint,
                   !cm->cur_frame->raw_frame_buffer.data));
@@ -160,7 +160,7 @@ index 4910c427d5..7cd0394751 100644
  
    FrameHash raw_frame_hash = cm->cur_frame->raw_frame_hash;
    FrameHash grain_frame_hash = cm->cur_frame->grain_frame_hash;
-@@ -8154,6 +8212,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -8181,6 +8239,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
  
    int seq_header_id_for_frame_header = setup_sequence_header_id(cm, rb);
    assert(seq_header_id_for_frame_header >= 0);
@@ -172,7 +172,7 @@ index 4910c427d5..7cd0394751 100644
  
    handle_sequence_header(pbi, obu_type, obu_xlayer_id,
                           seq_header_id_for_frame_header);
-@@ -8338,6 +8401,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -8365,6 +8428,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
      cm->cur_frame->immediate_output_picture = cm->immediate_output_picture;
      cm->cur_frame->implicit_output_picture = cm->implicit_output_picture;
      cm->cur_frame->frame_output_done = 0;
@@ -184,7 +184,7 @@ index 4910c427d5..7cd0394751 100644
    }
    av2_set_frame_sb_size(cm, cm->seq_params.sb_size);
  
-@@ -8457,6 +8525,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -8484,6 +8552,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
          }
        }
      }
@@ -197,7 +197,7 @@ index 4910c427d5..7cd0394751 100644
    }
  
    if (obu_type == OBU_CLOSED_LOOP_KEY || obu_type == OBU_OPEN_LOOP_KEY) {
-@@ -8581,6 +8655,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -8608,6 +8682,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        }
      }
    }
@@ -208,7 +208,7 @@ index 4910c427d5..7cd0394751 100644
  
    if (cm->immediate_output_picture == 0 &&
        current_frame->refresh_frame_flags == 0) {
-@@ -8760,6 +8838,14 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -8787,6 +8865,14 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
            cm->remapped_ref_idx[i] = ref;
          }
        }
@@ -223,7 +223,7 @@ index 4910c427d5..7cd0394751 100644
        if (!frame_is_sframe(cm) && frame_size_override_flag &&
            !cm->bridge_frame_info.is_bridge_frame) {
          setup_frame_size_with_refs(cm, explicit_ref_frame_map, rb);
-@@ -8771,6 +8857,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -8798,6 +8884,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        if (!explicit_ref_frame_map) {
          av2_get_ref_frames(cm, current_frame->display_order_hint, 1, 0,
                             cm->ref_frame_map_pairs);
@@ -237,7 +237,7 @@ index 4910c427d5..7cd0394751 100644
  
          // Note: The following if block implements bitstream constraint checks
          // for consistent reference frame mapping when (embedded or temporal)
-@@ -9023,6 +9116,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9050,6 +9143,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
          cm->tmvp_sample_step = 1;
          cm->tmvp_sample_stepl2 = 0;
        }
@@ -249,7 +249,7 @@ index 4910c427d5..7cd0394751 100644
  
        cm->tip_global_motion.as_int = 0;
        cm->tip_interp_filter = MULTITAP_SHARP;
-@@ -9081,6 +9179,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9108,6 +9206,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
              !cm->bridge_frame_info.is_bridge_frame)
            read_frame_opfl_refine_type(cm, rb);
        }
@@ -266,7 +266,7 @@ index 4910c427d5..7cd0394751 100644
  
        if (features->tip_frame_mode != TIP_FRAME_AS_OUTPUT &&
            !cm->bridge_frame_info.is_bridge_frame &&
-@@ -9126,6 +9234,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9153,6 +9261,12 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
            features->enabled_motion_modes =
                cm->seq_params.seq_enabled_motion_modes;
          }
@@ -279,7 +279,7 @@ index 4910c427d5..7cd0394751 100644
        }
      }
  
-@@ -9303,6 +9417,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9330,6 +9444,10 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
      } else {
        features->disable_cdf_update = 1;
      }
@@ -290,7 +290,7 @@ index 4910c427d5..7cd0394751 100644
  
      read_tile_info(pbi, rb);
      if (!av2_is_min_tile_width_satisfied(cm)) {
-@@ -9315,6 +9433,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9342,6 +9460,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
      cm->cur_frame->base_qindex = quant_params->base_qindex;
      cm->cur_frame->u_ac_delta_q = quant_params->u_ac_delta_q;
      cm->cur_frame->v_ac_delta_q = quant_params->v_ac_delta_q;
@@ -307,7 +307,7 @@ index 4910c427d5..7cd0394751 100644
  
      set_primary_ref_frame_and_ctx(pbi);
  
-@@ -9332,6 +9460,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9359,6 +9487,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
      }
  
      setup_segmentation(cm, rb);
@@ -319,7 +319,7 @@ index 4910c427d5..7cd0394751 100644
  
      setup_qm_params(pbi, quant_params, cm->seg.enabled, av2_num_planes(cm), rb);
      cm->delta_q_info.delta_q_res = 1;
-@@ -9341,6 +9474,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9368,6 +9501,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        xd->current_base_qindex = quant_params->base_qindex;
        cm->delta_q_info.delta_q_res = 1 << avm_rb_read_literal(rb, 2);
      }
@@ -331,7 +331,7 @@ index 4910c427d5..7cd0394751 100644
  
      xd->cur_frame_force_integer_mv = features->cur_frame_force_integer_mv;
      features->has_lossless_segment = 0;
-@@ -9401,6 +9539,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9428,6 +9566,11 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        features->allow_parity_hiding = false;
      else
        features->allow_parity_hiding = avm_rb_read_bit(rb);
@@ -343,7 +343,7 @@ index 4910c427d5..7cd0394751 100644
  
      setup_segmentation_dequant(pbi, xd);
  
-@@ -9441,29 +9584,76 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9468,29 +9611,76 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
        cm->cur_frame->base_qindex = cm->quant_params.base_qindex;
        cm->cur_frame->u_ac_delta_q = cm->quant_params.u_ac_delta_q;
        cm->cur_frame->v_ac_delta_q = cm->quant_params.v_ac_delta_q;
@@ -420,7 +420,7 @@ index 4910c427d5..7cd0394751 100644
    }
    if (features->tip_frame_mode == TIP_FRAME_AS_OUTPUT) {
      if (cm->seq_params.enable_lf_sub_pu && cm->features.allow_lf_sub_pu &&
-@@ -9500,6 +9690,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9527,6 +9717,16 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
    features->enable_imp_msk_bld = seq_params->enable_imp_msk_bld;
  
    features->reduced_tx_set_used = avm_rb_read_literal(rb, 2);
@@ -437,7 +437,7 @@ index 4910c427d5..7cd0394751 100644
  
    if (features->allow_ref_frame_mvs && !frame_might_allow_ref_frame_mvs(cm)) {
      avm_internal_error(&cm->error, AVM_CODEC_CORRUPT_FRAME,
-@@ -9511,7 +9711,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
+@@ -9538,7 +9738,13 @@ static int read_uncompressed_header(AV2Decoder *pbi, OBU_TYPE obu_type,
                         "Frame wrongly requests TIP mode");
    }
  
@@ -453,7 +453,7 @@ index 4910c427d5..7cd0394751 100644
    features->enable_ext_seg = seq_params->enable_ext_seg;
    return 0;
 diff --git a/av2/decoder/obu_ci.c b/av2/decoder/obu_ci.c
-index ba2d076e06..a17b162157 100644
+index 6305ce79e8..8a0b702753 100644
 --- a/av2/decoder/obu_ci.c
 +++ b/av2/decoder/obu_ci.c
 @@ -25,6 +25,8 @@
@@ -676,5 +676,5 @@ index 36030e147d..b605a9125c 100644
  
  #endif /* AVM_DEBUG_H */
 -- 
-2.54.0
+2.48.1
 

@@ -1,4 +1,4 @@
-From c1dc48906ac7fadc2fd1f2af9b6ffe446af4d565 Mon Sep 17 00:00:00 2001
+From 8dd5a4860f1e56f38ed4988a3be67507a67b515b Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -446,7 +446,7 @@ index caaaf46d9f..8a062d7909 100644
 +#endif
  }
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 6f586538d3..a143d28d75 100644
+index ff724ab69a..6ebe3808ec 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -209,11 +209,25 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -516,7 +516,7 @@ index 6f586538d3..a143d28d75 100644
  
  static AVM_INLINE void copy_frame_mvs_inter_block(AV2_COMMON *const cm,
 diff --git a/av2/encoder/encodemb.c b/av2/encoder/encodemb.c
-index 4e81ebf1d4..7535d9d7fa 100644
+index c2cf414e58..2dd31408e9 100644
 --- a/av2/encoder/encodemb.c
 +++ b/av2/encoder/encodemb.c
 @@ -1029,7 +1029,7 @@ static void encode_block(int plane, int block, int blk_row, int blk_col,
@@ -537,7 +537,7 @@ index 4e81ebf1d4..7535d9d7fa 100644
          xd, dqcoeff, plane, tx_type, tx_size, dst, pd->dst.stride,
          (plane == 0 || !is_cctx_allowed(cm, xd) || !recon_with_cctx)
              ? p->eobs[block]
-@@ -1530,7 +1530,7 @@ void av2_encode_block_intra(int plane, int block, int blk_row, int blk_col,
+@@ -1512,7 +1512,7 @@ void av2_encode_block_intra(int plane, int block, int blk_row, int blk_col,
    }
  
    if (*eob) {
@@ -546,7 +546,7 @@ index 4e81ebf1d4..7535d9d7fa 100644
          xd, dqcoeff, plane, tx_type, tx_size, dst, dst_stride, *eob,
          replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
                              cm->features.allow_screen_content_tools, xd),
-@@ -1847,13 +1847,13 @@ void av2_encode_block_intra_joint_uv(int block, int blk_row, int blk_col,
+@@ -1829,13 +1829,13 @@ void av2_encode_block_intra_joint_uv(int block, int blk_row, int blk_col,
    if (*eob_c1 || *eob_c2) {
      av2_inv_cross_chroma_tx_block(dqcoeff_c1, dqcoeff_c2, tx_size, cctx_type,
                                    xd->bd);
@@ -576,7 +576,7 @@ index ab118c5e01..e3c60f9950 100644
  }
  
 diff --git a/av2/encoder/tx_search.c b/av2/encoder/tx_search.c
-index b6f5ed3ebb..9ff8b3b67b 100644
+index 559c7d1da9..3420c3f82a 100644
 --- a/av2/encoder/tx_search.c
 +++ b/av2/encoder/tx_search.c
 @@ -884,7 +884,7 @@ static AVM_INLINE void inverse_transform_block_facade(
