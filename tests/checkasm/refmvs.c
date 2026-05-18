@@ -589,6 +589,8 @@ void checkasm_check_refmvs(void) {
     Dav2dRefmvsDSPContext c;
     dav2d_refmvs_dsp_init(&c);
 
+    dav2d_init_ii_wedge_masks();
+
     check_splat_mv(&c);
     check_splat_warpmv(&c);
     check_splat_comp_warpmv(&c);

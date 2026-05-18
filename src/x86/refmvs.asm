@@ -277,7 +277,7 @@ cglobal splat_comp_wedgemv, 5, 8, 3, sdst, ssrc, tdst, tstride, tsrc, bw4, bh4, 
     pextrw  [tdstq+ 4], m6, 0
     pextrw  [tdstq+tstrideq*2+ 0], m6, 1
     pextrd  [tdstq+tstrideq*2+ 2], m6, 1
-    add         wedgeq, 8
+    add         wedgeq, 4
     lea          tdstq, [tdstq+tstrideq*4]
     sub           bh4d, 2
     jg .t1_loop
