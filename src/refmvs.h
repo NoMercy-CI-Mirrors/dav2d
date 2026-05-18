@@ -224,7 +224,8 @@ static ALWAYS_INLINE mv scale_mv(const mv in, const int sf) {
 static ALWAYS_INLINE unsigned quantize_mv_comp(const unsigned absv) {
     assert(absv < 2048);
     if (!absv) return 0;
-    const int nbits = iclip(ulog2(absv) - 4, 0, 6);
+    const int nbits = imax(ulog2(absv) - 4, 0);
+    assert((unsigned) nbits <= 6U);
     int res = (absv - (16 * !!nbits << nbits)) >> nbits;
     res += (nbits + !!nbits) * 16;
     return res;
