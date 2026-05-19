@@ -49,11 +49,13 @@ function ipred_dc_128_8bpc_neon, export=1
 40:
         AARCH64_VALID_JUMP_TARGET
 4:
-        st1             {v0.s}[0],  [x0], x1
-        st1             {v0.s}[0],  [x6], x1
+        str             s0,  [x0]
+        str             s0,  [x6]
         subs            w4,  w4,  #4
-        st1             {v0.s}[0],  [x0], x1
-        st1             {v0.s}[0],  [x6], x1
+        str             s0,  [x0, x1]
+        add             x0,  x0,  x1,  lsl #1
+        str             s0,  [x6, x1]
+        add             x6,  x6,  x1,  lsl #1
         b.gt            4b
         ret
 80:
