@@ -24,15 +24,14 @@
 ; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 struc FGData
-    .seed:                      resd 1
-    .num_y_points:              resd 1
-    .y_points:                  resb 14 * 2
     .chroma_scaling_from_luma:  resd 1
+    .num_y_points:              resd 1
     .num_uv_points:             resd 2
-    .uv_points:                 resb 2 * 10 * 2
+    .y_points:                  resb 14 * 2
+    .uv_points:                 resb 2 * 14 * 2
     .scaling_shift:             resd 1
     .ar_coeff_lag:              resd 1
-    .ar_coeffs_y:               resb 24
+    .ar_coeffs_y:               resb 28
     .ar_coeffs_uv:              resb 2 * 28 ; includes padding
     .ar_coeff_shift:            resq 1
     .grain_scale_shift:         resd 1
@@ -41,6 +40,8 @@ struc FGData
     .uv_offset:                 resd 2
     .overlap_flag:              resd 1
     .clip_to_restricted_range:  resd 1
+    .mc_identity:               resd 1
+    .block_size:                resd 1
 endstruc
 
 cextern gaussian_sequence

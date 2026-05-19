@@ -49,12 +49,14 @@ static ALWAYS_INLINE void film_grain_dsp_init_x86(Dav2dFilmGrainDSPContext *cons
 
     c->generate_grain_y = BF(dav2d_generate_grain_y, ssse3);
     c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I420 - 1] = BF(dav2d_generate_grain_uv_420, ssse3);
-    c->fgy_32x32xn = BF(dav2d_fgy_32x32xn, ssse3);
-    c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I420 - 1] = BF(dav2d_fguv_32x32xn_i420, ssse3);
     c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I422 - 1] = BF(dav2d_generate_grain_uv_422, ssse3);
     c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I444 - 1] = BF(dav2d_generate_grain_uv_444, ssse3);
+#if 0
+    c->fgy_32x32xn = BF(dav2d_fgy_32x32xn, ssse3);
+    c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I420 - 1] = BF(dav2d_fguv_32x32xn_i420, ssse3);
     c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I422 - 1] = BF(dav2d_fguv_32x32xn_i422, ssse3);
     c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I444 - 1] = BF(dav2d_fguv_32x32xn_i444, ssse3);
+#endif
 
 #if ARCH_X86_64
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
@@ -64,6 +66,7 @@ static ALWAYS_INLINE void film_grain_dsp_init_x86(Dav2dFilmGrainDSPContext *cons
     c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I422 - 1] = BF(dav2d_generate_grain_uv_422, avx2);
     c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I444 - 1] = BF(dav2d_generate_grain_uv_444, avx2);
 
+#if 0
     if (!(flags & DAV2D_X86_CPU_FLAG_SLOW_GATHER)) {
         c->fgy_32x32xn = BF(dav2d_fgy_32x32xn, avx2);
         c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I420 - 1] = BF(dav2d_fguv_32x32xn_i420, avx2);
@@ -79,5 +82,6 @@ static ALWAYS_INLINE void film_grain_dsp_init_x86(Dav2dFilmGrainDSPContext *cons
         c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I422 - 1] = BF(dav2d_fguv_32x32xn_i422, avx512icl);
         c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I444 - 1] = BF(dav2d_fguv_32x32xn_i444, avx512icl);
     }
+#endif
 #endif
 }

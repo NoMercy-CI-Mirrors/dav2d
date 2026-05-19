@@ -78,10 +78,11 @@ JMP_TABLE generate_grain_uv_444, avx2, 0, 1, 2, 3
 SECTION .text
 
 INIT_YMM avx2
-cglobal generate_grain_y_8bpc, 2, 9, 8, buf, fg_data
+cglobal generate_grain_y_8bpc, 2, 9, 8, buf, fg_data, seed
 %define base r4-generate_grain_y_8bpc_avx2_table
     lea              r4, [generate_grain_y_8bpc_avx2_table]
-    vpbroadcastw    xm0, [fg_dataq+FGData.seed]
+    movd            xm0, seedm
+    vpbroadcastw    xm0, xm0
     mov             r6d, [fg_dataq+FGData.grain_scale_shift]
     movq            xm1, [base+next_upperbit_mask]
     movsxd           r5, [fg_dataq+FGData.ar_coeff_lag]
@@ -381,10 +382,15 @@ INIT_YMM avx2
 
 %macro GEN_GRAIN_UV_FN 3 ; ss_name, ss_x, ss_y
 INIT_XMM avx2
-cglobal generate_grain_uv_%1_8bpc, 4, 10, 16, buf, bufy, fg_data, uv
+cglobal generate_grain_uv_%1_8bpc, 4, 10, 16, buf, bufy, fg_data, uv, seed
 %define base r4-generate_grain_uv_%1_8bpc_avx2_table
+%if UNIX64
+    movd            xm0, seedm
+    vpbroadcastw    xm0, xm0
+%else
+    vpbroadcastw    xm0, seedm
+%endif
     lea              r4, [generate_grain_uv_%1_8bpc_avx2_table]
-    vpbroadcastw    xm0, [fg_dataq+FGData.seed]
     mov             r6d, [fg_dataq+FGData.grain_scale_shift]
     movq            xm1, [base+next_upperbit_mask]
     movq            xm4, [base+mul_bits]
@@ -861,6 +867,7 @@ INIT_YMM avx2
     RET
 %endmacro
 
+%if 0
 INIT_YMM avx2
 cglobal fgy_32x32xn_8bpc, 6, 13, 15, dst, src, stride, fg_data, w, scaling, \
                                      grain_lut, h, sby, see, overlap
@@ -2081,12 +2088,13 @@ cglobal fguv_32x32xn_i%1_8bpc, 6, 15, 16, dst, src, stride, fg_data, w, scaling,
 .end:
     RET
 %endmacro
+%endif
 
 GEN_GRAIN_UV_FN 420, 1, 1
-FGUV_FN         420, 1, 1
+;FGUV_FN         420, 1, 1
 GEN_GRAIN_UV_FN 422, 1, 0
-FGUV_FN         422, 1, 0
+;FGUV_FN         422, 1, 0
 GEN_GRAIN_UV_FN 444, 0, 0
-FGUV_FN         444, 0, 0
+;FGUV_FN         444, 0, 0
 
 %endif ; ARCH_X86_64

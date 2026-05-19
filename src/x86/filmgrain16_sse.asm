@@ -129,26 +129,27 @@ SECTION .text
 
 INIT_XMM ssse3
 %if ARCH_X86_64
-cglobal generate_grain_y_16bpc, 3, 8, 16, buf, fg_data, bdmax
+cglobal generate_grain_y_16bpc, 2, 8, 16, buf, fg_data, seed, bdmax
+    SPLATW           m0, seedm
+    movifnidn       r3d, r3m
     lea              r4, [pb_mask]
 %define base r4-pb_mask
 %else
-cglobal generate_grain_y_16bpc, 3, 6, 8, buf, fg_data, bdmax
+cglobal generate_grain_y_16bpc, 3, 6, 8, buf, fg_data, seed, bdmax
     LEA              r4, $$
 %define base r4-$$
 %endif
     movq             m1, [base+rnd_next_upperbit_mask]
     movq             m4, [base+mul_bits]
     movq             m7, [base+hmul_bits]
-    mov             r3d, [fg_dataq+FGData.grain_scale_shift]
+    mov             r2d, [fg_dataq+FGData.grain_scale_shift]
     lea             r5d, [bdmaxq+1]
     shr             r5d, 11             ; 0 for 10bpc, 2 for 12bpc
-    sub              r3, r5
-    SPLATW           m6, [base+round+r3*2-2]
+    sub              r2, r5
+    SPLATW           m6, [base+round+r2*2-2]
     mova             m5, [base+pb_mask]
-    SPLATW           m0, [fg_dataq+FGData.seed]
-    mov              r3, -73*82*2
-    sub            bufq, r3
+    mov              r2, -73*82*2
+    sub            bufq, r2
 %if ARCH_X86_64
     lea              r6, [gaussian_sequence]
 %endif
@@ -174,26 +175,27 @@ cglobal generate_grain_y_16bpc, 3, 6, 8, buf, fg_data, bdmax
     paddw            m3, m3             ; otherwise bpc=12 w/ grain_scale_shift=0
                                         ; shifts by 0, which pmulhrsw does not support
     pmulhrsw         m3, m6
-    movq      [bufq+r3], m3
-    add              r3, 4*2
+    movq      [bufq+r2], m3
+    add              r2, 4*2
     jl .loop
 
     ; auto-regression code
-    movsxd           r3, [fg_dataq+FGData.ar_coeff_lag]
-    movsxd           r3, [base+generate_grain_y_16bpc_ssse3_table+r3*4]
-    lea              r3, [r3+base+generate_grain_y_16bpc_ssse3_table]
-    jmp              r3
+    movsxd           r2, [fg_dataq+FGData.ar_coeff_lag]
+    movsxd           r2, [base+generate_grain_y_16bpc_ssse3_table+r2*4]
+    lea              r2, [r2+base+generate_grain_y_16bpc_ssse3_table]
+    jmp              r2
 
 .ar1:
 %if WIN64
-    DEFINE_ARGS shift, fg_data, max, buf, val3, min, cf3, x, val0
+    DEFINE_ARGS shift, fg_data, buf, max, val3, min, cf3, x, val0
     lea            bufq, [r0-2*(82*73-(82*3+79))]
     PUSH             r8
 %else
 %if ARCH_X86_64
     DEFINE_ARGS buf, fg_data, max, shift, val3, min, cf3, x, val0
+    mov            maxd, r3d
 %else ; x86-32
-    DEFINE_ARGS buf, fg_data, min, val3, x, cf3, val0
+    DEFINE_ARGS buf, fg_data, val3, min, x, cf3, val0
     PUSH             r6
 %define shiftd r1d
 %endif
@@ -203,12 +205,12 @@ cglobal generate_grain_y_16bpc, 3, 6, 8, buf, fg_data, bdmax
     movd             m4, [fg_dataq+FGData.ar_coeffs_y]
     mov          shiftd, [fg_dataq+FGData.ar_coeff_shift]
 %if WIN64
-    DEFINE_ARGS shift, h, max, buf, val3, min, cf3, x, val0
+    DEFINE_ARGS shift, h, buf, max, val3, min, cf3, x, val0
 %elif ARCH_X86_64
     DEFINE_ARGS buf, h, max, shift, val3, min, cf3, x, val0
 %else ; x86-32
 %undef shiftd
-    DEFINE_ARGS buf, shift, min, val3, x, cf3, val0
+    DEFINE_ARGS buf, shift, val3, min, x, cf3, val0
 %define hd dword r0m
 %define maxd dword minm
 %endif
@@ -277,7 +279,7 @@ cglobal generate_grain_y_16bpc, 3, 6, 8, buf, fg_data, bdmax
 %if ARCH_X86_32
     ALLOC_STACK -16*8
 %endif
-    DEFINE_ARGS buf, fg_data, bdmax, shift
+    DEFINE_ARGS buf, fg_data, shift, bdmax
     mov          shiftd, [fg_dataq+FGData.ar_coeff_shift]
     movd             m0, [base+round_vals-12+shiftq*2]
     pshuflw          m0, m0, q0000
@@ -418,7 +420,7 @@ cglobal generate_grain_y_16bpc, 3, 6, 8, buf, fg_data, bdmax
     RET
 
 .ar3:
-    DEFINE_ARGS buf, fg_data, bdmax, shift
+    DEFINE_ARGS buf, fg_data, shift, bdmax
 %if WIN64
     mov              r6, rsp
     and             rsp, ~15
@@ -630,7 +632,7 @@ cglobal generate_grain_y_16bpc, 3, 6, 8, buf, fg_data, bdmax
 %macro generate_grain_uv_fn 3 ; ss_name, ss_x, ss_y
 INIT_XMM ssse3
 %if ARCH_X86_64
-cglobal generate_grain_uv_%1_16bpc, 4, 11, 16, buf, bufy, fg_data, uv, bdmax, x, gaussian_reg, h, pic_reg
+cglobal generate_grain_uv_%1_16bpc, 4, 11, 16, buf, bufy, fg_data, uv, x, bdmax, gaussian_reg, h, pic_reg
 %define base r8-pb_mask
     lea              r8, [pb_mask]
     movifnidn    bdmaxd, bdmaxm
@@ -640,23 +642,23 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
 %define base r2-$$
     LEA              r2, $$
     mov        fg_dataq, r2m
-    mov             r6d, r4m
+    mov             r6d, r5m
     inc             r6d
 %endif
+    SPLATW           m0, r4m
     movq             m1, [base+rnd_next_upperbit_mask]
     movq             m4, [base+mul_bits]
     movq             m7, [base+hmul_bits]
-    mov             r5d, [fg_dataq+FGData.grain_scale_shift]
+    mov             r4d, [fg_dataq+FGData.grain_scale_shift]
     shr             r6d, 11             ; 0 for 10bpc, 2 for 12bpc
-    sub              r5, r6
-    SPLATW           m6, [base+round+r5*2-2]
+    sub              r4, r6
+    SPLATW           m6, [base+round+r4*2-2]
     mova             m5, [base+pb_mask]
-    SPLATW           m0, [fg_dataq+FGData.seed]
 %if ARCH_X86_64
     SPLATW           m2, [base+pw_seed_xor+uvq*4]
 %else
-    mov             r5d, r3m
-    SPLATW           m2, [base+pw_seed_xor+r5*4]
+    mov             r4d, r3m
+    SPLATW           m2, [base+pw_seed_xor+r4*4]
 %endif
     pxor             m0, m2
 %if ARCH_X86_64
@@ -703,14 +705,14 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
 %endif
 
     ; auto-regression code
-    movsxd           r5, [fg_dataq+FGData.ar_coeff_lag]
-    movsxd           r5, [base+generate_grain_uv_%1_16bpc_ssse3_table+r5*4]
-    lea              r5, [r5+base+generate_grain_uv_%1_16bpc_ssse3_table]
-    jmp              r5
+    movsxd           r4, [fg_dataq+FGData.ar_coeff_lag]
+    movsxd           r4, [base+generate_grain_uv_%1_16bpc_ssse3_table+r4*4]
+    lea              r4, [r4+base+generate_grain_uv_%1_16bpc_ssse3_table]
+    jmp              r4
 
 .ar0:
 %if ARCH_X86_64
-    DEFINE_ARGS buf, bufy, fg_data, uv, bdmax, shift
+    DEFINE_ARGS buf, bufy, fg_data, uv, shift, bdmax
 %else
     DEFINE_ARGS buf, bufy, pic_reg, fg_data, uv, shift
     ALLOC_STACK  -16*2
@@ -725,7 +727,7 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
     sar          bdmaxd, 1
     SPLATW           m1, bdmaxd                     ; max_gain
 %else
-    SPLATW           m1, r4m
+    SPLATW           m1, r5m
     psraw            m1, 1
 %endif
     pcmpeqw          m7, m7
@@ -826,7 +828,7 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
 
 .ar1:
 %if ARCH_X86_64
-    DEFINE_ARGS buf, bufy, fg_data, uv, max, cf3, min, val3, x
+    DEFINE_ARGS buf, bufy, fg_data, uv, cf3, max, min, val3, x
 %else
     RESET_STACK_STATE
     DEFINE_ARGS buf, shift, pic_reg, fg_data, uv, bufy, cf3
@@ -837,7 +839,7 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
     movsx          cf3d, byte [fg_dataq+FGData.ar_coeffs_uv+uvq+3]
     movq             m4, [fg_dataq+FGData.ar_coeffs_uv+uvq]
 %if WIN64
-    DEFINE_ARGS shift, bufy, h, buf, max, cf3, min, val3, x, val0
+    DEFINE_ARGS shift, bufy, h, buf, cf3, max, min, val3, x, val0
 %if %2
     lea            bufq, [r0-2*(82*(73-35*%3)+44-(82*3+41))]
 %else
@@ -845,12 +847,12 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
 %endif
 %else
 %if ARCH_X86_64
-    DEFINE_ARGS buf, bufy, h, shift, max, cf3, min, val3, x, val0
+    DEFINE_ARGS buf, bufy, h, shift, cf3, max, min, val3, x, val0
 %else
     DEFINE_ARGS buf, shift, pic_reg, fg_data, val0, bufy, cf3
 %define hd dword r1m
 %define mind dword r3m
-%define maxd dword r4m
+%define maxd dword r5m
 %endif
 %if %2
     sub            bufq, 2*(82*(73-35*%3)+44-(82*3+41))
@@ -954,7 +956,7 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
 
 .ar2:
 %if ARCH_X86_64
-    DEFINE_ARGS buf, bufy, fg_data, uv, bdmax, shift
+    DEFINE_ARGS buf, bufy, fg_data, uv, shift, bdmax
 %else
     DEFINE_ARGS buf, bufy, pic_reg, fg_data, uv, shift
     ALLOC_STACK  -16*8
@@ -967,7 +969,7 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
     sar          bdmaxd, 1
     SPLATW           m5, bdmaxd                 ; max_grain
 %else
-    SPLATW           m5, r4m
+    SPLATW           m5, r5m
     psraw            m5, 1
 %endif
     pcmpeqw          m6, m6
@@ -1143,7 +1145,7 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
 
 .ar3:
 %if ARCH_X86_64
-    DEFINE_ARGS buf, bufy, fg_data, uv, bdmax, shift
+    DEFINE_ARGS buf, bufy, fg_data, uv, shift, bdmax
 %if WIN64
     mov              r6, rsp
     and             rsp, ~15
@@ -1169,7 +1171,7 @@ cglobal generate_grain_uv_%1_16bpc, 1, 7, 8, buf, x, pic_reg, fg_data, h
     sar          bdmaxd, 1
     SPLATW           m6, bdmaxd                 ; max_grain
 %else
-    SPLATW           m6, r4m
+    SPLATW           m6, r5m
     psraw            m6, 1
 %endif
     pcmpeqw          m7, m7
@@ -1394,6 +1396,7 @@ generate_grain_uv_fn 420, 1, 1
 generate_grain_uv_fn 422, 1, 0
 generate_grain_uv_fn 444, 0, 0
 
+%if 0
 %macro SCRATCH 3
 %if ARCH_X86_32
     mova [rsp+%3*mmsize], m%1
@@ -3413,3 +3416,4 @@ DECLARE_ARG 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 FGUV_FN 420, 1, 1
 FGUV_FN 422, 1, 0
 FGUV_FN 444, 0, 0
+%endif

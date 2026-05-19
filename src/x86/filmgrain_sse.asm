@@ -85,15 +85,15 @@ SECTION .text
 %endmacro
 
 INIT_XMM ssse3
-cglobal generate_grain_y_8bpc, 2, 7 + 2 * ARCH_X86_64, 16, buf, fg_data
+cglobal generate_grain_y_8bpc, 2, 7 + 2 * ARCH_X86_64, 16, buf, fg_data, seed
     LEA              r4, $$
 %define base r4-$$
     movq             m1, [base+rnd_next_upperbit_mask]
     movq             m4, [base+mul_bits]
     movq             m7, [base+hmul_bits]
+    movd             m0, seedm
     mov             r2d, [fg_dataq+FGData.grain_scale_shift]
     movd             m2, [base+round+r2*2]
-    movd             m0, [fg_dataq+FGData.seed]
     mova             m5, [base+pb_mask]
     pshuflw          m2, m2, q0000
     pshuflw          m0, m0, q0000
@@ -495,6 +495,7 @@ INIT_XMM ssse3
 cglobal generate_grain_uv_%1_8bpc, 1, 7 + 3 * ARCH_X86_64, 16, buf, bufy, fg_data, uv
     movifnidn        r2, r2mp
     movifnidn        r3, r3mp
+    movd             m0, r4m
     LEA              r4, $$
 %define base r4-$$
     movq             m1, [base+rnd_next_upperbit_mask]
@@ -503,7 +504,6 @@ cglobal generate_grain_uv_%1_8bpc, 1, 7 + 3 * ARCH_X86_64, 16, buf, bufy, fg_dat
     mov             r5d, [fg_dataq+FGData.grain_scale_shift]
     movd             m6, [base+round+r5*2]
     mova             m5, [base+pb_mask]
-    movd             m0, [fg_dataq+FGData.seed]
     movd             m2, [base+pw_seed_xor+uvq*4]
     pxor             m0, m2
     pshuflw          m6, m6, q0000
@@ -1226,6 +1226,7 @@ generate_grain_uv_fn 420, 1, 1
 generate_grain_uv_fn 422, 1, 0
 generate_grain_uv_fn 444, 0, 0
 
+%if 0
 %macro vpgatherdw 5-6 ; dst, src, base, tmp_gpr[x2], tmp_xmm_reg
 %assign %%idx 0
 %define %%tmp %2
@@ -3221,3 +3222,4 @@ DECLARE_ARG 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 %endif
 
 FGUV_FN 444, 0, 0
+%endif

@@ -172,7 +172,7 @@ if is_asm_enabled
         if dav2d_bitdepths.contains('8')
             libdav2d_sources_asm += files(
                 'x86/cdef_avx512.asm',
-                'x86/filmgrain_avx512.asm',
+#                'x86/filmgrain_avx512.asm',
                 'x86/ipred_avx512.asm',
 #                'x86/mc_avx512.asm',
                 'x86/stx_avx512.asm',
@@ -192,7 +192,7 @@ if is_asm_enabled
         if dav2d_bitdepths.contains('16')
             libdav2d_sources_asm += files(
                 'x86/cdef16_avx512.asm',
-                'x86/filmgrain16_avx512.asm',
+#                'x86/filmgrain16_avx512.asm',
                 'x86/ipred16_avx512.asm',
 #                'x86/mc16_avx512.asm',
                 'x86/cdef16_avx2.asm',

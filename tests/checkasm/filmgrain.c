@@ -46,6 +46,7 @@ static const char ss_name[][4] = {
     [DAV2D_PIXEL_LAYOUT_I444 - 1] = "444",
 };
 
+#include <stdio.h>
 static void check_gen_grny(const Dav2dFilmGrainDSPContext *const dsp) {
     ALIGN_STK_16(entry, grain_lut_c, GRAIN_HEIGHT,[GRAIN_WIDTH]);
     ALIGN_STK_16(entry, grain_lut_a, GRAIN_HEIGHT + 1,[GRAIN_WIDTH]);
@@ -89,8 +90,8 @@ static void check_gen_grnuv(const Dav2dFilmGrainDSPContext *const dsp) {
 
     declare_func(void, entry grain_lut[][GRAIN_WIDTH],
                  const entry grain_lut_y[][GRAIN_WIDTH],
-                 const Dav2dFilmGrainData *data, unsigned seed,
-                 intptr_t uv HIGHBD_DECL_SUFFIX);
+                 const Dav2dFilmGrainData *data, intptr_t uv,
+                 unsigned seed HIGHBD_DECL_SUFFIX);
 
     for (int layout_idx = 0; layout_idx < 3; layout_idx++) {
         const enum Dav2dPixelLayout layout = layout_idx + 1;
@@ -126,15 +127,18 @@ static void check_gen_grnuv(const Dav2dFilmGrainDSPContext *const dsp) {
                     fg_data[0].ar_coeffs[1 + uv][num_uv_pos] = 0;
                 memset(grain_lut_c, 0xff, sizeof(grain_lut_c));
                 memset(grain_lut_a, 0xff, sizeof(grain_lut_a));
-                call_ref(grain_lut_c, grain_lut_y, fg_data, seed, uv HIGHBD_TAIL_SUFFIX);
-                call_new(grain_lut_a, grain_lut_y, fg_data, seed, uv HIGHBD_TAIL_SUFFIX);
+                call_ref(grain_lut_c, grain_lut_y, fg_data, uv, seed
+                         HIGHBD_TAIL_SUFFIX);
+                call_new(grain_lut_a, grain_lut_y, fg_data, uv, seed
+                         HIGHBD_TAIL_SUFFIX);
                 int w = ss_x ? 44 : GRAIN_WIDTH;
                 int h = ss_y ? 38 : GRAIN_HEIGHT;
                 checkasm_check_entry(grain_lut_c[0], sizeof(entry) * GRAIN_WIDTH,
                                      grain_lut_a[0], sizeof(entry) * GRAIN_WIDTH,
                                      w, h, "grain_lut");
 
-                bench_new(grain_lut_a, grain_lut_y, fg_data, seed, uv HIGHBD_TAIL_SUFFIX);
+                bench_new(grain_lut_a, grain_lut_y, fg_data, uv, seed
+                          HIGHBD_TAIL_SUFFIX);
             }
         }
     }
@@ -299,7 +303,8 @@ static void check_fguv_sbrow(const Dav2dFilmGrainDSPContext *const dsp) {
                         fg_data[0].ar_coeffs[1 + uv_pl][n] = (rnd() & 0xff) - 128;
                     dsp->generate_grain_y(grain_lut[0], fg_data, seed HIGHBD_TAIL_SUFFIX);
                     dsp->generate_grain_uv[layout_idx](grain_lut[1], grain_lut[0],
-                                                       fg_data, seed, uv_pl HIGHBD_TAIL_SUFFIX);
+                                                       fg_data, uv_pl, seed
+                                                       HIGHBD_TAIL_SUFFIX);
 
                     if (csfl) {
                         const int pad = 0xff / fg_data[0].num_points[0];

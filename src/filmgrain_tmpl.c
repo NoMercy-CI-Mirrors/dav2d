@@ -88,7 +88,7 @@ static NOINLINE void
 generate_grain_uv_c(entry buf[][GRAIN_WIDTH],
                     const entry buf_y[][GRAIN_WIDTH],
                     const Dav2dFilmGrainData *const data,
-                    unsigned seed, const intptr_t uv,
+                    const intptr_t uv, unsigned seed,
                     const int subx, const int suby HIGHBD_DECL_SUFFIX)
 {
     const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
@@ -145,7 +145,7 @@ generate_grain_uv_c(entry buf[][GRAIN_WIDTH],
 
 #define gnuv_ss_fn(nm, ss_x, ss_y) \
 static decl_generate_grain_uv_fn(generate_grain_uv_##nm##_c) { \
-    generate_grain_uv_c(buf, buf_y, data, seed, uv, ss_x, ss_y HIGHBD_TAIL_SUFFIX); \
+    generate_grain_uv_c(buf, buf_y, data, uv, seed, ss_x, ss_y HIGHBD_TAIL_SUFFIX); \
 }
 
 gnuv_ss_fn(420, 1, 1);
@@ -427,9 +427,9 @@ fguv_ss_fn(420, 1, 1);
 fguv_ss_fn(422, 1, 0);
 fguv_ss_fn(444, 0, 0);
 
-#if HAVE_ASM && 0
+#if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
-#include "src/arm/filmgrain.h"
+//#include "src/arm/filmgrain.h"
 #elif ARCH_X86
 #include "src/x86/filmgrain.h"
 #endif
@@ -446,9 +446,9 @@ COLD void bitfn(dav2d_film_grain_dsp_init)(Dav2dFilmGrainDSPContext *const c) {
     c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I422 - 1] = fguv_32x32xn_422_c;
     c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I444 - 1] = fguv_32x32xn_444_c;
 
-#if HAVE_ASM && 0
+#if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
-    film_grain_dsp_init_arm(c);
+    //film_grain_dsp_init_arm(c);
 #elif ARCH_X86
     film_grain_dsp_init_x86(c);
 #endif

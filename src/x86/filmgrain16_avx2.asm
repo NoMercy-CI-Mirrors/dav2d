@@ -87,13 +87,14 @@ SECTION .text
 %define m(x) mangle(private_prefix %+ _ %+ x %+ SUFFIX)
 
 INIT_YMM avx2
-cglobal generate_grain_y_16bpc, 3, 9, 14, buf, fg_data, bdmax
+cglobal generate_grain_y_16bpc, 4, 9, 14, buf, fg_data, seed, bdmax
 %define base r4-generate_grain_y_16bpc_avx2_table
     lea              r4, [generate_grain_y_16bpc_avx2_table]
-    vpbroadcastw    xm0, [fg_dataq+FGData.seed]
+    movd            xm0, seedd
+    vpbroadcastw    xm0, xm0
     mov             r6d, [fg_dataq+FGData.grain_scale_shift]
     movq            xm1, [base+next_upperbit_mask]
-    mov              r3, -73*82*2
+    mov              r2, -73*82*2
     movsxd           r5, [fg_dataq+FGData.ar_coeff_lag]
     lea             r7d, [bdmaxq+1]
     movq            xm4, [base+mul_bits]
@@ -101,7 +102,7 @@ cglobal generate_grain_y_16bpc, 3, 9, 14, buf, fg_data, bdmax
     movq            xm5, [base+hmul_bits]
     sub              r6, r7
     mova            xm6, [base+pb_mask]
-    sub            bufq, r3
+    sub            bufq, r2
     vpbroadcastw    xm7, [base+round+r6*2-2]
     lea              r6, [gaussian_sequence]
     movsxd           r5, [r4+r5*4]
@@ -154,8 +155,8 @@ cglobal generate_grain_y_16bpc, 3, 9, 14, buf, fg_data, bdmax
     pinsrw          xm2, [r6+r8*2], 7
     paddw           xm2, xm2            ; otherwise bpc=12 w/ grain_scale_shift=0
     pmulhrsw        xm2, xm7            ; shifts by 0, which pmulhrsw does not support
-    mova      [bufq+r3], xm2
-    add              r3, 8*2
+    mova      [bufq+r2], xm2
+    add              r2, 8*2
     jl .loop
 
     ; auto-regression code
@@ -163,11 +164,11 @@ cglobal generate_grain_y_16bpc, 3, 9, 14, buf, fg_data, bdmax
     jmp              r5
 
 .ar1:
-    DEFINE_ARGS buf, fg_data, max, shift, val3, min, cf3, x, val0
+    DEFINE_ARGS buf, fg_data, shift, max, val3, min, cf3, x, val0
     mov          shiftd, [fg_dataq+FGData.ar_coeff_shift]
     movsx          cf3d, byte [fg_dataq+FGData.ar_coeffs_y+3]
     movd            xm4, [fg_dataq+FGData.ar_coeffs_y]
-    DEFINE_ARGS buf, h, max, shift, val3, min, cf3, x, val0
+    DEFINE_ARGS buf, h, shift, max, val3, min, cf3, x, val0
     pinsrb          xm4, [base+pb_1], 3
     pmovsxbw        xm4, xm4
     pshufd          xm5, xm4, q1111
@@ -217,7 +218,7 @@ cglobal generate_grain_y_16bpc, 3, 9, 14, buf, fg_data, bdmax
     RET
 
 .ar2:
-    DEFINE_ARGS buf, fg_data, bdmax, shift
+    DEFINE_ARGS buf, fg_data, shift, bdmax
     mov          shiftd, [fg_dataq+FGData.ar_coeff_shift]
     movq            xm0, [fg_dataq+FGData.ar_coeffs_y+5]    ; cf5-11
     vinserti128      m0, [fg_dataq+FGData.ar_coeffs_y+0], 1 ; cf0-4
@@ -286,7 +287,7 @@ cglobal generate_grain_y_16bpc, 3, 9, 14, buf, fg_data, bdmax
     RET
 
 .ar3:
-    DEFINE_ARGS buf, fg_data, bdmax, shift
+    DEFINE_ARGS buf, fg_data, shift, bdmax
     mov          shiftd, [fg_dataq+FGData.ar_coeff_shift]
     sar          bdmaxd, 1
     movq            xm7, [fg_dataq+FGData.ar_coeffs_y+ 0]    ; cf0-6
@@ -378,31 +379,36 @@ cglobal generate_grain_y_16bpc, 3, 9, 14, buf, fg_data, bdmax
 
 %macro GEN_GRAIN_UV_FN 3 ; ss_name, ss_x, ss_y
 INIT_XMM avx2
-cglobal generate_grain_uv_%1_16bpc, 4, 11, 8, buf, bufy, fg_data, uv, bdmax
+cglobal generate_grain_uv_%1_16bpc, 4, 11, 8, buf, bufy, fg_data, uv, seed, bdmax
 %define base r8-generate_grain_uv_%1_16bpc_avx2_table
     lea              r8, [generate_grain_uv_%1_16bpc_avx2_table]
     movifnidn    bdmaxd, bdmaxm
-    vpbroadcastw    xm0, [fg_dataq+FGData.seed]
-    mov             r5d, [fg_dataq+FGData.grain_scale_shift]
+%if WIN64
+    vpbroadcastw    xm0, seedm
+%else
+    movd            xm0, seedm
+    vpbroadcastw    xm0, xm0
+%endif
+    mov             r4d, [fg_dataq+FGData.grain_scale_shift]
     movq            xm1, [base+next_upperbit_mask]
     lea             r6d, [bdmaxq+1]
     movq            xm4, [base+mul_bits]
     shr             r6d, 11             ; 0 for 10bpc, 2 for 12bpc
     movq            xm5, [base+hmul_bits]
-    sub              r5, r6
+    sub              r4, r6
     mova            xm6, [base+pb_mask]
     vpbroadcastd    xm2, [base+pw_seed_xor+uvq*4]
-    vpbroadcastw    xm7, [base+round+r5*2-2]
+    vpbroadcastw    xm7, [base+round+r4*2-2]
     pxor            xm0, xm2
     lea              r6, [gaussian_sequence]
 %if %2
     mov             r7d, 73-35*%3
     add            bufq, 44*2
 .loop_y:
-    mov              r5, -44*2
+    mov              r4, -44*2
 %else
-    mov              r5, -82*73*2
-    sub            bufq, r5
+    mov              r4, -82*73*2
+    sub            bufq, r4
 %endif
 .loop_x:
     pand            xm2, xm0, xm1
@@ -430,8 +436,8 @@ cglobal generate_grain_uv_%1_16bpc, 4, 11, 8, buf, bufy, fg_data, uv, bdmax
     pinsrw          xm2, [r6+r9*2], 3
     paddw           xm2, xm2            ; otherwise bpc=12 w/ grain_scale_shift=0
     pmulhrsw        xm2, xm7            ; shifts by 0, which pmulhrsw does not support
-    movq      [bufq+r5], xm2
-    add              r5, 8
+    movq      [bufq+r4], xm2
+    add              r4, 8
     jl .loop_x
 %if %2
     add            bufq, 82*2
@@ -447,7 +453,7 @@ cglobal generate_grain_uv_%1_16bpc, 4, 11, 8, buf, bufy, fg_data, uv, bdmax
 
 INIT_YMM avx2
 .ar0:
-    DEFINE_ARGS buf, bufy, fg_data, uv, bdmax, shift
+    DEFINE_ARGS buf, bufy, fg_data, uv, shift, bdmax
     imul            uvd, 28
     mov          shiftd, [fg_dataq+FGData.ar_coeff_shift]
     vpbroadcastb     m0, [fg_dataq+FGData.ar_coeffs_uv+uvq]
@@ -566,13 +572,13 @@ INIT_YMM avx2
 
 INIT_XMM avx2
 .ar1:
-    DEFINE_ARGS buf, bufy, fg_data, uv, max, cf3, min, val3, x, shift
+    DEFINE_ARGS buf, bufy, fg_data, uv, cf3, max, min, val3, x, shift
     imul            uvd, 28
     mov          shiftd, [fg_dataq+FGData.ar_coeff_shift]
     movsx          cf3d, byte [fg_dataq+FGData.ar_coeffs_uv+uvq+3]
     movd            xm4, [fg_dataq+FGData.ar_coeffs_uv+uvq]
     pinsrb          xm4, [fg_dataq+FGData.ar_coeffs_uv+uvq+4], 3
-    DEFINE_ARGS buf, bufy, h, val0, max, cf3, min, val3, x, shift
+    DEFINE_ARGS buf, bufy, h, val0, cf3, max, min, val3, x, shift
     pmovsxbw        xm4, xm4
     pshufd          xm5, xm4, q1111
     pshufd          xm4, xm4, q0000
@@ -650,7 +656,7 @@ INIT_YMM avx2
     SUB             rsp, stack_size_padded
     WIN64_PUSH_XMM 13 + %2, 8
 %endif
-    DEFINE_ARGS buf, bufy, fg_data, uv, bdmax, shift
+    DEFINE_ARGS buf, bufy, fg_data, uv, shift, bdmax
     mov          shiftd, [fg_dataq+FGData.ar_coeff_shift]
     imul            uvd, 28
     vbroadcasti128  m10, [base+gen_shufA]
@@ -743,7 +749,7 @@ INIT_YMM avx2
     SUB             rsp, stack_size_padded
     WIN64_PUSH_XMM 14 + %2, 8
 %endif
-    DEFINE_ARGS buf, bufy, fg_data, uv, bdmax, shift
+    DEFINE_ARGS buf, bufy, fg_data, uv, shift, bdmax
     mov          shiftd, [fg_dataq+FGData.ar_coeff_shift]
     imul            uvd, 28
     vpbroadcastw   xm11, [base+round_vals-12+shiftq*2]
@@ -851,6 +857,7 @@ INIT_YMM avx2
     RET
 %endmacro
 
+%if 0
 cglobal fgy_32x32xn_16bpc, 6, 14, 16, dst, src, stride, fg_data, w, scaling, \
                                       grain_lut, unused, sby, see
 %define base r11-grain_min
@@ -2218,12 +2225,13 @@ cglobal fguv_32x32xn_i%1_16bpc, 6, 15, 16, dst, src, stride, fg_data, w, scaling
 .end:
     RET
 %endmacro
+%endif
 
 GEN_GRAIN_UV_FN 420, 1, 1
-FGUV_FN 420,         1, 1
+;FGUV_FN 420,         1, 1
 GEN_GRAIN_UV_FN 422, 1, 0
-FGUV_FN 422,         1, 0
+;FGUV_FN 422,         1, 0
 GEN_GRAIN_UV_FN 444, 0, 0
-FGUV_FN 444,         0, 0
+;FGUV_FN 444,         0, 0
 
 %endif ; ARCH_X86_64

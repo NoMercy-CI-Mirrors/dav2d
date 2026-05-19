@@ -113,10 +113,10 @@ void bitfn(dav2d_prep_grain)(const Dav2dFilmGrainDSPContext *const dsp,
     dsp->generate_grain_y(grain_lut[0], data, seed HIGHBD_TAIL_SUFFIX); // always needed
     if (data->num_points[1] || data->chroma_scaling_from_luma)
         dsp->generate_grain_uv[in->p.layout - 1](grain_lut[1], grain_lut[0],
-                                                 data, seed, 0 HIGHBD_TAIL_SUFFIX);
+                                                 data, 0, seed HIGHBD_TAIL_SUFFIX);
     if (data->num_points[2] || data->chroma_scaling_from_luma)
         dsp->generate_grain_uv[in->p.layout - 1](grain_lut[2], grain_lut[0],
-                                                 data, seed, 1 HIGHBD_TAIL_SUFFIX);
+                                                 data, 1, seed HIGHBD_TAIL_SUFFIX);
 
     // Generate scaling LUTs as needed
     if (data->num_points[0] || data->chroma_scaling_from_luma)
