@@ -171,6 +171,7 @@ typedef struct CdfCoefContext {
     ALIGN(uint16_t eob_base_y_tok_lf[5][4][5+3], 16);
     ALIGN(uint16_t base_y_tok_lf[5][33][2][6+2], 16);
     ALIGN(uint16_t br_y_tok_lf[14][4], 8);
+    ALIGN(uint16_t ph_dc_y_tok[5][3+1], 8);
     ALIGN(uint16_t dc_sign[2][2][3][2], 4);
     ALIGN(uint16_t bob_base_y_tok[3][3][3+1], 8);
     ALIGN(uint16_t br_y_tok_idtx[3][7][4], 8);

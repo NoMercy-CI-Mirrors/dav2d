@@ -1,4 +1,4 @@
-From 6e745873e73e0563ebc533a91f9d6fe3e6baed24 Mon Sep 17 00:00:00 2001
+From 1bd7468b8d3b1dfd14ee8682e198f6ffd65bc1b0 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -14,13 +14,13 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  av2/decoder/decodemv.h      |  21 +-
  av2/decoder/decoder.c       |   5 +-
  av2/decoder/decoder.h       |  12 +-
- av2/decoder/decodetxb.c     | 230 ++++++++--
+ av2/decoder/decodetxb.c     | 246 +++++++++--
  av2/decoder/decodetxb.h     |  14 +-
  av2/decoder/detokenize.c    |   8 +-
  av2/decoder/detokenize.h    |   3 +-
  av2/encoder/rdopt.c         |  10 +-
  avm/debug.h                 |  16 +
- 15 files changed, 1830 insertions(+), 296 deletions(-)
+ 15 files changed, 1843 insertions(+), 299 deletions(-)
 
 diff --git a/av2/common/av2_common_int.h b/av2/common/av2_common_int.h
 index 83394d3efd..d6e8714c9e 100644
@@ -4210,7 +4210,7 @@ index 278ecf797e..6c8b4619a2 100644
                                     PARTITION_TYPE partition, BLOCK_SIZE bsize,
                                     PARTITION_TREE *parent, int index);
 diff --git a/av2/decoder/decodetxb.c b/av2/decoder/decodetxb.c
-index 8db11062fc..022211689d 100644
+index 8db11062fc..f5aacd6ea3 100644
 --- a/av2/decoder/decodetxb.c
 +++ b/av2/decoder/decodetxb.c
 @@ -115,7 +115,11 @@ static int read_adaptive_hr(MACROBLOCKD *xd, avm_reader *r, int ctx) {
@@ -4578,7 +4578,27 @@ index 8db11062fc..022211689d 100644
        if (c == 0) dc_val = sign ? -level : level;
        // Bitmasking to clamp level to valid range:
        // The valid range for 8/10/12 bit video is at most 14/16/18 bit
-@@ -655,7 +749,8 @@ static INLINE tran_low_t read_coeff_hidden(avm_reader *r, TX_CLASS tx_class,
+@@ -640,7 +734,13 @@ uint8_t av2_read_coeffs_txb_skip(const AV2_COMMON *const cm,
+ 
+ // This function returns the partial absolute level of the coefficient
+ // with hidden parity.
+-static INLINE tran_low_t read_coeff_hidden(avm_reader *r, TX_CLASS tx_class,
++static INLINE tran_low_t read_coeff_hidden(DB_ONLY(const int depth,
++                                                   const AV2_COMMON *const cm,
++                                                   const int txs_ctx,
++                                                   const int mi_row,
++                                                   const int mi_col,
++                                                   const int plane)
++                                           avm_reader *r, TX_CLASS tx_class,
+                                            const int16_t *scan, int bwl,
+                                            uint8_t *levels, int parity,
+                                            base_ph_cdf_arr base_cdf_ph) {
+@@ -652,10 +752,13 @@ static INLINE tran_low_t read_coeff_hidden(avm_reader *r, TX_CLASS tx_class,
+   assert(q_index <= MAX_BASE_BR_RANGE);
+   uint8_t level = (q_index << 1) + parity;
+   levels[get_padded_idx(pos, bwl)] = level;
++  DEBUG_CF_printf("%*sPost-dc_tok_ph[pos=0,ctx=%d|%d|%d,plane=y,%d]: r=%d\n",
++                  depth, "", txs_ctx, ctx_idx, q_index, level, r->ec.rng);
    return level;
  }
  
@@ -4588,7 +4608,7 @@ index 8db11062fc..022211689d 100644
                              avm_reader *const r, const int blk_row,
                              const int blk_col, const int plane,
                              const TXB_CTX *const txb_ctx,
-@@ -696,6 +791,10 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -696,6 +799,10 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
    uint16_t *const eob = &(eob_data->eob);
    uint16_t *const max_scan_line = &(eob_data->max_scan_line);
  
@@ -4599,7 +4619,7 @@ index 8db11062fc..022211689d 100644
    const TX_TYPE tx_type =
        av2_get_tx_type(xd, plane_type, blk_row, blk_col, tx_size,
                        is_reduced_tx_set_used(cm, plane_type));
-@@ -717,7 +816,7 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -717,7 +824,7 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
             ? (*eob > 3 && cm->seq_params.enable_inter_ist)
             : (*eob != 1 && cm->seq_params.enable_ist &&
                !xd->mi[0]->fsc_mode[xd->tree_type == CHROMA_PART]))) {
@@ -4608,7 +4628,7 @@ index 8db11062fc..022211689d 100644
    }
  
    if (*eob > 1) {
-@@ -740,6 +839,7 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -740,6 +847,7 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
      const int col = pos - (row << bwl);
      int limits = get_lf_limits(row, col, tx_class, plane);
      if (plane > 0) {
@@ -4616,7 +4636,7 @@ index 8db11062fc..022211689d 100644
        if (limits) {
          avm_cdf_prob *cdf = ec_ctx->coeff_base_lf_eob_uv_cdf[coeff_ctx];
          level +=
-@@ -753,12 +853,16 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -753,12 +861,16 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
                   1;
  
          if (level > NUM_BASE_LEVELS) {
@@ -4634,7 +4654,7 @@ index 8db11062fc..022211689d 100644
        if (limits) {
          avm_cdf_prob *cdf = ec_ctx->coeff_base_lf_eob_cdf[txs_ctx][coeff_ctx];
          level += avm_read_symbol(r, cdf, LF_BASE_SYMBOLS - 1,
-@@ -766,7 +870,7 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -766,7 +878,7 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
                   1;
  
          if (level > LF_NUM_BASE_LEVELS) {
@@ -4643,7 +4663,7 @@ index 8db11062fc..022211689d 100644
            cdf = ec_ctx->coeff_br_lf_cdf[br_ctx];
            level += read_low_range(r, cdf);
          }
-@@ -777,11 +881,14 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -777,11 +889,14 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
                   1;
  
          if (level > NUM_BASE_LEVELS) {
@@ -4659,7 +4679,7 @@ index 8db11062fc..022211689d 100644
      }
      levels[get_padded_idx(pos, bwl)] = level;
      state = tcq_next_state(state, level);
-@@ -803,7 +910,8 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -803,7 +918,8 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
      br_cdf_arr br_uv_cdf = ec_ctx->coeff_br_uv_cdf;
  
      if (tx_class == TX_CLASS_2D) {
@@ -4669,8 +4689,13 @@ index 8db11062fc..022211689d 100644
                               br_lf_cdf, plane, base_cdf, br_cdf, base_lf_uv_cdf,
                               base_uv_cdf, br_uv_cdf, &state);
        if (enable_parity_hiding) {
-@@ -822,12 +930,14 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
-         read_coeff_hidden(r, tx_class, scan, bwl, levels, (sum_abs1 & 1),
+@@ -819,15 +935,18 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+         is_hidden = num_nz >= PHTHRESH;
+       }
+       if (is_hidden) {
+-        read_coeff_hidden(r, tx_class, scan, bwl, levels, (sum_abs1 & 1),
++        read_coeff_hidden(DB_ONLY(depth, cm, txs_ctx, mi_row, mi_col, plane)
++                          r, tx_class, scan, bwl, levels, (sum_abs1 & 1),
                            ec_ctx->coeff_base_ph_cdf);
        } else {
 -        read_coeffs_reverse(r, tx_class, 0, 0, scan, bwl, levels, base_lf_cdf,
@@ -4686,8 +4711,13 @@ index 8db11062fc..022211689d 100644
                            base_lf_cdf, br_lf_cdf, plane, base_cdf, br_cdf,
                            base_lf_uv_cdf, base_uv_cdf, br_uv_cdf, &state);
        if (enable_parity_hiding) {
-@@ -846,7 +956,8 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
-         read_coeff_hidden(r, tx_class, scan, bwl, levels, (sum_abs1 & 1),
+@@ -843,10 +962,12 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+         is_hidden = num_nz >= PHTHRESH;
+       }
+       if (is_hidden) {
+-        read_coeff_hidden(r, tx_class, scan, bwl, levels, (sum_abs1 & 1),
++        read_coeff_hidden(DB_ONLY(depth, cm, txs_ctx, mi_row, mi_col, plane)
++                          r, tx_class, scan, bwl, levels, (sum_abs1 & 1),
                            ec_ctx->coeff_base_ph_cdf);
        } else {
 -        read_coeffs_reverse(r, tx_class, 0, 0, scan, bwl, levels, base_lf_cdf,
@@ -4696,7 +4726,7 @@ index 8db11062fc..022211689d 100644
                              br_lf_cdf, plane, base_cdf, br_cdf, base_lf_uv_cdf,
                              base_uv_cdf, br_uv_cdf, &state);
        }
-@@ -877,27 +988,38 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -877,27 +998,38 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
                  r,
                  ec_ctx->dc_sign_cdf[plane_type][is_hidden ? 1 : 0][dc_sign_ctx],
                  2, ACCT_INFO("sign", "dc_sign_cdf", "plane_y_or_u"));
@@ -4723,9 +4753,9 @@ index 8db11062fc..022211689d 100644
        if (is_hidden && c == 0) {
          if (level >= ((NUM_BASE_LEVELS + 1) << 1)) {
            int hr_level = (read_adaptive_hr(xd, r, hr_level_avg >> 1) << 1);
-+          DEBUG_CF_printf("%*sPost-residual[pos=%d,%d->%d]: r=%d\n",
-+                          depth, "", c, pos, hr_level, r->ec.rng);
            level += hr_level;
++          DEBUG_CF_printf("%*sPost-residual_ph[pos=%d,%d->%d]: r=%d\n",
++                          depth, "", c, hr_level, level, r->ec.rng);
            hr_level_avg = (hr_level_avg + hr_level) >> 1;
          }
        } else {
@@ -4736,7 +4766,7 @@ index 8db11062fc..022211689d 100644
                                  plane);
        }
        if (c == 0) dc_val = sign ? -level : level;
-@@ -976,7 +1098,8 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
+@@ -976,7 +1108,8 @@ uint8_t av2_read_coeffs_txb(const AV2_COMMON *const cm, DecoderCodingBlock *dcb,
    return cul_level;
  }
  
@@ -4746,7 +4776,7 @@ index 8db11062fc..022211689d 100644
                                  DecoderCodingBlock *dcb, avm_reader *const r,
                                  const int plane, const int row, const int col,
                                  const TX_SIZE tx_size) {
-@@ -995,9 +1118,17 @@ void av2_read_coeffs_txb_facade(const AV2_COMMON *const cm,
+@@ -995,9 +1128,17 @@ void av2_read_coeffs_txb_facade(const AV2_COMMON *const cm,
                pd->left_entropy_context + row, &txb_ctx,
                mbmi->fsc_mode[xd->tree_type == CHROMA_PART] &&
                    cm->seq_params.enable_fsc);
@@ -4766,7 +4796,7 @@ index 8db11062fc..022211689d 100644
  
    const PLANE_TYPE plane_type = get_plane_type(plane);
    const TX_TYPE tx_type =
-@@ -1011,10 +1142,12 @@ void av2_read_coeffs_txb_facade(const AV2_COMMON *const cm,
+@@ -1011,10 +1152,12 @@ void av2_read_coeffs_txb_facade(const AV2_COMMON *const cm,
            get_primary_tx_type(tx_type) == IDTX && plane == PLANE_TYPE_Y) ||
           use_inter_fsc(cm, plane, tx_type, is_inter))) {
        cul_level =
@@ -4781,7 +4811,7 @@ index 8db11062fc..022211689d 100644
      }
    } else {
      av2_update_txk_skip_array(cm, xd->mi_row, xd->mi_col, xd->tree_type,
-@@ -1028,7 +1161,16 @@ void av2_read_coeffs_txb_facade(const AV2_COMMON *const cm,
+@@ -1028,7 +1171,16 @@ void av2_read_coeffs_txb_facade(const AV2_COMMON *const cm,
                          is_reduced_tx_set_used(cm, plane_type));
      update_txk_array(xd, row, col, tx_size, tx_type_inter);
    }
@@ -4954,5 +4984,5 @@ index b605a9125c..ae277ab7a6 100644
  
  #endif /* AVM_DEBUG_H */
 -- 
-2.48.1
+2.54.0
 
