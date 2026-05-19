@@ -88,8 +88,9 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
             } else {
                 multi_wiener = 1;
                 wiener_fn = dsp->lr.ns_wiener_multi;
-                wiener_params.multi.base_q = f->lf.base_q;
                 wiener_params.multi.class_lut = f->lf.ns_subclass_lut;
+                wiener_params.multi.qval_approx =
+                    &f->lf.wiener_qval_approx_data;
                 wiener_params.multi.filters.user = pd->filter;
             }
         } else {
@@ -99,8 +100,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     } else if (wiener_type == DAV2D_RESTORATION_PC_WIENER) {
         multi_wiener = 1;
         wiener_fn = dsp->lr.pc_wiener;
-        wiener_params.multi.base_q = f->lf.base_q;
         wiener_params.multi.class_lut = f->lf.pc_subclass_lut;
+        wiener_params.multi.qval_approx = &f->lf.wiener_qval_approx_data;
         wiener_params.multi.filters.pretrained = f->lf.pc_filters;
     }
 

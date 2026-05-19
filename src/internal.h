@@ -342,10 +342,10 @@ struct Dav2dFrameContext {
          * 2-3: stride*(n_tile_rows-1)*4 if n_tc==1, double that otherwise */
         int lr_buf_plane_sz[4];
         int re_sz /* h */;
-        int base_q;
         int gdf_ref_dst_idx;
         const uint8_t *ns_subclass_lut;
         const uint8_t *pc_subclass_lut;
+        WienerQValApproxData wiener_qval_approx_data;
         const int16_t (*pc_filters)[13];
         uint8_t *tx_db_right_edge[2];
         uint8_t *lr_line_buf;

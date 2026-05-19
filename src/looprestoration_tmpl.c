@@ -111,13 +111,7 @@ static const int8_t gdf_coords[18][2] = {
     { 0,  6 }, { 0,  5 }, { 0,  4 }, { 0,  3 }, { 0,  2 }, { 0,  1 }
 };
 
-static const uint16_t pc_wiener_normalizer[ 4 ] = { 3739, 3273, 3074, 7 };
-
-static const int16_t mode_weights[ 4 ][ 3 ] = {
-    { -527, 15325, 321 }, { 26436, -17705, 17905 }, { 366, -147, -194 }, { 202, -267, -179 }
-};
-
-static const int16_t mode_offsets[ 4 ] = { -547, -21565, -573, -680 };
+static const uint16_t pc_wiener_normalizer[3] = { 3739, 3273, 3074 };
 
 static void backup_row(pixel *dst, const pixel *src, const pixel *left, const int w,
                        const int edge_len, const enum LrEdgeFlags edges)
@@ -450,18 +444,11 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
     }
 }
 
-static int get_qval_given_tskip(int qstep, int tskip, int i, int bitdepth_min_8) {
-    qstep = (qstep + (1 << bitdepth_min_8 >> 1)) >> bitdepth_min_8;
-    int prod = (tskip * qstep + 128) >> 8;
-    int qval = mode_weights[i][0] * (tskip << 5) + mode_weights[i][1] * qstep + mode_weights[i][2] * prod;
-    int abs_qval = abs(qval);
-    qval = apply_sign((abs_qval + (1 << 12)) >> 13, qval);
-    qval = 255 * (mode_offsets[i] + qval);
-    return qval;
-}
-
-static int get_class_lut_idx(const pixel *ptrs[10], const uint16_t *noskip_mask, const int base_q,
-                             const int bx, const int by, const int bh, const int bitdepth_min_8) {
+static int get_class_lut_idx(const pixel *ptrs[10], const uint16_t *noskip_mask,
+                             const WienerQValApproxData *qval_approx,
+                             const int bx, const int by, const int bh,
+                             const int bitdepth_min_8)
+{
     int f[3] = {0, 0, 0};
     int s = 0;
 
@@ -503,15 +490,15 @@ static int get_class_lut_idx(const pixel *ptrs[10], const uint16_t *noskip_mask,
     for (int i = 0; i < 3; i++) {
         f[i] = (f[i] * pc_wiener_normalizer[i] + rnd) >> bitdepth_min_8;
     }
-    s = s * pc_wiener_normalizer[3];
 
-    int qval = (imax(0, get_qval_given_tskip(base_q, s, 0, bitdepth_min_8)) + (1 << 13)) >> 14;
-    qval = imin(qval, 255) >> 5;
-    int lut_idx = qval << 9;
+    int lut_idx = (s < qval_approx->idx0_changeover) << 9;
     for (int i = 0; i < 3; i++) {
-        qval = (imax(0, f[i] + get_qval_given_tskip(base_q, s, i + 1, bitdepth_min_8)) + (1 << 13)) >> 14;
-        qval = imin(qval, 255) >> 5;
-        lut_idx |= qval << (3 * (2-i));
+        const int qval = qval_approx->slopes[i] * s +
+                         qval_approx->error_lut[i*64 + s] +
+                         qval_approx->offsets[i];
+        int sub_idx = (imax(0, f[i] + 255 * qval) + 8192) >> 14;
+        sub_idx = imin(sub_idx, 255) >> 5;
+        lut_idx |= sub_idx << (3 * (2-i));
     }
     return lut_idx;
 }
@@ -524,7 +511,8 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
                          const int16_t (*filters_pretrained)[13],
                          const uint8_t *class_lut,
                          const uint16_t *noskip_mask,
-                         const int base_q, const enum LrEdgeFlags edges,
+                         const WienerQValApproxData *qval_approx,
+                         const enum LrEdgeFlags edges,
                          const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
     const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
@@ -591,7 +579,8 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
             ptrs[9] = ptrs[7];
         }
         for (int bx = 0; bx < bw; bx++) {
-            int lut_idx = get_class_lut_idx(ptrs, noskip_mask, base_q, bx, by, bh, bitdepth_min_8);
+            int lut_idx = get_class_lut_idx(ptrs, noskip_mask, qval_approx,
+                                            bx, by, bh, bitdepth_min_8);
             classes[bx] = class_lut[lut_idx];
         }
         for (int y = by << 2; y < (by << 2) + 4; y++) {
@@ -660,7 +649,8 @@ static void ns_wiener_multi_c(pixel *p, const ptrdiff_t stride,
     wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
                  params->multi.filters.user, NULL,
                  params->multi.class_lut, params->multi.noskip_mask,
-                 params->multi.base_q, edges, ll_mask HIGHBD_TAIL_SUFFIX);
+                 params->multi.qval_approx,
+                 edges, ll_mask HIGHBD_TAIL_SUFFIX);
 }
 
 static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
@@ -673,7 +663,8 @@ static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
     wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
                  NULL, params->multi.filters.pretrained,
                  params->multi.class_lut, params->multi.noskip_mask,
-                 params->multi.base_q, edges, ll_mask HIGHBD_TAIL_SUFFIX);
+                 params->multi.qval_approx,
+                 edges, ll_mask HIGHBD_TAIL_SUFFIX);
 }
 
 // Sum 2x2 rows of gradients and store in dst

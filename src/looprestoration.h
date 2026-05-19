@@ -30,8 +30,93 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #include "common/bitdepth.h"
+
+// Some of the luma wiener filters select different filters based pixel data
+// and the pixels within skipped/unskipped blocks. This process can be sped up
+// by approximating the skip portion of the calculation then correcting error
+// with a lut.
+// There are 4 different sub-indices that are calculated and combined to create
+// the full index. The first is purely based on skip counts, so we look that up
+// directly.
+typedef struct WienerQValApproxData {
+    // skip is calculated on a 6x6 region, the largest value is 36.
+    // There are 37 entries in the lookup table + padding.
+    int8_t error_lut[3 /* vert, diag, anti-diag */ * 64];
+    int32_t offsets[3 /* vert, diag, anti-diag */];
+    int16_t slopes[3 /* vert, diag, anti-diag */];
+
+    // First index doesn't depend on pixel data, so we can calculate it ahead
+    // of time. Additionally, it only ever uses 2 values and only decreases.
+    int8_t idx0_changeover;
+} WienerQValApproxData;
+
+static inline void
+setup_wiener_qval_approx_data(WienerQValApproxData *const data,
+                              ptrdiff_t *const class_lut_offset,
+                              const int qstep)
+{
+    const int16_t mode_weights[ 4 ][ 3 ] = {
+        { -527, 15325, 321 },
+        { 26436, -17705, 17905 },
+        { 366, -147, -194 },
+        { 202, -267, -179 }
+    };
+    static const int16_t mode_offsets[ 4 ] = { -547, -21565, -573, -680 };
+
+    int init_idx0 = 0;
+    int idx0_low = 0;
+    int idx0_changeover = -1;
+    for (int s = 0; s <= 36; s++) {
+        int tskip = s * 7;
+        int prod = (tskip * qstep + 128) >> 8;
+        int qval = mode_weights[0][0] * (tskip << 5) +
+                   mode_weights[0][1] * qstep +
+                   mode_weights[0][2] * prod;
+        int abs_qval = abs(qval);
+        qval = apply_sign((abs_qval + 4096) >> 13, qval);
+        qval = 255 * (mode_offsets[0] + qval);
+        qval = (imax(0, qval) + 8192) >> 14;
+        qval = imin(qval, 255) >> 5;
+        if (s == 0) {
+            idx0_low = init_idx0 = qval;
+        } else if (qval != init_idx0) {
+            assert(qval < init_idx0);
+            idx0_low = qval;
+            idx0_changeover = s;
+            break;
+        }
+    }
+    data->idx0_changeover = idx0_changeover;
+    *class_lut_offset = idx0_low << 9;
+
+    int32_t tmp_table[37];
+    for (int i = 0; i < 3; i++) {
+        int slope = 7 * 32 * mode_weights[i+1][0] +
+                    (int) ((7 * mode_weights[i+1][2] *
+                            (long long) qstep) >> 8);
+        slope = (slope + 4096) >> 13;
+        for (int s = 0; s <= 36; s++) {
+            int tskip = s * 7;
+            int prod = (tskip * qstep + 128) >> 8;
+            int qval = mode_weights[i+1][0] * (tskip << 5) +
+                       mode_weights[i+1][1] * qstep +
+                       mode_weights[i+1][2] * prod;
+            int abs_qval = abs(qval);
+            qval = apply_sign((abs_qval + 4096) >> 13, qval);
+            qval = mode_offsets[i+1] + qval;
+            tmp_table[s] = qval - s * slope;
+        }
+
+        data->slopes[i] = slope;
+        data->offsets[i] = tmp_table[0];
+        for (int s = 0; s <= 36; s++) {
+            data->error_lut[i*64 + s] = tmp_table[s] - tmp_table[0];
+        }
+    }
+}
 
 enum LrEdgeFlags {
     LR_HAVE_LEFT = 1 << 0,
@@ -65,7 +150,7 @@ typedef union WienerParams {
         } filters;
         const uint8_t *class_lut;
         const uint16_t *noskip_mask;
-        int base_q;
+        const WienerQValApproxData *qval_approx;
     } multi;
 } WienerParams;
 

@@ -78,10 +78,16 @@ static inline void init_wiener(Dav2dFrameContext *const f) {
     const enum Dav2dRestorationType type = f->frame_hdr->restoration.p[0].type;
     if (type == DAV2D_RESTORATION_NONE) return;
 
-    const int qmax = 255 + 48 * f->seq_hdr->hbd;
+    ptrdiff_t class_lut_offset;
+    const int bitdepth_min_8 = f->seq_hdr->hbd * 2;
+    const int qmax = 255 + 24 * f->seq_hdr->hbd;
     const int qidx = imin(f->frame_hdr->quant.yac, qmax);
+    const int base_q = dav2d_dq_lookup(f->frame_hdr->quant.yac);
+    const int qstep = (base_q + (1 << bitdepth_min_8 >> 1)) >> bitdepth_min_8;
+    setup_wiener_qval_approx_data(&f->lf.wiener_qval_approx_data,
+                                  &class_lut_offset,
+                                  qstep);
 
-    f->lf.base_q = dav2d_dq_lookup(qidx);
     int idx = 3;
     if (qidx < 130) {
         idx = 0;
@@ -92,11 +98,14 @@ static inline void init_wiener(Dav2dFrameContext *const f) {
     }
     if (type == DAV2D_RESTORATION_NS_WIENER || type == DAV2D_RESTORATION_SWITCHABLE) {
         int num_classes_idx = f->frame_hdr->restoration.p[0].ns.num_classes_idx;
-        if (num_classes_idx)
-            f->lf.ns_subclass_lut = dav2d_user_wiener_class[idx][num_classes_idx - 1];
+        if (num_classes_idx) {
+            f->lf.ns_subclass_lut = dav2d_user_wiener_class[idx][num_classes_idx - 1] +
+                                    class_lut_offset;
+        }
     }
     if (type == DAV2D_RESTORATION_PC_WIENER || type == DAV2D_RESTORATION_SWITCHABLE) {
-        f->lf.pc_subclass_lut = dav2d_pretrained_wiener_class[idx];
+        f->lf.pc_subclass_lut = dav2d_pretrained_wiener_class[idx] +
+                                class_lut_offset;
         f->lf.pc_filters = dav2d_pc_wiener_filters[idx];
     }
 }
