@@ -2112,7 +2112,7 @@ static int tip_pred(Dav2dTaskContext *const t,
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (ref.ref[0] * 8 + ref.ref[1])));
-    for (int y = 0, yy = 0; y < h4; y += step, yy++, rmv_line += 16 * step >> 1) {
+    for (int y = 0; y < h4; y += step, rmv_line += 16 * step >> 1) {
         const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * t_stride;
         for (int x = 0; x < w4; x += step) {
             const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
