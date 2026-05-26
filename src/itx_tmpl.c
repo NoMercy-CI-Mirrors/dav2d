@@ -277,7 +277,9 @@ inv_txfm_fn(R, 64, 32)
 inv_txfm_fn( , 64, 64)
 
 #if HAVE_ASM
-#if ARCH_X86
+#if ARCH_AARCH64
+#include "src/arm/itx.h"
+#elif ARCH_X86
 #include "src/x86/itx.h"
 #endif
 #endif
@@ -314,7 +316,9 @@ COLD void bitfn(dav2d_itx_dsp_init)(Dav2dInvTxfmDSPContext *const c) {
     assign_itx(64, 64, );
 
 #if HAVE_ASM
-#if ARCH_X86
+#if ARCH_AARCH64
+    itx_dsp_init_arm(c);
+#elif ARCH_X86
     itx_dsp_init_x86(c);
 #endif
 #endif

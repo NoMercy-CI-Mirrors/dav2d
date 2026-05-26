@@ -106,6 +106,7 @@ if is_asm_enabled
                     'arm/64/cdef.S',
                     'arm/64/filmgrain.S',
                     'arm/64/ipred.S',
+                    'arm/64/itx.S',
                     'arm/64/mc.S',
                     'arm/64/mc_dotprod.S',
                     'arm/64/mc_sve.S',

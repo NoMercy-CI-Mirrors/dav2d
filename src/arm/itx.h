@@ -1,6 +1,5 @@
 /*
- * Copyright © 2018, VideoLAN and dav2d authors
- * Copyright © 2019, Martin Storsjo
+ * Copyright © 2026, Arm Limited
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,59 +24,318 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "config.h"
+
 #include "src/cpu.h"
 #include "src/itx.h"
+#include "src/itx_1d.h"
+#include "src/scan.h"
+#include "src/tables.h"
 
-decl_itx17_fns( 4,  4, neon);
-decl_itx16_fns( 4,  8, neon);
-decl_itx16_fns( 4, 16, neon);
-decl_itx16_fns( 8,  4, neon);
-decl_itx16_fns( 8,  8, neon);
-decl_itx16_fns( 8, 16, neon);
-decl_itx2_fns ( 8, 32, neon);
-decl_itx16_fns(16,  4, neon);
-decl_itx16_fns(16,  8, neon);
-decl_itx12_fns(16, 16, neon);
-decl_itx2_fns (16, 32, neon);
-decl_itx2_fns (32,  8, neon);
-decl_itx2_fns (32, 16, neon);
-decl_itx2_fns (32, 32, neon);
+#if BITDEPTH == 8
 
-decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_16x64, neon));
-decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_32x64, neon));
-decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x16, neon));
-decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x32, neon));
-decl_itx_fn(BF(dav2d_inv_txfm_add_dct_dct_64x64, neon));
+#define decl_itx_1d_row_fn(name)                                               \
+  void(name)(coef *dst, ptrdiff_t dst_stride, const coef *c, ptrdiff_t stride, \
+             uint64_t shift, uint64_t do_scale,                                \
+             uint64_t howmany HIGHBD_DECL_SUFFIX)
+typedef decl_itx_1d_row_fn(*itx_1d_fn_row);
 
-static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c, int bpc,
-                                           int *const all_simd)
+#define decl_itx_1d_col_fn(name)                                               \
+  void(name)(pixel *dst, ptrdiff_t dst_stride, const coef *c,                  \
+             ptrdiff_t stride, uint64_t w, uint64_t h, uint64_t shift,         \
+             uint64_t howmany HIGHBD_DECL_SUFFIX)
+typedef decl_itx_1d_col_fn(*itx_1d_fn_col);
+
+#define decl_residual_add_fn(name)                                             \
+  void(name)(pixel* dst, ptrdiff_t dst_stride, const coef *c, uint64_t w,      \
+             uint64_t h, uint64_t shift,                                       \
+             enum TxfmType txtp HIGHBD_DECL_SUFFIX)
+
+#define decl_itx_1d_pair(name) \
+decl_itx_1d_row_fn(BF(dav2d_inv_##name##_1d_row, neon)); \
+decl_itx_1d_col_fn(BF(dav2d_inv_##name##_1d_col, neon))
+
+#define decl_residual_add_idtx_fn(sz) \
+decl_residual_add_fn(BF(dav2d_residual_add_idtx##sz, neon))
+
+decl_itx_1d_pair(dct4);
+decl_itx_1d_pair(dct8);
+decl_itx_1d_pair(dct16);
+decl_itx_1d_pair(dct32);
+decl_itx_1d_pair(adst4);
+decl_itx_1d_pair(flipadst4);
+decl_itx_1d_pair(adst8);
+decl_itx_1d_pair(flipadst8);
+decl_itx_1d_pair(ddt8);
+decl_itx_1d_pair(flipddt8);
+decl_itx_1d_pair(adst16);
+decl_itx_1d_pair(flipadst16);
+decl_itx_1d_pair(ddt16);
+decl_itx_1d_pair(flipddt16);
+decl_itx_1d_pair(identity4);
+decl_itx_1d_pair(identity8);
+decl_itx_1d_pair(identity16);
+decl_itx_1d_pair(identity32);
+
+decl_residual_add_idtx_fn(4);
+decl_residual_add_idtx_fn(8);
+decl_residual_add_idtx_fn(16);
+decl_residual_add_idtx_fn(32);
+
+void BF(dav2d_inv_txfm_add_wht_wht_4x4,
+        neon)(pixel *dst, ptrdiff_t dst_stride, coef *coeff,
+              enum TxfmType txtp HIGHBD_DECL_SUFFIX);
+
+static const itx_1d_fn_col itx_1d_x4_fns_col[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
+    [TX_4X4] = {
+        [DCT]      = BF(dav2d_inv_dct4_1d_col, neon),
+        [ADST]     = BF(dav2d_inv_adst4_1d_col, neon),
+        [FLIPADST] = BF(dav2d_inv_flipadst4_1d_col, neon),
+        [IDENTITY] = BF(dav2d_inv_identity4_1d_col, neon),
+    }, [TX_8X8] = {
+        [DCT]      = BF(dav2d_inv_dct8_1d_col, neon),
+        [ADST]     = BF(dav2d_inv_adst8_1d_col, neon),
+        [FLIPADST] = BF(dav2d_inv_flipadst8_1d_col, neon),
+        [IDENTITY] = BF(dav2d_inv_identity8_1d_col, neon),
+        [DDT]      = BF(dav2d_inv_ddt8_1d_col, neon),
+        [FLIPDDT]  = BF(dav2d_inv_flipddt8_1d_col, neon),
+    }, [TX_16X16] = {
+        [DCT]      = BF(dav2d_inv_dct16_1d_col, neon),
+        [ADST]     = BF(dav2d_inv_adst16_1d_col, neon),
+        [FLIPADST] = BF(dav2d_inv_flipadst16_1d_col, neon),
+        [IDENTITY] = BF(dav2d_inv_identity16_1d_col, neon),
+        [DDT]      = BF(dav2d_inv_ddt16_1d_col, neon),
+        [FLIPDDT]  = BF(dav2d_inv_flipddt16_1d_col, neon),
+    }, [TX_32X32] = {
+        [DCT]      = BF(dav2d_inv_dct32_1d_col, neon),
+        [IDENTITY] = BF(dav2d_inv_identity32_1d_col, neon),
+    }, [TX_64X64] = {
+        [DCT]      = BF(dav2d_inv_dct32_1d_col, neon),
+    },
+};
+
+static const itx_1d_fn_row itx_1d_x4_fns_row[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
+    [TX_4X4] = {
+        [DCT]      = BF(dav2d_inv_dct4_1d_row, neon),
+        [ADST]     = BF(dav2d_inv_adst4_1d_row, neon),
+        [FLIPADST] = BF(dav2d_inv_flipadst4_1d_row, neon),
+        [IDENTITY] = BF(dav2d_inv_identity4_1d_row, neon),
+    }, [TX_8X8] = {
+        [DCT]      = BF(dav2d_inv_dct8_1d_row, neon),
+        [ADST]     = BF(dav2d_inv_adst8_1d_row, neon),
+        [FLIPADST] = BF(dav2d_inv_flipadst8_1d_row, neon),
+        [IDENTITY] = BF(dav2d_inv_identity8_1d_row, neon),
+        [DDT]      = BF(dav2d_inv_ddt8_1d_row, neon),
+        [FLIPDDT]  = BF(dav2d_inv_flipddt8_1d_row, neon),
+    }, [TX_16X16] = {
+        [DCT]      = BF(dav2d_inv_dct16_1d_row, neon),
+        [ADST]     = BF(dav2d_inv_adst16_1d_row, neon),
+        [FLIPADST] = BF(dav2d_inv_flipadst16_1d_row, neon),
+        [IDENTITY] = BF(dav2d_inv_identity16_1d_row, neon),
+        [DDT]      = BF(dav2d_inv_ddt16_1d_row, neon),
+        [FLIPDDT]  = BF(dav2d_inv_flipddt16_1d_row, neon),
+    }, [TX_32X32] = {
+        [DCT]      = BF(dav2d_inv_dct32_1d_row, neon),
+        [IDENTITY] = BF(dav2d_inv_identity32_1d_row, neon),
+    }, [TX_64X64] = {
+        [DCT]      = BF(dav2d_inv_dct32_1d_row, neon),
+    },
+};
+
+static NOINLINE void itx_dc_only(pixel *dst, const ptrdiff_t stride,
+                                 coef *const coeff, const int shift0,
+                                 const int shift1, const int w, const int h,
+                                 const int is_rect2 HIGHBD_DECL_SUFFIX)
+{
+    const int shift = shift0 + shift1 - 12;
+    const int rnd = (1 << (shift - 1)) + shift0 - 6;
+    int dc = coeff[0];
+    coeff[0] = 0;
+
+    if (is_rect2) {
+        dc = (dc * 181 + 128) >> 8;
+    }
+    dc = (dc + rnd) >> shift;
+
+    for (int y = 0; y < h; y++, dst += PXSTRIDE(stride)) {
+        for (int x = 0; x < w; x++) {
+            dst[x] = iclip_pixel(dst[x] + dc);
+        }
+    }
+}
+
+static ALWAYS_INLINE int itx_first_pass_howmany(const int tx_class,
+                                                const int sh, const int lw,
+                                                const int eob, const int tx)
+{
+    if (tx_class == TX_CLASS_2D) {
+        const uint16_t *last_eob = dav2d_last_eob_per_col.table +
+                                   dav2d_last_eob_per_col.offset[tx];
+        int howmany = 4;
+        while (howmany < sh && eob > *last_eob++) {
+            howmany += 4;
+        }
+        return howmany;
+    }
+
+    int last_nz_col;
+    if (tx_class == TX_CLASS_H) {
+        last_nz_col = imin(sh - 1, eob);
+    } else if (tx_class == TX_CLASS_V) {
+        last_nz_col = imin(sh - 1, eob >> (lw + 2));
+    } else {
+        last_nz_col = sh - 1;
+    }
+    return imin(sh, (last_nz_col + 4) & ~3);
+}
+
+#define ITX_WRAP(w, h, lw, lh, shift0, shift1, rect2, sw, sh, tx) \
+static void BF(dav2d_inv_txfm_add_##w##x##h, neon)(pixel *dst, \
+                                                   const ptrdiff_t stride, \
+                                                   coef *const coeff, \
+                                                   const enum TxfmType txtp, \
+                                                   const int eob HIGHBD_DECL_SUFFIX) \
+{ \
+    assert(eob >= 0 && eob < 32 * 32); \
+    if (eob == 0 && txtp == DCT_DCT) { \
+        itx_dc_only(dst, stride, coeff, shift0, shift1, w, h, rect2 \
+                    HIGHBD_TAIL_SUFFIX); \
+        return; \
+    } \
+    const enum TxfmType base_txtp = txtp & 0xff; \
+    const itx_1d_fn_row first_1d_fn = itx_1d_x4_fns_row[lw][base_txtp & 7]; \
+    const itx_1d_fn_col second_1d_fn = itx_1d_x4_fns_col[lh][base_txtp >> 5]; \
+    assert(first_1d_fn); \
+    assert(second_1d_fn); \
+    const int tx_class = (txtp >> 3) & 3; \
+    const int howmany = itx_first_pass_howmany(tx_class, sh, lw, eob, tx); \
+    coef tmp[sw * sh]; \
+    /* Special-case IDTX + DPCM to fuse the final identity with residual_add. */ \
+    if (txtp >> 8) { \
+        assert((txtp & 0xe7) == IDTX); \
+        BF(dav2d_inv_identity##sw##_1d_row, neon)(tmp, sw, coeff, sh, shift0, rect2, \
+                                                  howmany HIGHBD_TAIL_SUFFIX); \
+        BF(dav2d_residual_add_idtx##sh, neon)(dst, stride, tmp, w, h, shift1, txtp \
+                                              HIGHBD_TAIL_SUFFIX); \
+        return; \
+    } \
+    first_1d_fn(tmp, sw, coeff, sh, shift0, rect2, howmany HIGHBD_TAIL_SUFFIX); \
+    second_1d_fn(dst, stride, tmp, sw, w, h, shift1, sw HIGHBD_TAIL_SUFFIX); \
+}
+
+static void BF(dav2d_inv_txfm_add_4x4, neon)(pixel *dst,
+                                             const ptrdiff_t dst_stride,
+                                             coef *const coeff,
+                                             const enum TxfmType txtp,
+                                             const int eob
+                                             HIGHBD_DECL_SUFFIX)
+{
+    const enum TxfmType base_txtp = txtp & 0xff;
+    if (base_txtp == WHT_WHT) {
+        BF(dav2d_inv_txfm_add_wht_wht_4x4, neon)(dst, dst_stride, coeff, txtp
+                                                 HIGHBD_TAIL_SUFFIX);
+        return;
+    }
+
+    // Special-case IDTX + DPCM to fuse the final identity with residual_add.
+    if (txtp >> 8) { \
+        assert((txtp & 0xe7) == IDTX); \
+        assert(eob >= 0 && eob < 32 * 32);
+        coef tmp[4 * 4];
+        BF(dav2d_inv_identity4_1d_row, neon)(tmp, 4, coeff, 4, 7, 0, 4
+                                             HIGHBD_TAIL_SUFFIX);
+        BF(dav2d_residual_add_idtx4, neon)(dst, dst_stride, tmp, 4, 4,
+                                           10, txtp HIGHBD_TAIL_SUFFIX);
+        return;
+    }
+
+    const itx_1d_fn_row first_1d_fn = itx_1d_x4_fns_row[0][base_txtp & 7];
+    const itx_1d_fn_col second_1d_fn = itx_1d_x4_fns_col[0][base_txtp >> 5];
+    assert(first_1d_fn && second_1d_fn);
+    assert(eob >= 0 && eob < 32 * 32);
+    if (eob == 0 && txtp == DCT_DCT) {
+        itx_dc_only(dst, dst_stride, coeff, 7, 10, 4, 4, 0
+                    HIGHBD_TAIL_SUFFIX);
+        return;
+    }
+
+    coef tmp[4 * 4];
+    first_1d_fn(tmp, 4, coeff, 4, 7, 0, 4 HIGHBD_TAIL_SUFFIX);
+    second_1d_fn(dst, dst_stride, tmp, 4, 4, 4, 10, 4
+                 HIGHBD_TAIL_SUFFIX);
+}
+
+//        w   h lw lh shift0 shift1 rect2  sw  sh  tx
+ITX_WRAP( 4,  8, 0, 1,     7,    10,    1,  4,  8, RTX_4X8)
+ITX_WRAP( 4, 16, 0, 2,     6,    12,    0,  4, 16, RTX_4X16)
+ITX_WRAP( 4, 32, 0, 3,     7,    11,    1,  4, 32, RTX_4X32)
+ITX_WRAP( 4, 64, 0, 4,     6,    13,    0,  4, 32, RTX_4X64)
+ITX_WRAP( 8,  4, 1, 0,     7,    10,    1,  8,  4, RTX_8X4)
+ITX_WRAP( 8,  8, 1, 1,     7,    11,    0,  8,  8, TX_8X8)
+ITX_WRAP( 8, 16, 1, 2,     7,    11,    1,  8, 16, RTX_8X16)
+ITX_WRAP( 8, 32, 1, 3,     6,    13,    0,  8, 32, RTX_8X32)
+ITX_WRAP( 8, 64, 1, 4,     6,    12,    1,  8, 32, RTX_8X64)
+ITX_WRAP(16,  4, 2, 0,     6,    12,    0, 16,  4, RTX_16X4)
+ITX_WRAP(16,  8, 2, 1,     7,    11,    1, 16,  8, RTX_16X8)
+ITX_WRAP(16, 16, 2, 2,     6,    13,    0, 16, 16, TX_16X16)
+ITX_WRAP(16, 32, 2, 3,     6,    12,    1, 16, 32, RTX_16X32)
+ITX_WRAP(16, 64, 2, 4,     6,    13,    0, 16, 32, RTX_16X64)
+ITX_WRAP(32,  4, 3, 0,     7,    11,    1, 32,  4, RTX_32X4)
+ITX_WRAP(32,  8, 3, 1,     6,    13,    0, 32,  8, RTX_32X8)
+ITX_WRAP(32, 16, 3, 2,     6,    12,    1, 32, 16, RTX_32X16)
+ITX_WRAP(32, 32, 3, 3,     6,    13,    0, 32, 32, TX_32X32)
+ITX_WRAP(32, 64, 3, 4,     6,    12,    1, 32, 32, RTX_32X64)
+ITX_WRAP(64,  4, 4, 0,     6,    13,    0, 32,  4, RTX_64X4)
+ITX_WRAP(64,  8, 4, 1,     6,    12,    1, 32,  8, RTX_64X8)
+ITX_WRAP(64, 16, 4, 2,     6,    13,    0, 32, 16, RTX_64X16)
+ITX_WRAP(64, 32, 4, 3,     6,    12,    1, 32, 32, RTX_64X32)
+ITX_WRAP(64, 64, 4, 4,     6,    13,    0, 32, 32, TX_64X64)
+
+static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c)
 {
     const unsigned flags = dav2d_get_cpu_flags();
 
     if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
-    assign_itx_fn( , 4, 4, wht_wht,           WHT_WHT,           neon);
-
-    if (BITDEPTH == 16 && bpc != 10) return;
-
-    assign_itx16_fn( ,  4,  4, neon);
-    assign_itx16_fn(R,  4,  8, neon);
-    assign_itx16_fn(R,  4, 16, neon);
-    assign_itx16_fn(R,  8,  4, neon);
-    assign_itx16_fn( ,  8,  8, neon);
-    assign_itx16_fn(R,  8, 16, neon);
-    assign_itx2_fn (R,  8, 32, neon);
-    assign_itx16_fn(R, 16,  4, neon);
-    assign_itx16_fn(R, 16,  8, neon);
-    assign_itx12_fn( , 16, 16, neon);
-    assign_itx2_fn (R, 16, 32, neon);
-    assign_itx1_fn (R, 16, 64, neon);
-    assign_itx2_fn (R, 32,  8, neon);
-    assign_itx2_fn (R, 32, 16, neon);
-    assign_itx2_fn ( , 32, 32, neon);
-    assign_itx1_fn (R, 32, 64, neon);
-    assign_itx1_fn (R, 64, 16, neon);
-    assign_itx1_fn (R, 64, 32, neon);
-    assign_itx1_fn ( , 64, 64, neon);
-    *all_simd = 1;
+    assign_itx_fn( ,  4,  4, neon);
+    assign_itx_fn(R,  4,  8, neon);
+    assign_itx_fn(R,  4, 16, neon);
+    assign_itx_fn(R,  4, 32, neon);
+    assign_itx_fn(R,  4, 64, neon);
+    assign_itx_fn(R,  8,  4, neon);
+    assign_itx_fn( ,  8,  8, neon);
+    assign_itx_fn(R,  8, 16, neon);
+    assign_itx_fn(R,  8, 32, neon);
+    assign_itx_fn(R,  8, 64, neon);
+    assign_itx_fn(R, 16,  4, neon);
+    assign_itx_fn(R, 16,  8, neon);
+    assign_itx_fn( , 16, 16, neon);
+    assign_itx_fn(R, 16, 32, neon);
+    assign_itx_fn(R, 16, 64, neon);
+    assign_itx_fn(R, 32,  4, neon);
+    assign_itx_fn(R, 32,  8, neon);
+    assign_itx_fn(R, 32, 16, neon);
+    assign_itx_fn( , 32, 32, neon);
+    assign_itx_fn(R, 32, 64, neon);
+    assign_itx_fn(R, 64,  4, neon);
+    assign_itx_fn(R, 64,  8, neon);
+    assign_itx_fn(R, 64, 16, neon);
+    assign_itx_fn(R, 64, 32, neon);
+    assign_itx_fn( , 64, 64, neon);
 }
+
+#undef ITX_WRAP
+#undef decl_residual_add_idtx_fn
+#undef decl_itx_1d_pair
+#undef decl_residual_add_fn
+#undef decl_itx_1d_col_fn
+#undef decl_itx_1d_row_fn
+
+#else
+
+static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c)
+{
+    (void) c;
+}
+
+#endif
