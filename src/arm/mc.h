@@ -60,6 +60,7 @@ decl_morph_fn(BF(dav2d_morph, neon));
 decl_morph_fn(BF(dav2d_morph, sve2));
 
 decl_opfl_derive_mv_fn(BF(dav2d_opfl_derive_mv, neon));
+decl_opfl_derive_mv_fn(BF(dav2d_opfl_derive_mv, sve));
 
 static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
 #define init_mc_fn(type, name, suffix) \
@@ -107,6 +108,12 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
         init_8tap_fns(neon_i8mm);
     }
 #endif  // HAVE_I8MM
+
+#if HAVE_SVE
+    if (flags & DAV2D_ARM_CPU_FLAG_SVE) {
+        c->opfl_derive_mv = BF(dav2d_opfl_derive_mv, sve);
+    }
+#endif  // HAVE_SVE
 
 #if HAVE_SVE2
     if (flags & DAV2D_ARM_CPU_FLAG_SVE2) {
