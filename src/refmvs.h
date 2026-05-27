@@ -226,9 +226,7 @@ static ALWAYS_INLINE unsigned quantize_mv_comp(const unsigned absv) {
     if (!absv) return 0;
     const int nbits = imax(ulog2(absv) - 4, 0);
     assert((unsigned) nbits <= 6U);
-    int res = (absv - (16 * !!nbits << nbits)) >> nbits;
-    res += (nbits + !!nbits) * 16;
-    return res;
+    return (absv >> nbits) + 16 * nbits;
 }
 
 static ALWAYS_INLINE union qmv quantize_mv(const union mv mv) {
