@@ -5231,7 +5231,7 @@ INV_TXFM_FN 32, 8
     push                 r9
     mov                  r8, rsp
     and                 rsp, ~31
-    lea                 r3d, [eobq+(24<<16)]
+    lea                 r3d, [eobq+(21<<16)]
     test               eobb, 0x10 ; TX_CLASS_H
     lea                  r9, [cfq+32*8]
     cmovz              eobd, r3d
