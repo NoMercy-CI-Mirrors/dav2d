@@ -750,7 +750,11 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     const uint32_t *const dq_tbl = ts->dq[b->seg_id][plane];
     const int cf_max = ~(~127U << (BITDEPTH == 8 ? 8 : f->cur.p.p.bpc));
     unsigned dc_sign_level = 1 << 6;
-    int ph = 0;
+    // parity hiding state, enabled when greater than 0
+    // upper 16 bits: number of non-zero coefficients
+    // middle 15 bits: scratch space for state calculation
+    // low bit: parity bit
+    unsigned ph_state = ph_enabled ? 2 : 0;
 
     if (f->seq_hdr->fsc && (!intra || b->fsc) &&
         *txtp == IDTX && !chroma)
@@ -839,8 +843,6 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         goto end;
     } else if (eob) {
         int8_t *const levels = t->scratch.levels;
-        unsigned sum;
-        unsigned nz_count;
 
 #define DECODE_COEFS_CLASS(tx_class, xy, is_stx) \
         int lim, tok; \
@@ -889,14 +891,10 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (tok == lim && hi_cdf) { \
             tok += dav2d_msac_decode_symbol_adapt4(&ts->msac, \
                        hi_cdf[lim == 5 ? 7 : 0], 3); \
-            if (ph_enabled) { \
-                sum = umin(tok, 6); \
-                nz_count = 1; \
-            } \
-        } else if (ph_enabled) { \
-            sum = tok; \
-            nz_count = !!tok; \
-        } \
+            if (ph_state) \
+                ph_state += 0x10000 + tok + (tok == 7); \
+        } else if (ph_state) \
+            ph_state += 0x10000 + tok; \
         DEBUG_CF_printf("%*sPost-eob_tok[pos=%d,ctx=%d|%d|%d,freq=%s,plane=%s,%d]: r=%d\n", \
                         depth, "", eob, t_dim->ctx, ctx, \
                         tok < lim || !hi_cdf ? -1 : lim == 5 ? 7 : 0, \
@@ -942,14 +940,10 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 tok = dav2d_msac_decode_symbol_adapt4(&ts->msac, lo_cdf.hf[lo_cdf_idx], 3); \
             if (tok == lim && hi_cdf) { \
                 tok += dav2d_msac_decode_symbol_adapt4(&ts->msac, hi_cdf[hr_ctx], 3); \
-                if (ph_enabled) { \
-                    sum += umin(tok, 6); \
-                    nz_count++; \
-                } \
-            } else if (ph_enabled) { \
-                sum += tok; \
-                nz_count += !!tok; \
-            } \
+                if (ph_state) \
+                    ph_state += 0x10000 + tok + (tok == 7); \
+            } else if (ph_state) \
+                ph_state += -tok & 0x10001; \
             DEBUG_CF_printf("%*sPost-tok[pos=%d,ctx=%d|%d|%d|%d,freq=%s,plane=%s,%d]: r=%d\n", \
                             depth, "", i, t_dim->ctx, ctx, tcq, \
                             tok < lim || !hi_cdf ? -1 : hr_ctx, \
@@ -960,11 +954,10 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             cf[is_stx ? (unsigned)i : rc] = tok; \
         } \
         /* dc */ \
-        ph = ph_enabled && nz_count > 3; \
-        if (ph) { \
+        if (ph_state >> 18) { \
             ctx = get_ph_ctx(levels, tx_class, stride); \
             const int idx = dav2d_msac_decode_symbol_adapt4(&ts->msac, ts->cdf.coef.ph_dc_y_tok[ctx], 3); \
-            dc_tok = (idx << 1) + (sum & 1); \
+            dc_tok = (idx << 1) + (ph_state & 1); \
             DEBUG_CF_printf("%*sPost-dc_tok_ph[pos=0,ctx=%d|%d|%d,plane=y,%d]: r=%d\n", \
                             depth, "", t_dim->ctx, ctx, idx, dc_tok, ts->msac.rng); \
         } else { \
@@ -1008,7 +1001,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                 ts->msac.rng); \
             } else { \
                 sign = dav2d_msac_decode_bool_adapt(&ts->msac, \
-                           ts->cdf.coef.dc_sign[chroma][ph][0]); \
+                           ts->cdf.coef.dc_sign[chroma][!!(ph_state >> 18)][0]); \
                 DEBUG_CF_printf("%*sPost-dc_sign[pos=%d,ctx=0,%d]: r=%d\n", \
                                 depth, "", i, sign, ts->msac.rng); \
             } \
@@ -1098,7 +1091,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         depth, "", dc_sign, ts->msac.rng);
     } else {
         const int dc_sign_ctx = get_dc_sign_ctx(t_dim, a, l);
-        uint16_t *const dc_sign_cdf = ts->cdf.coef.dc_sign[chroma][ph][dc_sign_ctx];
+        uint16_t *const dc_sign_cdf = ts->cdf.coef.dc_sign[chroma][!!(ph_state >> 18)][dc_sign_ctx];
         dc_sign = dav2d_msac_decode_bool_adapt(&ts->msac, dc_sign_cdf);
         DEBUG_CF_printf("%*sPost-dc_sign[pos=0,ctx=%d,%d]: r=%d\n",
                         depth, "", dc_sign_ctx, dc_sign, ts->msac.rng);
@@ -1131,7 +1124,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         const int max_br = chroma ? 5 : 8;
         int dc_val;
         int tcq = (tcq_state & 2) >> 1;
-        if (ph && dc_tok > 5) {
+        if (!!(ph_state >> 18) && dc_tok > 5) {
             const int hr = decode_hr(&ts->msac, hr_avg >> 1) << 1;
             dc_tok += hr;
             DEBUG_CF_printf("%*sPost-residual_ph[pos=0,%d->%d]: r=%d\n",
