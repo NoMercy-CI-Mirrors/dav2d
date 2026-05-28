@@ -219,7 +219,7 @@ cglobal splat_comp_wedgemv, 5, 8, 3, sdst, ssrc, tdst, tstride, tsrc, bw4, bh4, 
     shr           bh4d, 1
     jmp             r7
 
-%macro COMP_WEDGEMV_LOOP_START 1 ; len
+%macro COMP_WEDGEMV_LOOP_START 1-2 1 ; len, shuffle_end
 .t%1:
     mov         wedgeq, wedgemp
     WIN64_SPILL_XMM 12
@@ -255,28 +255,32 @@ cglobal splat_comp_wedgemv, 5, 8, 3, sdst, ssrc, tdst, tstride, tsrc, bw4, bh4, 
                                         ; if mv0=invalid&mv1=valid: ref1 [2x]
                                         ; if mv0=valid&mv1=invalid: ref0 [2x]
                                         ; if both mvs are invalid:  -1
+%if %2
     pshufb          m7, m9              ; ref2,ref3,8x?,ref0,ref1
     palignr         m8, m6, m7, 12      ; [0..3]ref0-1,[4..15]mv0-2
     palignr         m6, m7, m6, 12      ; [0..3]mv3,[4..7]ref2-3
     pshufb          m8, m10
     pshufb          m6, m11
+%else
+    packsswb        m7, m7
+%endif
 %endmacro
 
     INIT_XMM avx2
-    COMP_WEDGEMV_LOOP_START 1
-    movd    [tdstq+ 0], m8
-    pextrw  [tdstq+ 4], m8, 2
+    COMP_WEDGEMV_LOOP_START 1, 0
+    movd    [tdstq+ 0], m6
+    pextrw  [tdstq+ 4], m7, 0
     dec           bh4d
     jz .t1_break
-    pextrw  [tdstq+tstrideq*2+ 0], m8, 3
-    pextrd  [tdstq+tstrideq*2+ 2], m8, 2
+    pextrd  [tdstq+tstrideq*2+ 0], m6, 1
+    pextrw  [tdstq+tstrideq*2+ 4], m7, 1
     dec           bh4d
     jz .t1_break
     lea          tdstq, [tdstq+tstrideq*4]
-    pextrd  [tdstq+ 0], m8, 3
-    pextrw  [tdstq+ 4], m6, 0
-    pextrw  [tdstq+tstrideq*2+ 0], m6, 1
-    pextrd  [tdstq+tstrideq*2+ 2], m6, 1
+    pextrd  [tdstq+ 0], m6, 2
+    pextrw  [tdstq+ 4], m7, 2
+    pextrd  [tdstq+tstrideq*2+ 0], m6, 3
+    pextrw  [tdstq+tstrideq*2+ 4], m7, 3
     add         wedgeq, 4
     lea          tdstq, [tdstq+tstrideq*4]
     sub           bh4d, 2
