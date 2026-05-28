@@ -1350,8 +1350,7 @@ static inline int dequantize_mv_comp(const int v) {
     const unsigned absv = abs(v);
     assert(v < 0x80);
     const int nbits = (absv >> 4) - (absv >= 16);
-    int res = (absv - (nbits + !!nbits) * 16) << nbits;
-    res += 16 * !!nbits << nbits;
+    const int res = (absv - nbits * 16) << nbits;
     return v < 0 ? -res : res;
 }
 
