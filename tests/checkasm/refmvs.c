@@ -411,7 +411,7 @@ static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
                         s_src[0].bs = bs_from_bwh4(w, h);
                         s_src[0].bx4 = rnd() % ((0x4000 >> (!wide * 7)) - w);
                         s_src[0].by4 = rnd() % ((0x4000 >> (!wide * 7)) - h);
-                        int32_t *const mat = s_src[0].m;
+                        int32_t gmv_mat[6], *const mat = g ? gmv_mat : s_src[0].m;
                         mat[0] = s_src[0].mv[0].x * (1 << 13);
                         mat[1] = s_src[0].mv[0].y * (1 << 13);
                         const int range = 0x3ff >> (!wide * 4);
