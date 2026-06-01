@@ -17,6 +17,13 @@ stages:
         - docker
         - amd64
 
+.debian-amd64-minimum:
+    image: registry.videolan.org/dav1d-debian-minimum:20260422185248
+    stage: build
+    tags:
+        - docker
+        - amd64
+
 .debian-llvm-mingw-common:
     image: registry.videolan.org/vlc-debian-llvm-ucrt:20260121170706
     stage: build
@@ -211,6 +218,14 @@ build-debian-avx:
         - ninja -C build
         - cd build
         - time meson test -v
+
+build-debian-minimum:
+    extends: .debian-amd64-minimum
+    script:
+        - meson setup build --buildtype release
+                            -Dtrim_dsp=false
+        - ninja -C build
+        - cd build && meson test -v
 
 build-debian-avx512:
     extends: .debian-amd64-common
