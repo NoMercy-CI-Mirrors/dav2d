@@ -1080,7 +1080,12 @@ SECTION .text
     mova      [rsp+5*32], m5
 %endif
 
-%if %1 >= 6 && %isidn(%2, v)
+%assign do_loop %1 >= 6
+%ifidn %2, h
+    %assign do_loop 0
+%endif
+
+%if do_loop
     ; start at +3, -4
     lea             dstq, [dstq+stride3q]
     vbroadcasti128   m11, [base_mul_lut]
