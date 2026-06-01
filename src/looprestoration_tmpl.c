@@ -785,11 +785,9 @@ static void gdf_prep_c(int8_t *dst, const ptrdiff_t dst_stride,
             for (int idx = 0; idx < 3; idx++)
                 shared_vals[idx] = dav2d_gdf_bias[ref_dst_idx][qp_idx][idx];
             for (int d = 0; d < 4; d++) {
-                const int k = d + 18;
-                const int alpha = dav2d_gdf_alpha[ref_dst_idx][qp_idx][k][cls];
+                const int alpha = dav2d_gdf_gradient_alpha[ref_dst_idx][qp_idx][d];
                 const int v = imin(grad_sums[d] >> (4 - up_shift), alpha);
-                for (int idx = 0; idx < 3; idx++)
-                    shared_vals[idx] += v * dav2d_gdf_weight[ref_dst_idx][qp_idx][idx][k][cls];
+                shared_vals[2] += v * dav2d_gdf_gradient_weight[ref_dst_idx][qp_idx][d];
             }
 
             for (int x2 = 0; x2 < 2; x2++) {

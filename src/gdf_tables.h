@@ -32,8 +32,10 @@
 
 #include "common/intops.h"
 
-EXTERN const uint16_t dav2d_gdf_alpha[6][6][22][4];
-EXTERN const int16_t dav2d_gdf_weight[6][6][3][22][4];
+EXTERN const uint16_t dav2d_gdf_gradient_alpha[6][6][4];
+EXTERN const uint16_t dav2d_gdf_alpha[6][6][18][4];
+EXTERN const int16_t dav2d_gdf_gradient_weight[6][6][4];
+EXTERN const int16_t dav2d_gdf_weight[6][6][3][18][4];
 EXTERN const int16_t dav2d_gdf_bias[6][6][3];
 EXTERN const int8_t dav2d_gdf_intra_error[6][4096];
 EXTERN const int8_t dav2d_gdf_inter_error[5][6][1000];
