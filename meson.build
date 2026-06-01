@@ -311,10 +311,25 @@ if (get_option('buildtype') != 'debug' and get_option('buildtype') != 'plain')
     optional_arguments += '-ffast-math'
 endif
 
-if (host_machine.system() in ['darwin', 'ios', 'tvos'] and cc.get_id() == 'clang' and
-    cc.version().startswith('11'))
-    # Workaround for Xcode 11 -fstack-check bug, see #301
-    optional_arguments += '-fno-stack-check'
+if host_machine.system() in ['darwin', 'ios', 'tvos']
+    if cc.get_id() == 'clang' and cc.version().startswith('11')
+        # Workaround for Xcode 11 -fstack-check bug, see #301
+        optional_arguments += '-fno-stack-check'
+    endif
+    # Xcode Clang doesn't default to -fno-common while upstream llvm.org
+    # Clang (and GCC) do.
+    #
+    # If compiled with -fcommon, uninitialized global variables are treated
+    # as "common". On MachO, such variables don't have any alignment signaled,
+    # so the linker assumes alignment equal to the size.
+    #
+    # Explicitly enable -fno-common, which is the sensible default. This allows
+    # tracking the alignment properly for large uninitialized buffers.
+    #
+    # This avoids linker warnings on Xcode 16.3 about
+    # "reducing alignment of section __DATA,__common from 0x8000 to 0x4000
+    # because it exceeds segment maximum alignment".
+    optional_arguments += '-fno-common'
 endif
 
 if (host_machine.cpu_family() == 'aarch64' or host_machine.cpu_family().startswith('arm'))
