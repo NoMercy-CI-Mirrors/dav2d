@@ -39,20 +39,18 @@ endif
 dav2d_test_args = ['-q', '--threads', '1', '--filmgrain=1']
 
 tests = [
-    'avm-v15.0.0-bus.352x288.l10.deltaq1.obu',
-    'avm-v15.0.0-bus.352x288.l1.partial_lossless.obu',
-    'avm-v15.0.0-bus.352x288.l5.seg1.obu',
-    'avm-v15.0.0-bus.64x64.l1.sdp0.obu',
-    'avm-v15.0.0-bus.64x64.l1.sdp1.obu',
-    'avm-v15.0.0-bus.64x64.l5.lossless.obu',
-    'avm-v15.0.0-bus.64x64.l5.obu',
-    'avm-v15.0.0-bus.64x64.l5.opfl0-refinemv0.obu',
-    'avm-v15.0.0-hm.64x64.l5.filmgrain.obu',
+    ['avm-v15.0.0-bus.352x288.l10.deltaq1',         files('avm-v15.0.0-bus.352x288.l10.deltaq1.obu'),         'a51faffac365722f94697051af0d9e00'],
+    ['avm-v15.0.0-bus.352x288.l1.partial_lossless', files('avm-v15.0.0-bus.352x288.l1.partial_lossless.obu'), '073a204edb3cd90bdf8d15d2bb4c6920'],
+    ['avm-v15.0.0-bus.352x288.l5.seg1',             files('avm-v15.0.0-bus.352x288.l5.seg1.obu'),             '841f3395b0836a92d5454e9bd30a3bb6'],
+    ['avm-v15.0.0-bus.64x64.l1.sdp0',               files('avm-v15.0.0-bus.64x64.l1.sdp0.obu'),               '15c9e34e1df4630094833207c5fc6a9c'],
+    ['avm-v15.0.0-bus.64x64.l1.sdp1',               files('avm-v15.0.0-bus.64x64.l1.sdp1.obu'),               'a5fc9864ff716f298b87c69107230b05'],
+    ['avm-v15.0.0-bus.64x64.l5.lossless',           files('avm-v15.0.0-bus.64x64.l5.lossless.obu'),           '1a00c22d0bc0a4f7b9dc33f5abeccd46'],
+    ['avm-v15.0.0-bus.64x64.l5',                    files('avm-v15.0.0-bus.64x64.l5.obu'),                    'c7e65cb31f675f460daf745a42bf9d0e'],
+    ['avm-v15.0.0-bus.64x64.l5.opfl0-refinemv0',    files('avm-v15.0.0-bus.64x64.l5.opfl0-refinemv0.obu'),    'ae41842a250d29146e5316a4f77271ed'],
+    ['avm-v15.0.0-hm.64x64.l5.filmgrain',           files('avm-v15.0.0-hm.64x64.l5.filmgrain.obu'),           'e4162fac59c040adfae012baa413c7d1'],
 ]
 
-fs = import('fs')
-
 foreach test : tests
-    test(test, dav2d, suite: ['media'],
-         args: dav2d_test_args + ['-i', files(test), '--verify', fs.read(files(test + '.md5')).strip()])
+    test(test[0], dav2d, suite: ['media'],
+         args: dav2d_test_args + ['-i', test[1], '--verify', test[2]])
 endforeach
