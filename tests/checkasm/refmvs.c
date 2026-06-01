@@ -354,6 +354,9 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
                     }
                     const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
+                    memset(s_dst, -1, sizeof(*s_dst) * 64 * 128);
+                    memset(c_t_dst, -1, sizeof(*c_t_dst) * 32 * 32);
+                    memset(a_t_dst, -1, sizeof(*a_t_dst) * 32 * 32);
                     call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src, w, h);
                     call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src, w, h);
 
@@ -423,6 +426,9 @@ static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
 
                         const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
+                        memset(s_dst, -1, sizeof(*s_dst) * 64 * 128);
+                        memset(c_t_dst, -1, sizeof(*c_t_dst) * 32 * 32);
+                        memset(a_t_dst, -1, sizeof(*a_t_dst) * 32 * 32);
                         call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src,
                                  w, h, mat);
                         call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src,
@@ -504,6 +510,9 @@ static void check_splat_comp_warpmv(const Dav2dRefmvsDSPContext *const c) {
 
                         const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
+                        memset(s_dst, -1, sizeof(*s_dst) * 64 * 128);
+                        memset(c_t_dst, -1, sizeof(*c_t_dst) * 32 * 32);
+                        memset(a_t_dst, -1, sizeof(*a_t_dst) * 32 * 32);
                         call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src,
                                  w, h, mat[0], mat[1], t_swap, mask, w_swap);
                         call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src,
@@ -564,6 +573,9 @@ static void check_splat_comp_wedgemv(const Dav2dRefmvsDSPContext *const c) {
                     t_src.mv.mv[1] = quantize_mv(s_src[0].mv[1]);
                     const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
+                    memset(s_dst, -1, sizeof(*s_dst) * 64 * 128);
+                    memset(c_t_dst, -1, sizeof(*c_t_dst) * 32 * 32);
+                    memset(a_t_dst, -1, sizeof(*a_t_dst) * 32 * 32);
                     call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src,
                              w, h, mask, w_swap);
                     call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src,
