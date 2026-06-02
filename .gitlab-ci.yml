@@ -223,6 +223,7 @@ build-debian-minimum:
     extends: .debian-amd64-minimum
     script:
         - meson setup build --buildtype release
+                            --werror
                             -Dtrim_dsp=false
         - ninja -C build
         - cd build && meson test -v
