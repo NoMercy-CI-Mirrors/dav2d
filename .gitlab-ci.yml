@@ -520,6 +520,11 @@ test-debian-tsan:
 test-win64:
     extends: .debian-amd64-common
     stage: test
+    needs: ["build-win: [x86_64-w64-mingw32]"]
+    tags:
+        - docker
+        - avx2
+        - amd64
     # GCC 15.2 miscompiles dav2d when vectorization is enabled (as it is
     # by default), see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=122793.
     # This is fixed in future 15.x releases.
