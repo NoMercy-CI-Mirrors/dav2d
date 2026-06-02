@@ -2127,8 +2127,10 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
 
         uint8_t ref_done[7][2] = {{ 0 }};
         // mark keyframes as done since they don't have MVs
-        for (int n = 0; n < frm_hdr->n_ref_frames; n++)
+        for (int n = 0; n < frm_hdr->n_ref_frames; n++) {
+            assert(n < 7);
             if (!rp_ref[n]) ref_done[n][0] = ref_done[n][1] = 1;
+        }
 
         if (seq_hdr->tip && (rf->ref_sign[rf->tip.ref.ref[0]] ||
                              rf->ref_sign[rf->tip.ref.ref[1]]))
