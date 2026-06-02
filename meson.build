@@ -624,5 +624,3 @@ subdir('tools')
 subdir('examples')
 
 subdir('tests')
-
-subdir('media')

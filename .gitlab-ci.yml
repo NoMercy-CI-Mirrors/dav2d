@@ -406,7 +406,7 @@ build-debian-wasm:
                             --default-library static
                             --cross-file package/crossfiles/${CROSSFILE}.meson
         - ninja -C build
-        - meson test -v -C build --no-suite media
+        - meson test -v -C build
     parallel:
       matrix:
         - CROSSFILE: [wasm32, wasm64]
