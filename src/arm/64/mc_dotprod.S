@@ -1009,9 +1009,6 @@ L(\type\()_6tap_hv_\isa):
 80:     // HV6 - 8xN+
         ldr             d26, [\xmx]
 .ifc \isa, neon_i8mm
-        cmp             w9, #SHARP1
-        b.eq            88f             // horizontal == SHARP1
-
         ldp             q29, q30, [x13, #(OFFSET_USMMLA)]
         ext             v0.8b, v26.8b, v26.8b, #7
         ins             v26.d[1], v0.d[0]
@@ -1085,9 +1082,19 @@ L(\type\()_6tap_hv_\isa):
         b.gt            81b
         ret             x15
 
-        .align JUMP_ALIGN
-88:
-.endif  // neon_i8mm
+        .align FUNC_ALIGN
+L(\type\()_hv_filter6_neon_i8mm):
+        ld1             {v4.16b}, [\lsrc], \s_strd
+        movi            v22.4s, #0
+        movi            v23.4s, #0
+        tbl             v2.16b, {v4.16b}, v29.16b
+        tbl             v3.16b, {v4.16b}, v30.16b
+        usmmla          v22.4s, v2.16b, v26.16b
+        usmmla          v23.4s, v3.16b, v26.16b
+        uzp1            v22.8h, v22.8h, v23.8h
+        ret
+
+.else   // neon_dotprod
         ldp             q29, q30, [x13, #16]
 
         .align LOOP_ALIGN
@@ -1095,29 +1102,17 @@ L(\type\()_6tap_hv_\isa):
         mov             \lsrc, \src
         mov             \ldst, \dst
         mov             w8, \h
-.ifc \isa, neon_i8mm
-        bl              L(\type\()_hv_filter8_\isa)
-        srshr           v16.8h, v22.8h, #2
-        bl              L(\type\()_hv_filter8_\isa)
-        srshr           v17.8h, v22.8h, #2
-        bl              L(\type\()_hv_filter8_\isa)
-        srshr           v18.8h, v22.8h, #2
-        bl              L(\type\()_hv_filter8_\isa)
-        srshr           v19.8h, v22.8h, #2
-        bl              L(\type\()_hv_filter8_\isa)
-        srshr           v20.8h, v22.8h, #2
-.else
-        bl              L(\type\()_hv_filter8_\isa)
+        bl              L(\type\()_hv_filter8_neon_dotprod)
         sshr            v16.8h, v22.8h, #2
-        bl              L(\type\()_hv_filter8_\isa)
+        bl              L(\type\()_hv_filter8_neon_dotprod)
         sshr            v17.8h, v22.8h, #2
-        bl              L(\type\()_hv_filter8_\isa)
+        bl              L(\type\()_hv_filter8_neon_dotprod)
         sshr            v18.8h, v22.8h, #2
-        bl              L(\type\()_hv_filter8_\isa)
+        bl              L(\type\()_hv_filter8_neon_dotprod)
         sshr            v19.8h, v22.8h, #2
-        bl              L(\type\()_hv_filter8_\isa)
+        bl              L(\type\()_hv_filter8_neon_dotprod)
         sshr            v20.8h, v22.8h, #2
-.endif
+
         .align LOOP_ALIGN
 8:
         ldr             q23, [\lsrc]
@@ -1125,17 +1120,10 @@ L(\type\()_6tap_hv_\isa):
 
         smull           v0.4s, v16.4h, v7.h[1]
         smull2          v1.4s, v16.8h, v7.h[1]
-.ifc \isa, neon_dotprod
         sub             v23.16b, v23.16b, v24.16b
-.endif
         mov             v16.16b, v17.16b
-.ifc \isa, neon_i8mm
-        movi            v5.4s, #0
-        movi            v6.4s, #0
-.else
         mov             v5.16b, v27.16b
         mov             v6.16b, v27.16b
-.endif
         tbl             v2.16b, {v23.16b}, v28.16b
         tbl             v3.16b, {v23.16b}, v29.16b
 
@@ -1161,31 +1149,28 @@ L(\type\()_6tap_hv_\isa):
 
         smlal           v0.4s, v20.4h, v7.h[5]
         smlal2          v1.4s, v20.8h, v7.h[5]
-.ifc \isa, neon_i8mm
-        srshr           v20.8h, v23.8h, #2
-.else
         sshr            v20.8h, v23.8h, #2
-.endif
         subs            w8, w8, #1
         smlal           v0.4s, v20.4h, v7.h[6]
         smlal2          v1.4s, v20.8h, v7.h[6]
-.ifc \type, prep
+    .ifc \type, prep
         rshrn           v0.4h, v0.4s, #6
         rshrn2          v0.8h, v1.4s, #6
         st1             {v0.8h}, [\ldst], \d_strd
         b.gt            8b
         add             \dst, \dst, #16
-.else
+    .else
         tbl             v0.16b, {v0.16b, v1.16b}, v25.16b
         sqrshrun        v0.8b, v0.8h, #2
         st1             {v0.8b}, [\ldst], \d_strd
         b.gt            8b
         add             \dst, \dst, #8
-.endif
+    .endif
         add             \src, \src, #8
         subs            \w, \w, #8
         b.gt            81b
         ret             x15
+.endif  // neon_i8mm
 
         .align FUNC_ALIGN
 L(\type\()_hv_filter8_\isa):
@@ -1207,20 +1192,6 @@ L(\type\()_hv_filter8_\isa):
         \dot            v23.4s, v4.16b, v26.4b[1]
         uzp1            v22.8h, v22.8h, v23.8h
         ret
-
-.ifc \isa, neon_i8mm
-        .align FUNC_ALIGN
-L(\type\()_hv_filter6_neon_i8mm):
-        ld1             {v4.16b}, [\lsrc], \s_strd
-        movi            v22.4s, #0
-        movi            v23.4s, #0
-        tbl             v2.16b, {v4.16b}, v29.16b
-        tbl             v3.16b, {v4.16b}, v30.16b
-        usmmla          v22.4s, v2.16b, v26.16b
-        usmmla          v23.4s, v3.16b, v26.16b
-        uzp1            v22.8h, v22.8h, v23.8h
-        ret
-.endif
 
         .align FUNC_ALIGN
 L(\type\()_hv_filter4_\isa):
