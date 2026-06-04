@@ -1090,20 +1090,27 @@ L(\type\()_8tap_h_\isa):
         movi            v1.2d, #0
         movi            v2.2d, #0
         movi            v3.2d, #0
-.else
-        mov             v0.16b, v6.16b
-        mov             v1.16b, v6.16b
-        mov             v2.16b, v6.16b
-        mov             v3.16b, v6.16b
 .endif
         tbl             v16.16b, {v17.16b}, v30.16b
         tbl             v17.16b, {v17.16b}, v31.16b
+.ifc \type, put
+        movprfx         z0, z6
+.endif
         sdot            z0.d, z16.h, z4.h[0]
+.ifc \type, put
+        movprfx         z1, z6
+.endif
         sdot            z1.d, z17.h, z4.h[0]
         subs            \h, \h, #2
         tbl             v18.16b, {v19.16b}, v30.16b
         tbl             v19.16b, {v19.16b}, v31.16b
+.ifc \type, put
+        movprfx         z2, z6
+.endif
         sdot            z2.d, z18.h, z4.h[0]
+.ifc \type, put
+        movprfx         z3, z6
+.endif
         sdot            z3.d, z19.h, z4.h[0]
 
         uzp1            v0.4s, v0.4s, v1.4s
@@ -1141,14 +1148,17 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v0.2d, #0
         movi            v2.2d, #0
-.else
-        mov             v0.16b, v6.16b
-        mov             v2.16b, v6.16b
 .endif
         tbl             v16.16b, {v17.16b}, v30.16b
         tbl             v17.16b, {v17.16b}, v31.16b
         add             \src, \src, \s_strd
+.ifc \type, put
+        movprfx         z0, z6
+.endif
         sdot            z0.d, z16.h, z4.h[0]
+.ifc \type, put
+        movprfx         z2, z6
+.endif
         sdot            z2.d, z17.h, z4.h[0]
 
         tbl             v18.16b, {v19.16b}, v30.16b
@@ -1156,14 +1166,17 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v16.2d, #0
         movi            v17.2d, #0
-.else
-        mov             v16.16b, v6.16b
-        mov             v17.16b, v6.16b
 .endif
         ldp             q23, q27, [\src]
         ldur            q25, [\src, #8]
 
+.ifc \type, put
+        movprfx         z16, z6
+.endif
         sdot            z16.d, z18.h, z4.h[0]
+.ifc \type, put
+        movprfx         z17, z6
+.endif
         sdot            z17.d, z19.h, z4.h[0]
 
         tbl             v22.16b, {v23.16b}, v30.16b
@@ -1171,12 +1184,15 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v1.2d, #0
         movi            v3.2d, #0
-.else
-        mov             v1.16b, v6.16b
-        mov             v3.16b, v6.16b
 .endif
         add             \src, \src, \s_strd
+.ifc \type, put
+        movprfx         z1, z6
+.endif
         sdot            z1.d, z22.h, z4.h[0]
+.ifc \type, put
+        movprfx         z3, z6
+.endif
         sdot            z3.d, z23.h, z4.h[0]
 
         tbl             v24.16b, {v25.16b}, v30.16b
@@ -1184,11 +1200,14 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v22.2d, #0
         movi            v23.2d, #0
-.else
-        mov             v22.16b, v6.16b
-        mov             v23.16b, v6.16b
+.endif
+.ifc \type, put
+        movprfx         z22, z6
 .endif
         sdot            z22.d, z24.h, z4.h[0]
+.ifc \type, put
+        movprfx         z23, z6
+.endif
         sdot            z23.d, z25.h, z4.h[0]
 
         tbl             v20.16b, {v21.16b}, v30.16b
@@ -1248,13 +1267,16 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v0.2d, #0
         movi            v2.2d, #0
-.else
-        mov             v0.16b, v6.16b
-        mov             v2.16b, v6.16b
 .endif
         tbl             v16.16b, {v17.16b}, v30.16b
         tbl             v17.16b, {v17.16b}, v31.16b
+.ifc \type, put
+        movprfx         z0, z6
+.endif
         sdot            z0.d, z16.h, z4.h[0]
+.ifc \type, put
+        movprfx         z2, z6
+.endif
         sdot            z2.d, z17.h, z4.h[0]
 
         tbl             v18.16b, {v19.16b}, v30.16b
@@ -1262,14 +1284,17 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v16.2d, #0
         movi            v17.2d, #0
-.else
-        mov             v16.16b, v6.16b
-        mov             v17.16b, v6.16b
 .endif
         ldur            q25, [\src, #24]
         ldr             q27, [\src, #32]
 
+.ifc \type, put
+        movprfx         z16, z6
+.endif
         sdot            z16.d, z18.h, z4.h[0]
+.ifc \type, put
+        movprfx         z17, z6
+.endif
         sdot            z17.d, z19.h, z4.h[0]
 
         tbl             v22.16b, {v21.16b}, v30.16b
@@ -1277,12 +1302,15 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v1.2d, #0
         movi            v3.2d, #0
-.else
-        mov             v1.16b, v6.16b
-        mov             v3.16b, v6.16b
 .endif
         add             \src, \src, \s_strd
+.ifc \type, put
+        movprfx         z1, z6
+.endif
         sdot            z1.d, z22.h, z4.h[0]
+.ifc \type, put
+        movprfx         z3, z6
+.endif
         sdot            z3.d, z23.h, z4.h[0]
 
         tbl             v24.16b, {v25.16b}, v30.16b
@@ -1290,11 +1318,14 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v22.2d, #0
         movi            v23.2d, #0
-.else
-        mov             v22.16b, v6.16b
-        mov             v23.16b, v6.16b
+.endif
+.ifc \type, put
+        movprfx         z22, z6
 .endif
         sdot            z22.d, z24.h, z4.h[0]
+.ifc \type, put
+        movprfx         z23, z6
+.endif
         sdot            z23.d, z25.h, z4.h[0]
 
         tbl             v20.16b, {v21.16b}, v30.16b
@@ -1357,13 +1388,16 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v0.2d, #0
         movi            v2.2d, #0
-.else
-        mov             v0.16b, v6.16b
-        mov             v2.16b, v6.16b
 .endif
         tbl             v16.16b, {v17.16b}, v30.16b
         tbl             v17.16b, {v17.16b}, v31.16b
+.ifc \type, put
+        movprfx         z0, z6
+.endif
         sdot            z0.d, z16.h, z4.h[0]
+.ifc \type, put
+        movprfx         z2, z6
+.endif
         sdot            z2.d, z17.h, z4.h[0]
 
         tbl             v18.16b, {v19.16b}, v30.16b
@@ -1371,13 +1405,16 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v16.2d, #0
         movi            v17.2d, #0
-.else
-        mov             v16.16b, v6.16b
-        mov             v17.16b, v6.16b
 .endif
         ldur            q25, [\src, #24]
 
+.ifc \type, put
+        movprfx         z16, z6
+.endif
         sdot            z16.d, z18.h, z4.h[0]
+.ifc \type, put
+        movprfx         z17, z6
+.endif
         sdot            z17.d, z19.h, z4.h[0]
 
         ldr             q27, [\src, #32]!
@@ -1387,11 +1424,14 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v1.2d, #0
         movi            v3.2d, #0
-.else
-        mov             v1.16b, v6.16b
-        mov             v3.16b, v6.16b
+.endif
+.ifc \type, put
+        movprfx         z1, z6
 .endif
         sdot            z1.d, z22.h, z4.h[0]
+.ifc \type, put
+        movprfx         z3, z6
+.endif
         sdot            z3.d, z23.h, z4.h[0]
 
         tbl             v24.16b, {v25.16b}, v30.16b
@@ -1399,11 +1439,14 @@ L(\type\()_8tap_h_\isa):
 .ifc \type, prep
         movi            v22.2d, #0
         movi            v23.2d, #0
-.else
-        mov             v22.16b, v6.16b
-        mov             v23.16b, v6.16b
+.endif
+.ifc \type, put
+        movprfx         z22, z6
 .endif
         sdot            z22.d, z24.h, z4.h[0]
+.ifc \type, put
+        movprfx         z23, z6
+.endif
         sdot            z23.d, z25.h, z4.h[0]
 
         tbl             v20.16b, {v21.16b}, v30.16b
