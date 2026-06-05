@@ -1924,7 +1924,8 @@ static ALWAYS_INLINE int get_mask(const Dav2dContext *const c,
                                   const union mv mv[2],
                                   const int h_subpel_bits, const int v_subpel_bits,
                                   const int bw4, const int bh4,
-                                  const int iw, const int ih)
+                                  const int iw, const int ih,
+                                  const int deferred_sz)
 {
     const int x0 = (bx4 + x4) * 4 + (mv[0].x >> h_subpel_bits);
     const int y0 = (by4 + y4) * 4 + (mv[0].y >> v_subpel_bits);
@@ -1934,6 +1935,10 @@ static ALWAYS_INLINE int get_mask(const Dav2dContext *const c,
         x0 + bw4 * 4 >= iw || x1 + bw4 * 4 >= iw ||
         y0 + bh4 * 4 >= ih || y1 + bh4 * 4 >= ih)
     {
+        // deferred initialization
+#define DEFERRED_MASK_MARKER 0xff
+        if (deferred_sz && *mask == DEFERRED_MASK_MARKER)
+            memset(mask, 0x20, deferred_sz);
         c->bacp_dsp.mask(&mask[(y4 * stride + x4) * 4], stride,
                          bw4 * 4, bh4 * 4, x0, y0, x1, y1, iw, ih);
         return 1;
@@ -2070,7 +2075,7 @@ static int tip_pred(Dav2dTaskContext *const t,
     const int bacp = f->seq_hdr->imp_msk_bld && b->cwp_idx == 8 &&
         !f->svc[ref.ref[0]][0].scale && !f->svc[ref.ref[1]][0].scale;
     const int w = f->bw * 4, h = f->bh * 4;
-    if (bacp) memset(mask, 0x20, bw4 * bh4 * 16);
+    if (bacp) *mask = DEFERRED_MASK_MARKER;
     int have_bacp = 0;
 
     const Dav2dThreadPicture *const refp[2] = { &f->refp[ref.ref[0]], &f->refp[ref.ref[1]] };
@@ -2170,7 +2175,8 @@ static int tip_pred(Dav2dTaskContext *const t,
                                 ref, dmv, t_swap);
                 if (bacp)
                     have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x, t->by, y,
-                                          cmv, 4, 4, step, step, w, h);
+                                          cmv, 4, 4, step, step, w, h,
+                                          bw4 * bh4 * 16);
                 scaledown_16pel_mv_for_chroma(cmv, f->cur.p.p.layout);
             } else {
                 for (int i = 0; i < 2; i++)
@@ -2201,7 +2207,8 @@ static int tip_pred(Dav2dTaskContext *const t,
                 }
                 if (bacp)
                     have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x, t->by, y,
-                                          cmv, 3, 3, step, step, w, h);
+                                          cmv, 3, 3, step, step, w, h,
+                                          bw4 * bh4 * 16);
                 scaleup_8pel_mv_for_chroma(cmv, f->cur.p.p.layout);
             }
         }
@@ -2233,7 +2240,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
     // FIXME namespace bacp symbols
     uint8_t *const mask = t->scratch.seg_mask;
     const int bacp = f->seq_hdr->imp_msk_bld && b->cwp_idx == 8;
-    if (bacp) memset(mask, 0x20, bw4 * bh4 * 16);
+    if (bacp) *mask = DEFERRED_MASK_MARKER;
     int have_bacp = 0;
 
     // FIXME namespace opfl symbols
@@ -2305,7 +2312,8 @@ static int opfl_pred(Dav2dTaskContext *const t,
                                             t_stride, 1, 1, b->ref, dmv, t_swap);
                             if (bacp)
                                 have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x + bx,
-                                                      t->by, y + by, mv, 4, 4, 2, 2, w, h);
+                                                      t->by, y + by, mv, 4, 4, 2, 2,
+                                                      w, h, bw4 * bh4 * 16);
                             scaledown_16pel_mv_for_chroma(mv, f->cur.p.p.layout);
                         }
                     }
@@ -2328,7 +2336,8 @@ static int opfl_pred(Dav2dTaskContext *const t,
                     scaleup_8pel_mv_for_chroma(mv, f->cur.p.p.layout);
                     if (bacp)
                         have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x,
-                                              t->by, y, mv, 3, 3, sw4, sh4, w, h);
+                                              t->by, y, mv, 3, 3, sw4, sh4,
+                                              w, h, bw4 * bh4 * 16);
                 }
                 for (int n = 0; n < 2; n++)
                     left[n] += 16;
@@ -2384,7 +2393,8 @@ static int opfl_pred(Dav2dTaskContext *const t,
                     }
                     if (bacp)
                         have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, bx,
-                                              t->by, y + by, mv, 4, 4, bs, bs, w, h);
+                                              t->by, y + by, mv, 4, 4, bs, bs,
+                                              w, h, bw4 * bh4 * 16);
                     scaledown_16pel_mv_for_chroma(mv, f->cur.p.p.layout);
                 }
                 r_line += bw4 >> (bs == 2);
@@ -2426,7 +2436,7 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
 
     uint8_t *const mask = t->scratch.seg_mask;
     const int bacp = !plane && f->seq_hdr->imp_msk_bld && b->cwp_idx == 8;
-    if (bacp) memset(mask, 0x20, bw4 * bh4 * 16);
+    if (bacp) *mask = DEFERRED_MASK_MARKER;
     int have_bacp = 0;
 
     const int w = f->bw * 4 >> ss_hor, h = f->bh * 4 >> ss_hor;
@@ -2466,7 +2476,9 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
                                               t->cbx >> ss_hor, (x + bx) >> ss_hor,
                                               t->cby >> ss_ver, (y + by) >> ss_ver,
                                               rmv[0], 4, 4, ow4 >> ss_hor, oh4 >> ss_ver,
-                                              f->bw * 4 >> ss_hor, f->bh * 4 >> ss_ver);
+                                              f->bw * 4 >> ss_hor,
+                                              f->bh * 4 >> ss_ver,
+                                              bw4 * bh4 * 16 >> (ss_hor + ss_ver));
                 }
                 uvoffi += oh4 * 4 * stride >> ss_ver;
             }
@@ -3292,7 +3304,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     if (bacp == 2)
                         bacp = get_mask(f->c, t->scratch.seg_mask, bw4 * 4, t->bx, 0,
                                         t->by, 0, b->mv, 3, 3, bw4, bh4,
-                                        f->bw * 4, f->bh * 4);
+                                        f->bw * 4, f->bh * 4, 0);
                     if (bacp) {
                         dsp->mc.mask(dst, f->cur.p.stride[0], tmp[0], tmp[1],
                                      bw4 * 4, bh4 * 4, t->scratch.seg_mask
@@ -3776,7 +3788,7 @@ chroma: {}
                                         t->cbx >> ss_hor, 0, t->cby >> ss_ver, 0,
                                         b->mv, 3 + ss_hor, 3 + ss_ver,
                                         cbw4 >> ss_hor, cbh4 >> ss_ver,
-                                        f->bw * 4 >> ss_hor, f->bh * 4 >> ss_ver);
+                                        f->bw * 4 >> ss_hor, f->bh * 4 >> ss_ver, 0);
                     if (pl) bacp = bacpu;
                     if (bacp) {
                         dsp->mc.mask(((pixel *) f->cur.p.data[1 + pl]) + uvdstoff, stride,
