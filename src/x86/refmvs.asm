@@ -215,7 +215,6 @@ cglobal splat_comp_wedgemv, 5, 8, 3, sdst, ssrc, tdst, tstride, tsrc, bw4, bh4, 
     add             r7, r6
     mov           bh4d, bh4m
     lea       tstrideq, [tstrideq*3]
-    inc           bh4d
     shr           bh4d, 1
     jmp             r7
 
