@@ -38,6 +38,7 @@
 #include "common/frame.h"
 #include "common/intops.h"
 
+#include "src/bacp.h"
 #include "src/cdef_apply.h"
 #include "src/ctx.h"
 #include "src/ipred_prepare.h"
@@ -1916,23 +1917,8 @@ static void warp_affine(Dav2dTaskContext *const t,
     }
 }
 
-static void gen_mask(uint8_t *mask, const ptrdiff_t stride,
-                     const int bw, const int bh,
-                     const int x0, const int y0,
-                     const int x1, const int y1,
-                     const unsigned fw, const unsigned fh)
-{
-    for (int y = 0; y < bh; y++) {
-        for (int x = 0; x < bw; x++) {
-            int p0 = (unsigned) (x0 + x) < fw && (unsigned) (y0 + y) < fh;
-            int p1 = (unsigned) (x1 + x) < fw && (unsigned) (y1 + y) < fh;
-            mask[x] = 32 * (p0 - p1 + 1);
-        }
-        mask += stride;
-    }
-}
-
-static ALWAYS_INLINE int get_mask(uint8_t *const mask, const ptrdiff_t stride,
+static ALWAYS_INLINE int get_mask(const Dav2dContext *const c,
+                                  uint8_t *const mask, const ptrdiff_t stride,
                                   const int bx4, const int x4,
                                   const int by4, const int y4,
                                   const union mv mv[2],
@@ -1948,8 +1934,8 @@ static ALWAYS_INLINE int get_mask(uint8_t *const mask, const ptrdiff_t stride,
         x0 + bw4 * 4 >= iw || x1 + bw4 * 4 >= iw ||
         y0 + bh4 * 4 >= ih || y1 + bh4 * 4 >= ih)
     {
-        gen_mask(&mask[(y4 * stride + x4) * 4], stride,
-                 bw4 * 4, bh4 * 4, x0, y0, x1, y1, iw, ih);
+        c->bacp_dsp.mask(&mask[(y4 * stride + x4) * 4], stride,
+                         bw4 * 4, bh4 * 4, x0, y0, x1, y1, iw, ih);
         return 1;
     }
     return 0;
@@ -2183,7 +2169,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                 update_temporal(f, &t_dst[x >> 1], t_stride, step >> 1, step >> 1,
                                 ref, dmv, t_swap);
                 if (bacp)
-                    have_bacp |= get_mask(mask, bw4 * 4, t->bx, x, t->by, y,
+                    have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x, t->by, y,
                                           cmv, 4, 4, step, step, w, h);
                 scaledown_16pel_mv_for_chroma(cmv, f->cur.p.p.layout);
             } else {
@@ -2214,7 +2200,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                     }
                 }
                 if (bacp)
-                    have_bacp |= get_mask(mask, bw4 * 4, t->bx, x, t->by, y,
+                    have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x, t->by, y,
                                           cmv, 3, 3, step, step, w, h);
                 scaleup_8pel_mv_for_chroma(cmv, f->cur.p.p.layout);
             }
@@ -2318,7 +2304,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                             update_temporal(f, &t_dst[((x + bx) >> 1) + !!by * t_stride],
                                             t_stride, 1, 1, b->ref, dmv, t_swap);
                             if (bacp)
-                                have_bacp |= get_mask(mask, bw4 * 4, t->bx, x + bx,
+                                have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x + bx,
                                                       t->by, y + by, mv, 4, 4, 2, 2, w, h);
                             scaledown_16pel_mv_for_chroma(mv, f->cur.p.p.layout);
                         }
@@ -2341,7 +2327,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                                     b->ref, mv, t_swap);
                     scaleup_8pel_mv_for_chroma(mv, f->cur.p.p.layout);
                     if (bacp)
-                        have_bacp |= get_mask(mask, bw4 * 4, t->bx, x,
+                        have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x,
                                               t->by, y, mv, 3, 3, sw4, sh4, w, h);
                 }
                 for (int n = 0; n < 2; n++)
@@ -2397,7 +2383,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                         ddl++;
                     }
                     if (bacp)
-                        have_bacp |= get_mask(mask, bw4 * 4, t->bx, bx,
+                        have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, bx,
                                               t->by, y + by, mv, 4, 4, bs, bs, w, h);
                     scaledown_16pel_mv_for_chroma(mv, f->cur.p.p.layout);
                 }
@@ -2476,7 +2462,7 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
                                 1 + plane, rmv[0][i], &f->refp[ref.ref[i]], b->filter,
                                 left[i], right[i], top[i], bottom[i]);
                     if (bacp)
-                        have_bacp |= get_mask(mask, bw4 * 4 >> ss_hor,
+                        have_bacp |= get_mask(f->c, mask, bw4 * 4 >> ss_hor,
                                               t->cbx >> ss_hor, (x + bx) >> ss_hor,
                                               t->cby >> ss_ver, (y + by) >> ss_ver,
                                               rmv[0], 4, 4, ow4 >> ss_hor, oh4 >> ss_ver,
@@ -3304,7 +3290,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 const int wt = b->cwp_idx;
                 if (wt == 8) {
                     if (bacp == 2)
-                        bacp = get_mask(t->scratch.seg_mask, bw4 * 4, t->bx, 0,
+                        bacp = get_mask(f->c, t->scratch.seg_mask, bw4 * 4, t->bx, 0,
                                         t->by, 0, b->mv, 3, 3, bw4, bh4,
                                         f->bw * 4, f->bh * 4);
                     if (bacp) {
@@ -3786,7 +3772,7 @@ chroma: {}
                 const int wt = b->cwp_idx;
                 if (wt == 8) {
                     if (bacp == 2)
-                        bacp = get_mask(t->scratch.seg_mask, cbw4 * 4 >> ss_hor,
+                        bacp = get_mask(f->c, t->scratch.seg_mask, cbw4 * 4 >> ss_hor,
                                         t->cbx >> ss_hor, 0, t->cby >> ss_ver, 0,
                                         b->mv, 3 + ss_hor, 3 + ss_ver,
                                         cbw4 >> ss_hor, cbh4 >> ss_ver,

@@ -298,6 +298,7 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
     }
     dav2d_pal_dsp_init(&c->pal_dsp);
     dav2d_refmvs_dsp_init(&c->refmvs_dsp);
+    dav2d_bacp_dsp_init(&c->bacp_dsp);
 
     pthread_attr_destroy(&thread_attr);
 

@@ -28,6 +28,7 @@
 
 # libdav2d source files
 libdav2d_sources = files(
+    'bacp.c',
     'cdf.c',
     'cpu.c',
     'ctx.c',

@@ -39,6 +39,7 @@ typedef struct Dav2dTask Dav2dTask;
 
 #include "common/attributes.h"
 
+#include "src/bacp.h"
 #include "src/ccso.h"
 #include "src/cdef.h"
 #include "src/cdf.h"
@@ -199,6 +200,7 @@ struct Dav2dContext {
     Dav2dDSPContext dsp[3 /* 8, 10, 12 bits/component */];
     Dav2dPalDSPContext pal_dsp;
     Dav2dRefmvsDSPContext refmvs_dsp;
+    Dav2dBACPDSPContext bacp_dsp;
 
     Dav2dPicAllocator allocator;
     int apply_grain;
