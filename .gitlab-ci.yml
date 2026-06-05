@@ -102,68 +102,11 @@ build-debian:
         - avx2
         - amd64
     script:
-        - set -eo pipefail
-        - git clone -b research-v15.0.0 --depth 1 --shallow-submodules
-              https://gitlab.com/AOMediaCodec/avm.git avm
-        - |
-          cd avm
-          git config user.name "CI Bot"
-          git config user.email "ci-bot@example.com"
-          git am ../patches/*.patch
-        - |
-          sed -i 's|#define DEBUG_OBU_HDR 0|#define DEBUG_OBU_HDR 1|' avm/debug.h
-          sed -i 's|#define DEBUG_SEQ_HDR 0|#define DEBUG_SEQ_HDR 1|' avm/debug.h
-          sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' avm/debug.h
-          sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' avm/debug.h
-          sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' avm/debug.h
-          sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' av2/common/mvref_common.c
-          sed -i 's|#define DEBUG_CI_HDR 0|#define DEBUG_CI_HDR 1|' av2/decoder/obu_ci.c
-          sed -i 's|#define DEBUG_FGM_HDR 0|#define DEBUG_FGM_HDR 1|' av2/decoder/obu_fgm.c
-          sed -i 's|cm->current_frame.frame_number == 0|cm->current_frame.frame_number <= 4|' avm/debug.h
-          git diff
-        - |
-          mkdir x86-64
-          cd x86-64
-          cmake .. -DENABLE_TESTS=0 -DCONFIG_AV2_ENCODER=0
-          make -j$(nproc) avmdec
-          cd ../..
-        - |
-          sed -i 's|#define DEBUG_OBU_HDR 0|#define DEBUG_OBU_HDR 1|' src/obu.c
-          sed -i 's|#define DEBUG_SEQ_HDR 0|#define DEBUG_SEQ_HDR 1|' src/obu.c
-          sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' src/obu.c
-          sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' src/debug.h
-          sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' src/debug.h
-          sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' src/refmvs.c
-          sed -i 's|#define DEBUG_CI_HDR 0|#define DEBUG_CI_HDR 1|' src/obu.c
-          sed -i 's|#define DEBUG_FGM_HDR 0|#define DEBUG_FGM_HDR 1|' src/obu.c
-          sed -i 's|frame_offset == 0|frame_offset <= 4|' src/debug.h
-          git diff
-        - meson setup build --buildtype debugoptimized -Dtrim_dsp=false && ninja -C build
-        - meson test -v -C build
+        - meson setup build --buildtype release
+                            -Dtrim_dsp=false
+                            --werror
         - ninja -C build
-        - |
-          files=(
-              "./media/avm-v15.0.0-bus.64x64.l1.sdp0.obu"
-              "./media/avm-v15.0.0-bus.64x64.l1.sdp1.obu"
-              "./media/avm-v15.0.0-bus.64x64.l5.obu"
-              "./media/avm-v15.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
-              "./media/avm-v15.0.0-bus.64x64.l5.lossless.obu"
-              "./media/avm-v15.0.0-hm.64x64.l5.filmgrain.obu"
-          )
-          for file in "${files[@]}"; do
-              avm/x86-64/avmdec $file -o /dev/null > avm.log
-              build/tools/dav2d -i $file --muxer=null --threads=1 --quiet > dav2d.log
-              diff -uw {avm,dav2d}.log
-              wc -l avm.log
-          done
-        - |
-          git reset --hard
-        - |
-          meson configure build --werror
-          ninja -C build
-        - |
-          echo "[CI] Running AVM vs DAV2D MD5 regression test"
-          time meson test -C build
+        - meson test -v -C build
 
 build-debian-static:
     extends: .debian-amd64-common
@@ -485,6 +428,72 @@ test-debian:
             coverage_report:
                 coverage_format: cobertura
                 path: build/meson-logs/coverage.xml
+
+test-debian-avm:
+    extends:
+        - .debian-amd64-cmake-common
+        - .test-common
+    needs: ["build-debian"]
+    tags:
+        - docker
+        - avx2
+        - amd64
+    script:
+        - set -eo pipefail
+        - git clone -b research-v15.0.0 --depth 1 --shallow-submodules
+              https://gitlab.com/AOMediaCodec/avm.git avm
+        - |
+          cd avm
+          git config user.name "CI Bot"
+          git config user.email "ci-bot@example.com"
+          git am ../patches/*.patch
+        - |
+          sed -i 's|#define DEBUG_OBU_HDR 0|#define DEBUG_OBU_HDR 1|' avm/debug.h
+          sed -i 's|#define DEBUG_SEQ_HDR 0|#define DEBUG_SEQ_HDR 1|' avm/debug.h
+          sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' avm/debug.h
+          sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' avm/debug.h
+          sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' avm/debug.h
+          sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' av2/common/mvref_common.c
+          sed -i 's|#define DEBUG_CI_HDR 0|#define DEBUG_CI_HDR 1|' av2/decoder/obu_ci.c
+          sed -i 's|#define DEBUG_FGM_HDR 0|#define DEBUG_FGM_HDR 1|' av2/decoder/obu_fgm.c
+          sed -i 's|cm->current_frame.frame_number == 0|cm->current_frame.frame_number <= 4|' avm/debug.h
+          git diff
+        - |
+          mkdir x86-64
+          cd x86-64
+          cmake .. -DENABLE_TESTS=0 -DCONFIG_AV2_ENCODER=0
+          make -j$(nproc) avmdec
+          cd ../..
+        - |
+          sed -i 's|#define DEBUG_OBU_HDR 0|#define DEBUG_OBU_HDR 1|' src/obu.c
+          sed -i 's|#define DEBUG_SEQ_HDR 0|#define DEBUG_SEQ_HDR 1|' src/obu.c
+          sed -i 's|#define DEBUG_FRAME_HDR 0|#define DEBUG_FRAME_HDR 1|' src/obu.c
+          sed -i 's|#define DEBUG_BLOCK_INFO 0|#define DEBUG_BLOCK_INFO 1|' src/debug.h
+          sed -i 's|#define DEBUG_B_PIXELS 0|#define DEBUG_B_PIXELS 1|' src/debug.h
+          sed -i 's|#define DEBUG_REFMV 0|#define DEBUG_REFMV 1|' src/refmvs.c
+          sed -i 's|#define DEBUG_CI_HDR 0|#define DEBUG_CI_HDR 1|' src/obu.c
+          sed -i 's|#define DEBUG_FGM_HDR 0|#define DEBUG_FGM_HDR 1|' src/obu.c
+          sed -i 's|frame_offset == 0|frame_offset <= 4|' src/debug.h
+          git diff
+        - meson setup build --buildtype debugoptimized -Dtrim_dsp=false && ninja -C build
+        - meson test -v -C build
+        - ninja -C build
+        - |
+          files=(
+              "avm-v15.0.0-bus.64x64.l1.sdp0.obu"
+              "avm-v15.0.0-bus.64x64.l1.sdp1.obu"
+              "avm-v15.0.0-bus.64x64.l5.obu"
+              "avm-v15.0.0-bus.64x64.l5.opfl0-refinemv0.obu"
+              "avm-v15.0.0-bus.64x64.l5.lossless.obu"
+              "avm-v15.0.0-hm.64x64.l5.filmgrain.obu"
+          )
+          for f in "${files[@]}"; do
+              file="tests/dav2d-test-data/avm/$f"
+              avm/x86-64/avmdec $file -o /dev/null > avm.log
+              build/tools/dav2d -i $file --muxer=null --threads=1 --quiet > dav2d.log
+              diff -uw {avm,dav2d}.log
+              wc -l avm.log
+          done
 
 test-debian-avx512:
     extends:
