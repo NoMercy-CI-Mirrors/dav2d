@@ -36,6 +36,7 @@
 
 /* List of tests to invoke */
 static const CheckasmTest tests[] = {
+    { "bacp", checkasm_check_bacp },
     { "msac", checkasm_check_msac },
     { "pal", checkasm_check_pal },
     { "refmvs", checkasm_check_refmvs },
