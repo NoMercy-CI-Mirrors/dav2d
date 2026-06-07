@@ -407,7 +407,10 @@ static inline int check_tile(Dav2dTask *const t, Dav2dFrameContext *const f) {
         error = p2 == TILE_ERROR;
         error |= atomic_fetch_or(&f->task_thread.error, error);
     }
-    if (!error && f->c->n_fc > 1 && !IS_KEY_OR_INTRA(f->frame_hdr)) {
+    if (!error && f->c->n_fc > 1 && !IS_KEY_OR_INTRA(f->frame_hdr) &&
+        !(t->type == DAV2D_TASK_TYPE_TILE_ENTROPY && !f->entropyref_mask) &&
+        !(t->type == DAV2D_TASK_TYPE_TILE_MV_RESOLUTION && !f->rf.mfmv_mask))
+    {
         // check reference state
         const Dav2dThreadPicture *p = &f->cur;
         const int sb128 = f->frame_hdr->sb128, sb64sz = 1 << sb128;
@@ -416,12 +419,16 @@ static inline int check_tile(Dav2dTask *const t, Dav2dFrameContext *const f) {
         const int tile_sby = (t->by64 >> f->frame_hdr->sb128) -
                              (ts->tiling.row_start >> f->sb_shift);
         const int (*const lowest_px)[2] = ts->lowest_pixel[tile_sby];
-        for (int n = t->deps_skip; n < f->frame_hdr->n_ref_frames; n++, t->deps_skip++) {
+        for (int n = t->deps_skip; n < f->frame_hdr->n_ref_frames;
+             n++, t->deps_skip++)
+        {
             unsigned lowest;
             if (t->type != DAV2D_TASK_TYPE_TILE_RECONSTRUCTION) {
-                // if temporal mv refs are disabled, we only need this
-                // for the primary ref; if segmentation is disabled, we
-                // don't even need that
+                if (!((t->type == DAV2D_TASK_TYPE_TILE_ENTROPY ?
+                       f->entropyref_mask : f->rf.mfmv_mask) & (1 << n)))
+                {
+                    continue;
+                }
                 lowest = p_b;
             } else {
                 // +8 is postfilter-induced delay
@@ -430,11 +437,13 @@ static inline int check_tile(Dav2dTask *const t, Dav2dFrameContext *const f) {
                 const int uv = lowest_px[n][1] == INT_MIN ? INT_MIN :
                                lowest_px[n][1] * (1 << ss_ver) + 8;
                 int max = imax(y, uv);
-                if (f->rf.mfmv_mask & (1 << n)) max = imax(max, p_b);
+                if (n_passes == 2 && f->rf.mfmv_mask & (1 << n))
+                    max = imax(max, p_b);
                 if (max == INT_MIN) continue;
                 lowest = iclip(max, 1, f->refp[n].p.p.h);
             }
-            const unsigned p3 = atomic_load(&f->refp[n].progress[!!pass * 2]);
+            const int p_idx = pass * (1 + (n_passes == 2));
+            const unsigned p3 = atomic_load(&f->refp[n].progress[p_idx]);
             if (p3 < lowest) return 1;
             atomic_fetch_or(&f->task_thread.error, p3 == FRAME_ERROR);
         }
@@ -649,13 +658,16 @@ void *dav2d_worker_task(void *data) {
                         if (p2 < t->recon_progress) goto next;
                         atomic_fetch_or(&f->task_thread.error, p2 == TILE_ERROR);
                     }
+                    const int sb128 = f->frame_hdr->sb128;
+                    const int inc = p ? 1 << sb128 : 1;
                     if (t->type != DAV2D_TASK_TYPE_ENTROPY_PROGRESS && c->n_fc > 1) {
                         atomic_store(&f->cur.progress[1],
                                      atomic_load(&f->task_thread.error) ?
-                                         FRAME_ERROR : (unsigned) t->recon_progress);
+                                         FRAME_ERROR :
+                                     t->by64 + inc < f->sb64h ?
+                                         ((unsigned) t->recon_progress) << 6 :
+                                         UINT_MAX);
                     }
-                    const int sb128 = f->frame_hdr->sb128;
-                    const int inc = p ? 1 << sb128 : 1;
                     if (t->by64 + inc < f->sb64h) {
                         // add sby+1 to list to replace this one
                         Dav2dTask *next_t = &t[1];

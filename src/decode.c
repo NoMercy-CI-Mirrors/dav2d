@@ -5540,6 +5540,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     }
 
     // segmap
+    f->entropyref_mask = 0;
     if (f->frame_hdr->segmentation.enabled) {
         // By default, the previous segmentation map is not initialised.
         f->prev_segmap_ref = NULL;
@@ -5547,7 +5548,9 @@ int dav2d_submit_frame(Dav2dContext *const c) {
 
         // We might need a previous frame's segmentation map. This
         // happens if there is either no update or a temporal update.
-        if (f->frame_hdr->segmentation.temporal || !f->frame_hdr->segmentation.update_map) {
+        if (f->frame_hdr->segmentation.temporal ||
+            !f->frame_hdr->segmentation.update_map)
+        {
             const int pri_ref = f->frame_hdr->primary_ref_frame;
             assert(pri_ref != DAV2D_PRIMARY_REF_NONE);
             const int ref_w = ((ref_coded_width[pri_ref] + 7) >> 3) << 1;
@@ -5557,6 +5560,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
                 if (f->prev_segmap_ref) {
                     dav2d_ref_inc(f->prev_segmap_ref);
                     f->prev_segmap = f->prev_segmap_ref->data;
+                    f->entropyref_mask |= 1 << pri_ref;
                 }
             }
         }
@@ -5600,6 +5604,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         for (int p = 0; p < n_planes; p++) {
             if (!f->frame_hdr->ccso.p[p].sb_reuse) continue;
             const int ref = f->frame_hdr->ccso.p[p].refidx;
+            f->entropyref_mask |= 1 << ref;
             f->prev_ccsomap_ref[p] = c->refs[f->frame_hdr->refidx[ref]].ccsomap;
             dav2d_ref_inc(f->prev_ccsomap_ref[p]);
             f->prev_ccsomap[p] = f->prev_ccsomap_ref[p]->data;

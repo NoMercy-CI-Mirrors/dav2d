@@ -2241,7 +2241,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
             }
         }
         for (int n = 0; n < 7; n++)
-            if (ref_done[n][0] || ref_done[n][1])
+            if (rp_ref[n] && (ref_done[n][0] || ref_done[n][1]))
                 rf->mfmv_mask |= 1 << n;
 
         for (int n = 0; n < rf->n_mfmvs; n++) {

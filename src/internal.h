@@ -269,6 +269,7 @@ struct Dav2dFrameContext {
     int use_pri_sec_cdf;
     CdfThreadContext in_cdf, out_cdf, src_cdf[2];
     struct Dav2dTileGroup *tile;
+    unsigned entropyref_mask;
     int n_tile_data_alloc;
     int n_tile_data;
 
