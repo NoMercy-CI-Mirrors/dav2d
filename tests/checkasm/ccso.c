@@ -205,6 +205,93 @@ static void check_ccso_prep_clf(const ccso_prep_clf_fn fn, const int ss_hor,
 #undef bench_ccso_prep_clf_case
 }
 
+static void init_add_buffers(pixel *const c_dst, pixel *const a_dst,
+                             uint8_t *const idx, uint8_t *const offset_idxs,
+                             const int bitdepth_max)
+{
+    init_pixels(c_dst, 8 * 64, bitdepth_max);
+    memcpy(a_dst, c_dst, 8 * 64 * sizeof(*c_dst));
+
+    // Offset first table index range is 0-127 inclusive, indexing into
+    // four-bit entries in `offset_idxs_tbl`: top six bits select byte, low bit
+    // selects within the byte.
+    for (int i = 0; i < 8 * 64; ++i)
+        idx[i] = rnd() & 0x7f;
+
+    // Offset second table range is 0-7 inclusive, indexing into
+    // `offset_lut_tbl` (loaded from `dav2d_ccso_offset`), with each value
+    // packed into four bits.
+    for (int i = 0; i < 64; ++i) {
+        const unsigned lo = rnd() & 7;
+        const unsigned hi = rnd() & 7;
+        offset_idxs[i] = lo | (hi << 4);
+    }
+}
+
+static void init_ll_mask(uint16_t (*ll_mask)[4], int w, int h)
+{
+    const int blocks = (w + 3) / 4;
+    const uint16_t valid_mask = (1u << blocks) - 1;
+
+    // Only the 0th value in the inner array is used.
+    ll_mask[0][0] = rnd() & valid_mask;
+    ll_mask[1][0] = rnd() & valid_mask;
+}
+
+static void check_ccso_add(const ccso_add_fn fn, int ss_hor, int ss_ver,
+                           const char *name)
+{
+    const int h = 8 >> ss_ver;
+
+    ALIGN_STK_64(pixel, c_dst, 8 * 64,);
+    ALIGN_STK_64(pixel, a_dst, 8 * 64,);
+    ALIGN_STK_64(uint8_t, idx, 8 * 64,);
+    ALIGN_STK_64(uint8_t, offset_idxs, 64,);
+    ALIGN_STK_16(uint16_t, ll_mask, 2, [4]);
+
+    declare_func(void, pixel *dst, ptrdiff_t dst_stride, const uint8_t *idx,
+                 ptrdiff_t idx_stride, const uint8_t *offset_idxs,
+                 const int8_t *offset_lut, int w, int h,
+                 const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
+
+    const ptrdiff_t dst_stride = 64 * sizeof(pixel);
+    const ptrdiff_t idx_stride = 64;
+
+    if (!check_func(fn, "ccso_add_%s_%dbpc", name, BITDEPTH))
+        return;
+
+    for (int scale_idx = 0; scale_idx < 4; ++scale_idx) {
+        const int w = get_rnd_width(ss_hor, 0xf);
+        const int bitdepth_max = get_rnd_bitdepth_max();
+        init_add_buffers(c_dst, a_dst, idx, offset_idxs, bitdepth_max);
+        init_ll_mask(ll_mask, w, h);
+
+        call_ref(c_dst, dst_stride, idx, idx_stride, offset_idxs,
+                 dav2d_ccso_offset[scale_idx], w, h, ll_mask
+                 HIGHBD_TAIL_SUFFIX);
+        call_new(a_dst, dst_stride, idx, idx_stride, offset_idxs,
+                 dav2d_ccso_offset[scale_idx], w, h, ll_mask
+                 HIGHBD_TAIL_SUFFIX);
+        if (checkasm_check_pixel(c_dst, dst_stride, a_dst, dst_stride, w, h,
+                                 "dst"))
+        {
+            fprintf(stderr, "name=%s bpc=%d w=%d h=%d scale_idx=%d "
+                    "ll_mask=%04x,%04x\n",
+                    name, bitdepth_from_max(bitdepth_max), w, h, scale_idx,
+                    ll_mask[0][0], ll_mask[1][0]);
+            return;
+        }
+    }
+
+    const int w = 64 >> ss_hor;
+    const int bitdepth_max = get_rnd_bitdepth_max();
+    init_add_buffers(c_dst, a_dst, idx, offset_idxs, bitdepth_max);
+    memset(ll_mask, 0, sizeof(ll_mask));
+
+    bench_new(a_dst, dst_stride, idx, idx_stride, offset_idxs,
+              dav2d_ccso_offset[0], w, h, ll_mask HIGHBD_TAIL_SUFFIX);
+}
+
 void bitfn(checkasm_check_ccso)(void)
 {
     Dav2dCcsoDSPContext c;
@@ -219,4 +306,9 @@ void bitfn(checkasm_check_ccso)(void)
     check_ccso_prep_clf(c.prep_clf[1], 1, 0, "422");
     check_ccso_prep_clf(c.prep_clf[2], 1, 1, "420");
     report("ccso_prep_clf");
+
+    check_ccso_add(c.add, 0, 0, "444");
+    check_ccso_add(c.add, 1, 0, "422");
+    check_ccso_add(c.add, 1, 1, "420");
+    report("ccso_add");
 }
