@@ -45,6 +45,7 @@ void checkasm_check_bacp(void);
 void checkasm_check_msac(void);
 void checkasm_check_pal(void);
 void checkasm_check_refmvs(void);
+decl_check_bitfns(void checkasm_check_ccso);
 decl_check_bitfns(void checkasm_check_cdef);
 decl_check_bitfns(void checkasm_check_filmgrain);
 decl_check_bitfns(void checkasm_check_ipred);

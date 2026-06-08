@@ -41,6 +41,7 @@ static const CheckasmTest tests[] = {
     { "pal", checkasm_check_pal },
     { "refmvs", checkasm_check_refmvs },
 #if CONFIG_8BPC
+    { "ccso_8bpc", checkasm_check_ccso_8bpc },
     { "cdef_8bpc", checkasm_check_cdef_8bpc },
     { "deblock_8bpc", checkasm_check_deblock_8bpc },
     { "filmgrain_8bpc", checkasm_check_filmgrain_8bpc },
@@ -51,6 +52,7 @@ static const CheckasmTest tests[] = {
     { "stx_8bpc", checkasm_check_stx_8bpc },
 #endif
 #if CONFIG_16BPC
+    { "ccso_16bpc", checkasm_check_ccso_16bpc },
     { "cdef_16bpc", checkasm_check_cdef_16bpc },
     { "deblock_16bpc", checkasm_check_deblock_16bpc },
     { "filmgrain_16bpc", checkasm_check_filmgrain_16bpc },
