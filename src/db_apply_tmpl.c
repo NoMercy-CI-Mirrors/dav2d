@@ -390,6 +390,7 @@ static inline void filter_plane_rows_uv(const Dav2dFrameContext *const f,
 }
 
 static const uint8_t placeholder_segmap[16] = { 0 };
+static const uint16_t placeholder_ll_mask[17] = { 0 };
 
 void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
                                       pixel *const p[3], Av2Filter *const lflvl,
@@ -514,6 +515,7 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
         }
     }
 
+    const int any_ll = f->frame_hdr->any_lossless;
     if (f->frame_hdr->deblock.level_y[0]) {
         int l_qidx = -1; // left q_idx
         pixel lut[2][16];
@@ -521,7 +523,9 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
         pixel edge_side_thr[16 * 16];
         pixel left_q_thr[16] = { 0 };
         pixel left_side_thr[16] = { 0 };
-        uint16_t ll_mask[17] = { 0 };
+        uint16_t ll_mask_mem[17];
+        ll_mask_mem[0] = 0;
+        const uint16_t *const ll_mask = any_ll ? ll_mask_mem : placeholder_ll_mask;
         pixel *ptr;
         int tile_col = 1;
         int tile_end = f->frame_hdr->tiling.t.col_start_sb[tile_col] << sbl2;
@@ -547,9 +551,10 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
                                 &col_lflvl->filter_y[0][(x64 & 3) * 16], lut,
                                 left_q_thr, left_side_thr, y64 & 3, 0, 0,
                                 imin(f->bw - x64 * 16, 16), h4);
-            transpose_lossless_mask(ll_mask,
-                                    &col_lflvl->lossless_mask_y[starty4],
-                                    x64 & 3, 0, 0);
+            if (any_ll)
+                transpose_lossless_mask(ll_mask_mem,
+                                        &col_lflvl->lossless_mask_y[starty4],
+                                        x64 & 3, 0, 0);
             filter_plane_cols_y(f, have_left,
                                 &col_lflvl->filter_y[0][(x64 & 3) * 16], ll_mask,
                                 edge_q_thr, edge_side_thr, ptr, f->cur.p.stride[0],
@@ -570,7 +575,9 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
     pixel edge_side_thr[2][16 * 16];
     pixel left_q_thr[2][16] = { { 0 } };
     pixel left_side_thr[2][16] = { { 0 } };
-    uint16_t ll_mask[17] = { 0 };
+    uint16_t ll_mask_mem[17];
+    ll_mask_mem[0] = 0;
+    const uint16_t *const ll_mask = any_ll ? ll_mask_mem : placeholder_ll_mask;
     ptrdiff_t uv_off;
     int tile_col = 1;
     int tile_end = f->frame_hdr->tiling.t.col_start_sb[tile_col] << sbl2;
@@ -602,9 +609,10 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
                             &col_lflvl->filter_uv[0][(x64 & 3) * 16 >> ss_hor],
                             lut[1], left_q_thr[1], left_side_thr[1],
                             y64 & 3, ss_hor, ss_ver, uv_w4, uv_h4);
-        transpose_lossless_mask(ll_mask,
-                                &col_lflvl->lossless_mask_uv[starty4 >> ss_ver],
-                                x64 & 3, ss_hor, ss_ver);
+        if (any_ll)
+            transpose_lossless_mask(ll_mask_mem,
+                                    &col_lflvl->lossless_mask_uv[starty4 >> ss_ver],
+                                    x64 & 3, ss_hor, ss_ver);
         filter_plane_cols_uv(f, have_left,
                              &col_lflvl->filter_uv[0][(x64 & 3) * 16 >> ss_hor],
                              ll_mask,
@@ -638,6 +646,7 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
     const uint8_t *const segmap =
         f->cur_segmap ? &f->cur_segmap[y64 * 16 * seg_stride] : NULL;
 
+    const int any_ll = f->frame_hdr->any_lossless;
     if (f->frame_hdr->deblock.level_y[1]) {
         pixel *ptr;
         int l_qidx = -1, al_qidx = -1; // left and above left
@@ -646,13 +655,16 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
         pixel (*const a_lut_ptr)[16] = a_lflvl ? a_lut : NULL;
         pixel edge_q_thr[16 * 16];
         pixel edge_side_thr[16 * 16];
-        uint16_t ll_mask[17] = { 0 };
+        uint16_t ll_mask_mem[17];
+        ll_mask_mem[0] = 0;
+        const uint16_t *const ll_mask = any_ll ? ll_mask_mem : placeholder_ll_mask;
 
         for (ptr = p[0], x64 = 0; x64 < (f->bw + 15) >> 4; x64++, ptr += 64) {
             const Av2Filter *const col_lflvl = &lflvl[x64 >> 2];
 
-            for (int y = 0; y < h4; y++)
-                ll_mask[y + 1] = col_lflvl->lossless_mask_y[starty4 + y][x64 & 3];
+            if (any_ll)
+                for (int y = 0; y < h4; y++)
+                    ll_mask_mem[y + 1] = col_lflvl->lossless_mask_y[starty4 + y][x64 & 3];
 
             const int cur_qidx = col_lflvl->qidx[(x64 & 3) + y64idx];
             if (cur_qidx != l_qidx) {
@@ -661,7 +673,8 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
                 l_qidx = cur_qidx;
             }
             if (a_lut_ptr) {
-                ll_mask[0] = a_lflvl[x64 >> 2].lossless_mask_y[(starty4 + 63) & 63][x64 & 3];
+                if (any_ll)
+                    ll_mask_mem[0] = a_lflvl[x64 >> 2].lossless_mask_y[(starty4 + 63) & 63][x64 & 3];
 
                 const int a_qidx = a_lflvl[x64 >> 2].qidx[(x64 & 3) + a_y64idx];
                 if (a_qidx != al_qidx) {
@@ -697,12 +710,15 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
     pixel (*const a_lut_ptr)[2][16] = a_lflvl ? a_lut : NULL;
     pixel edge_q_thr[2][16 * 16];
     pixel edge_side_thr[2][16 * 16];
-    uint16_t ll_mask[17] = { 0 };
+    uint16_t ll_mask_mem[17];
+    ll_mask_mem[0] = 0;
+    const uint16_t *const ll_mask = any_ll ? ll_mask_mem : placeholder_ll_mask;
     ptrdiff_t uv_off;
     for (uv_off = 0, x64 = 0; x64 < (f->bw + 15) >> 4; x64++, uv_off += 64 >> ss_hor) {
         const Av2Filter *const col_lflvl = &lflvl[x64 >> 2];
-        for (int y = 0; y < uv_h4; y++)
-            ll_mask[y + 1] = col_lflvl->lossless_mask_uv[(starty4 >> ss_ver) + y][x64 & 3];
+        if (any_ll)
+            for (int y = 0; y < uv_h4; y++)
+                ll_mask_mem[y + 1] = col_lflvl->lossless_mask_uv[(starty4 >> ss_ver) + y][x64 & 3];
 
         const int cur_qidx = col_lflvl->qidx[(x64 & 3) + y64idx];
         if (cur_qidx != l_qidx) {
@@ -710,7 +726,8 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
             l_qidx = cur_qidx;
         }
         if (a_lut_ptr) {
-            ll_mask[0] = a_lflvl[x64 >> 2].lossless_mask_uv[((starty4 + 63) & 63) >> ss_ver][x64 & 3];
+            if (any_ll)
+                ll_mask_mem[0] = a_lflvl[x64 >> 2].lossless_mask_uv[((starty4 + 63) & 63) >> ss_ver][x64 & 3];
 
             const int a_qidx = a_lflvl[x64 >> 2].qidx[(x64 & 3) + a_y64idx];
             if (a_qidx != al_qidx) {
