@@ -708,6 +708,7 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
             dav2d_thread_picture_unref(&c->refs[n].p);
         dav2d_ref_dec(&c->refs[n].refmvs);
         dav2d_ref_dec(&c->refs[n].segmap);
+        dav2d_ref_dec(&c->refs[n].ccsomap);
     }
     dav2d_ref_dec(&c->seq_hdr_ref);
     dav2d_ref_dec(&c->frame_hdr_ref);

@@ -5660,6 +5660,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
                 if (f->mvs_ref)
                     dav2d_ref_inc(f->mvs_ref);
             }
+            dav2d_ref_dec(&c->refs[i].ccsomap);
             c->refs[i].ccsomap = f->cur_ccsomap_ref;
             if (f->cur_ccsomap_ref)
                 dav2d_ref_inc(f->cur_ccsomap_ref);
@@ -5676,6 +5677,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
                     dav2d_cdf_thread_unref(&c->cdf[i]);
                     dav2d_ref_dec(&c->refs[i].segmap);
                     dav2d_ref_dec(&c->refs[i].refmvs);
+                    dav2d_ref_dec(&c->refs[i].ccsomap);
                 }
             }
             goto error;
