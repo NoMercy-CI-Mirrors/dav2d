@@ -701,6 +701,7 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
     for (int n = 0; n < c->n_tile_data; n++)
         dav2d_data_unref_internal(&c->tile[n].data);
     dav2d_free(c->tile);
+    dav2d_free(c->dpb);
     for (int n = 0; n < 8; n++) {
         dav2d_cdf_thread_unref(&c->cdf[n]);
         if (c->refs[n].p.p.frame_hdr)
