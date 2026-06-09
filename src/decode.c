@@ -58,11 +58,12 @@ static ALWAYS_INLINE int clip_qidx(const int qidx, const int delta, const int qm
 
 static void init_quant_tables(const Dav2dSequenceHeader *const seq_hdr,
                               const Dav2dFrameHeader *const frame_hdr,
+                              const int n_seg,
                               const int qidx, uint32_t (*dq)[3][2])
 {
     const int qmax = 255 + 48 * seq_hdr->hbd;
     // and then ac == dc
-    for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
+    for (int i = 0; i < n_seg; i++) {
         const int yac = iclip(frame_hdr->segmentation.enabled ?
                               qidx + frame_hdr->segmentation.d.delta_q[i] :
                               qidx, 0, qmax);
@@ -522,14 +523,14 @@ static inline unsigned get_prev_frame_segid(const Dav2dFrameContext *const f,
 {
     assert(f->frame_hdr->primary_ref_frame != DAV2D_PRIMARY_REF_NONE);
 
-    unsigned seg_id = 8;
+    unsigned seg_id = f->n_seg;
     ref_seg_map += by * stride + bx;
     do {
         for (int x = 0; x < w4; x++)
             seg_id = imin(seg_id, ref_seg_map[x]);
         ref_seg_map += stride;
     } while (--h4 > 0 && seg_id);
-    assert(seg_id < 8);
+    assert(seg_id < (unsigned) f->n_seg);
 
     return seg_id;
 }
@@ -1942,7 +1943,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             ts->dq = f->dq;
         } else if (new_qidx != prev_qidx) {
             // find sb-specific quant parameters
-            init_quant_tables(f->seq_hdr, f->frame_hdr, new_qidx, ts->dqmem);
+            init_quant_tables(f->seq_hdr, f->frame_hdr, f->n_seg,
+                              new_qidx, ts->dqmem);
             ts->dq = ts->dqmem;
         }
 
@@ -4958,7 +4960,8 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     }
 
     // setup dequant tables
-    init_quant_tables(f->seq_hdr, f->frame_hdr, f->frame_hdr->quant.yac, f->dq);
+    init_quant_tables(f->seq_hdr, f->frame_hdr, f->n_seg,
+                      f->frame_hdr->quant.yac, f->dq);
     if (f->frame_hdr->quant.qm.enabled)
         for (int i = 0; i < N_RECT_TX_SIZES; i++) {
             f->qm[i][0] = dav2d_qm_tbl[f->frame_hdr->quant.qm.y[0]][0][i];
@@ -5467,6 +5470,8 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     f->sbh = (f->bh + f->sb_step - 1) >> f->sb_shift;
     f->b4_stride = (f->bw + 63) & ~63;
     f->bitdepth_max = (1 << f->cur.p.p.bpc) - 1;
+    f->n_seg = f->frame_hdr->segmentation.enabled ?
+               8 << f->seq_hdr->segmentation.ext : 1;
     atomic_init(&f->task_thread.error, 0);
     const int n_passes = c->task_thread.n_passes;
     const int cols = f->frame_hdr->tiling.t.cols;

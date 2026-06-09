@@ -300,7 +300,7 @@ struct Dav2dFrameContext {
     int prefilter_data_full_frame;
     ptrdiff_t b4_stride;
     int bw, bh, sb256w, sb256h, sbh, sb64h, sb_shift, sb_step;
-    int ss_ver, ss_hor;
+    int ss_ver, ss_hor, n_seg /* 1, 8 or 16 */;
     uint32_t dq[DAV2D_MAX_SEGMENTS][3 /* plane */][2 /* dc/ac */];
     const uint8_t *qm[N_RECT_TX_SIZES][3 /* plane */];
     BlockContext *a;

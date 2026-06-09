@@ -50,11 +50,12 @@ static unsigned deblock_side_thr(const int hbd, const int qidx) {
 }
 
 static void init_deblock_thr_lut_y(const Dav2dFrameHeader *const frame_hdr,
-                                   const int hbd, const int dir, const int qidx,
+                                   const int hbd, const int n_seg,
+                                   const int dir, const int qidx,
                                    pixel lut[2][16])
 {
     const int qmax = 255 + 48 * hbd;
-    for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
+    for (int i = 0; i < n_seg; i++) {
         const int yac = frame_hdr->segmentation.enabled ?
             iclip(qidx + frame_hdr->segmentation.d.delta_q[i], 0, qmax) : qidx;
         const int dir_yac = yac + 8 * frame_hdr->deblock.delta_q_y[dir];
@@ -64,11 +65,11 @@ static void init_deblock_thr_lut_y(const Dav2dFrameHeader *const frame_hdr,
 }
 
 static void init_deblock_thr_lut_uv(const Dav2dFrameHeader *const frame_hdr,
-                                    const int hbd, const int qidx,
-                                    pixel lut[2][2][16])
+                                    const int hbd, const int n_seg,
+                                    const int qidx, pixel lut[2][2][16])
 {
     const int qmax = 255 + 48 * hbd;
-    for (int i = 0; i < (frame_hdr->segmentation.enabled ? 8 : 1); i++) {
+    for (int i = 0; i < n_seg; i++) {
         const int yac = frame_hdr->segmentation.enabled ?
             iclip(qidx + frame_hdr->segmentation.d.delta_q[i], 0, qmax) : qidx;
         const int uac = yac + frame_hdr->quant.uac_delta +
@@ -535,7 +536,8 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
             const Av2Filter *const col_lflvl = &lflvl[x64 >> 2];
             const int cur_qidx = col_lflvl->qidx[(x64 & 3) + y64idx];
             if (cur_qidx != l_qidx) {
-                init_deblock_thr_lut_y(f->frame_hdr, hbd, 0, cur_qidx, lut);
+                init_deblock_thr_lut_y(f->frame_hdr, hbd, f->n_seg,
+                                       0, cur_qidx, lut);
                 l_qidx = cur_qidx;
             }
 
@@ -583,7 +585,7 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
         const Av2Filter *const col_lflvl = &lflvl[x64 >> 2];
         const int cur_qidx = col_lflvl->qidx[(x64 & 3) + y64idx];
         if (cur_qidx != prev_qidx) {
-            init_deblock_thr_lut_uv(f->frame_hdr, hbd, cur_qidx, lut);
+            init_deblock_thr_lut_uv(f->frame_hdr, hbd, f->n_seg, cur_qidx, lut);
             prev_qidx = cur_qidx;
         }
 
@@ -654,7 +656,8 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
 
             const int cur_qidx = col_lflvl->qidx[(x64 & 3) + y64idx];
             if (cur_qidx != l_qidx) {
-                init_deblock_thr_lut_y(f->frame_hdr, hbd, 1, cur_qidx, lut);
+                init_deblock_thr_lut_y(f->frame_hdr, hbd, f->n_seg,
+                                       1, cur_qidx, lut);
                 l_qidx = cur_qidx;
             }
             if (a_lut_ptr) {
@@ -662,7 +665,8 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
 
                 const int a_qidx = a_lflvl[x64 >> 2].qidx[(x64 & 3) + a_y64idx];
                 if (a_qidx != al_qidx) {
-                    init_deblock_thr_lut_y(f->frame_hdr, hbd, 1, a_qidx, a_lut_ptr);
+                    init_deblock_thr_lut_y(f->frame_hdr, hbd, f->n_seg,
+                                           1, a_qidx, a_lut_ptr);
                     al_qidx = a_qidx;
                 }
             }
@@ -702,7 +706,7 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
 
         const int cur_qidx = col_lflvl->qidx[(x64 & 3) + y64idx];
         if (cur_qidx != l_qidx) {
-            init_deblock_thr_lut_uv(f->frame_hdr, hbd, cur_qidx, lut);
+            init_deblock_thr_lut_uv(f->frame_hdr, hbd, f->n_seg, cur_qidx, lut);
             l_qidx = cur_qidx;
         }
         if (a_lut_ptr) {
@@ -710,7 +714,8 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
 
             const int a_qidx = a_lflvl[x64 >> 2].qidx[(x64 & 3) + a_y64idx];
             if (a_qidx != al_qidx) {
-                init_deblock_thr_lut_uv(f->frame_hdr, hbd, a_qidx, a_lut_ptr);
+                init_deblock_thr_lut_uv(f->frame_hdr, hbd, f->n_seg,
+                                        a_qidx, a_lut_ptr);
                 al_qidx = a_qidx;
             }
         }
