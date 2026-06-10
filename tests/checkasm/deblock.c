@@ -263,6 +263,161 @@ static void check_deblock_sb(deblock_sb_fn fn, const char *const name,
     report("%s", name);
 }
 
+static const char *const ss_names[] = { "444", "422", "420" };
+
+static void init_deblock_thr_lut(const int hbd, const int n_seg,
+                                 const int qidx, pixel lut[2][16])
+{
+    const int qmax = 255 + 48 * hbd;
+    for (int i = 0; i < n_seg; i++) {
+        const int yac = n_seg > 1 ?
+            iclip(qidx + (rnd() % 703 - 351), 0, qmax) : qidx;
+        lut[0][i] = deblock_quant_thr(hbd, yac);
+        lut[1][i] = deblock_side_thr(hbd, yac);
+    }
+}
+
+static void check_setup_thr_sb_seg(const setup_thr_sb_seg_fn fn, const int dir) {
+    ALIGN_STK_64(pixel, c_dst, 2, [16 * 16]);
+    ALIGN_STK_64(pixel, a_dst, 2, [16 * 16]);
+    ALIGN_STK_16(uint8_t, segmap, 17 * 16,);
+    ALIGN_STK_64(pixel, lut, 3, [2][16]);
+    uint16_t mask[16][5][4];
+
+    declare_func(void, pixel (*dst_thr)[16 * 16], const uint8_t *seg_map,
+                 ptrdiff_t seg_stride, const uint16_t (*mask)[5][4],
+                 const pixel (*lut)[16], pixel (*prev)[16], int w4, int h4);
+
+    for (int ss_idx = 0; ss_idx <= 2; ss_idx++) {
+        const int ss_hor = ss_idx > 0, ss_ver = ss_idx == 2;
+        if (check_func(fn, "setup_thr_sb_seg_%s_%s_%dbpc", dir ? "rows" : "cols",
+                       ss_names[ss_idx], BITDEPTH))
+        {
+            const int w4 = 1 + (rnd() & (15 >> ss_hor));
+            const int h4 = 1 + (rnd() & (15 >> ss_ver));
+            const int hbd = BITDEPTH == 8 ? 0 : 1 + (rnd() & 1);
+            const int qmax = 255 + 48 * hbd;
+
+            init_deblock_thr_lut(hbd, 16, 1 + (rnd() % (qmax - 1)), lut[0]);
+            init_deblock_thr_lut(hbd, 16, 1 + (rnd() % (qmax - 1)), lut[1]);
+            if (!dir) memcpy(lut[2], lut[1], 16 * 2 * sizeof(pixel));
+
+            for (int n = 0; n < (16 >> (dir ? ss_ver : ss_hor)); n++)
+                mask[n][4][0] = rnd() & (0xffff >> ((dir ? ss_hor : ss_ver) * 16));
+
+            for (int n = 0; n < 16 * (16 + dir); n++)
+                segmap[n] = rnd() & 15;
+
+            call_ref(c_dst, segmap + dir * 16, 16, mask, lut[0], lut[1], w4, h4);
+            call_new(a_dst, segmap + dir * 16, 16, mask, lut[0], lut[2 - dir],
+                     w4, h4);
+            checkasm_check_pixel(c_dst[0], 16 * sizeof(pixel),
+                                 a_dst[0], 16 * sizeof(pixel),
+                                 dir ? w4 : h4, dir ? h4 : w4, "q_thr");
+            checkasm_check_pixel(c_dst[1], 16 * sizeof(pixel),
+                                 a_dst[1], 16 * sizeof(pixel),
+                                 dir ? w4 : h4, dir ? h4 : w4, "side_thr");
+            if (!dir)
+                checkasm_check_pixel((pixel *) lut[1], 16 * sizeof(pixel),
+                                     (pixel *) lut[2], 16 * sizeof(pixel),
+                                     16, 2, "left_thr");
+            bench_new(alternate(c_dst, a_dst), segmap + dir * 16, 16, mask,
+                      lut[0], lut[1], 16 >> ss_hor, 16 >> ss_ver);
+        }
+    }
+
+    report("setup_thr_sb_seg_%s", dir ? "rows" : "cols");
+}
+
+static void check_setup_thr_sb_dq(const setup_thr_sb_dq_fn fn, const int dir) {
+    ALIGN_STK_64(pixel, c_dst, 2, [16 * 16]);
+    ALIGN_STK_64(pixel, a_dst, 2, [16 * 16]);
+    pixel lut[3][2][16];
+    uint16_t mask[16][5][4];
+
+    declare_func(void, pixel (*dst_thr)[16 * 16], const uint16_t (*mask)[5][4],
+                 const pixel (*lut)[16], pixel (*prev)[16], int w4, int h4);
+
+    for (int ss_idx = 0; ss_idx <= 2; ss_idx++) {
+        const int ss_hor = ss_idx > 0, ss_ver = ss_idx == 2;
+        if (check_func(fn, "setup_thr_sb_dq_%s_%s_%dbpc", dir ? "rows" : "cols",
+                       ss_names[ss_idx], BITDEPTH))
+        {
+            const int w4 = 1 + (rnd() & (15 >> ss_hor));
+            const int h4 = 1 + (rnd() & (15 >> ss_ver));
+            const int hbd = BITDEPTH == 8 ? 0 : 1 + (rnd() & 1);
+            const int qmax = 255 + 48 * hbd;
+
+            init_deblock_thr_lut(hbd, 1, 1 + (rnd() % (qmax - 1)), lut[0]);
+            init_deblock_thr_lut(hbd, 1, 1 + (rnd() % (qmax - 1)), lut[1]);
+            if (!dir) {
+                lut[2][0][0] = lut[1][0][0];
+                lut[2][1][0] = lut[1][1][0];
+            }
+
+            for (int n = 0; n < (16 >> (dir ? ss_ver : ss_hor)); n++)
+                mask[n][4][0] = rnd() & (0xffff >> ((dir ? ss_hor : ss_ver) * 16));
+
+            call_ref(c_dst, mask, lut[0], lut[1], w4, h4);
+            call_new(a_dst, mask, lut[0], lut[2 - dir], w4, h4);
+            checkasm_check_pixel(c_dst[0], 16 * sizeof(pixel),
+                                 a_dst[0], 16 * sizeof(pixel),
+                                 dir ? w4 : h4, dir ? h4 : w4, "q_thr");
+            checkasm_check_pixel(c_dst[1], 16 * sizeof(pixel),
+                                 a_dst[1], 16 * sizeof(pixel),
+                                 dir ? w4 : h4, dir ? h4 : w4, "side_thr");
+            if (!dir)
+                checkasm_check_pixel((pixel *) lut[1], 16 * sizeof(pixel),
+                                     (pixel *) lut[2], 16 * sizeof(pixel),
+                                     1, 2, "left_thr");
+            bench_new(alternate(c_dst, a_dst), mask, lut[0], lut[1],
+                      16 >> ss_hor, 16 >> ss_ver);
+        }
+    }
+
+    report("setup_thr_sb_dq_%s", dir ? "rows" : "cols");
+}
+
+static void check_setup_thr_sb_smp(const setup_thr_sb_simple_fn fn, const int dir) {
+    ALIGN_STK_64(pixel, c_dst, 2, [16 * 16]);
+    ALIGN_STK_64(pixel, a_dst, 2, [16 * 16]);
+    pixel lut[2][16];
+    uint16_t mask[16][5][4];
+
+    declare_func(void, pixel (*dst_thr)[16 * 16], const uint16_t (*mask)[5][4],
+                 const pixel (*lut)[16], int w4, int h4);
+
+    for (int ss_idx = 0; ss_idx <= 2; ss_idx++) {
+        const int ss_hor = ss_idx > 0, ss_ver = ss_idx == 2;
+        if (check_func(fn, "setup_thr_sb_simple_%s_%s_%dbpc", dir ? "rows" : "cols",
+                       ss_names[ss_idx], BITDEPTH))
+        {
+            const int w4 = 1 + (rnd() & (15 >> ss_hor));
+            const int h4 = 1 + (rnd() & (15 >> ss_ver));
+            const int hbd = BITDEPTH == 8 ? 0 : 1 + (rnd() & 1);
+            const int qmax = 255 + 48 * hbd;
+
+            init_deblock_thr_lut(hbd, 1, 1 + (rnd() % (qmax - 1)), lut);
+
+            for (int n = 0; n < (16 >> (dir ? ss_ver : ss_hor)); n++)
+                mask[n][4][0] = rnd() & (0xffff >> ((dir ? ss_hor : ss_ver) * 16));
+
+            call_ref(c_dst, mask, lut, w4, h4);
+            call_new(a_dst, mask, lut, w4, h4);
+            checkasm_check_pixel(c_dst[0], 16 * sizeof(pixel),
+                                 a_dst[0], 16 * sizeof(pixel),
+                                 dir ? w4 : h4, dir ? h4 : w4, "q_thr");
+            checkasm_check_pixel(c_dst[1], 16 * sizeof(pixel),
+                                 a_dst[1], 16 * sizeof(pixel),
+                                 dir ? w4 : h4, dir ? h4 : w4, "side_thr");
+            bench_new(alternate(c_dst, a_dst), mask, lut,
+                      16 >> ss_hor, 16 >> ss_ver);
+        }
+    }
+
+    report("setup_thr_sb_simple_%s", dir ? "rows" : "cols");
+}
+
 void bitfn(checkasm_check_deblock)(void) {
     Dav2dDeblockDSPContext c;
 
@@ -272,4 +427,10 @@ void bitfn(checkasm_check_deblock)(void) {
     check_deblock_sb(c.deblock_sb[0][1], "deblock_v_sb_y", 16, 0, 1);
     check_deblock_sb(c.deblock_sb[1][0], "deblock_h_sb_uv", 8, 1, 0);
     check_deblock_sb(c.deblock_sb[1][1], "deblock_v_sb_uv", 8, 1, 1);
+
+    for (int dir = 0; dir <= 1; dir++) {
+        check_setup_thr_sb_seg(c.setup_thr_sb_seg[dir], dir);
+        check_setup_thr_sb_dq(c.setup_thr_sb_dq[dir], dir);
+        check_setup_thr_sb_smp(c.setup_thr_sb_simple[dir], dir);
+    }
 }
