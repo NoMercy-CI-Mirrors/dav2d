@@ -158,20 +158,31 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
                     if (!lflvl[sb256x].ccso[pl]) continue;
 
                     const Dav2dFrameHeader *const hdr = f->frame_hdr;
+                    const int pl_uv = !!pl;
                     const unsigned max_band = hdr->ccso.p[pl].max_band_log2;
+                    const int w = imin(16, f->bw - sb64x * 16) * 4;
+                    assert(w >= 0);
+
+                    if (hdr->ccso.p[pl].bo_only) {
+                        dsp->ccso.prep_bo[pl_uv * uv_idx](ccso_lut_idx[pl],
+                                                          64 >> (pl_uv * ss_hor),
+                                                          iptrs[0], f->cur.p.stride[0],
+                                                          max_band,
+                                                          w >> (pl_uv * ss_hor),
+                                                          8 >> (pl_uv * ss_ver)
+                                                          HIGHBD_CALL_SUFFIX);
+                        continue;
+                    }
+
                     const unsigned ext_filter = hdr->ccso.p[pl].ext_filter_support;
                     const unsigned scale_idx = hdr->ccso.p[pl].scale_idx;
                     const unsigned quant =
                         dav2d_ccso_quant_sz[scale_idx][hdr->ccso.p[pl].quant_idx];
                     const int edge_clf = hdr->ccso.p[pl].edge_clf;
-                    const int bo_only = hdr->ccso.p[pl].bo_only;
-
                     const pixel *top, *bot;
                     ptrdiff_t offset;
                     enum CdefEdgeFlags sb_edges = edges;
                     if ((sb64x + 1) * 16 >= f->bw) sb_edges &= ~CDEF_HAVE_RIGHT;
-                    const int w = imin(16, f->bw - sb64x * 16) * 4;
-                    assert(w >= 0);
 
                     if (slice_top) {
                         assert(edges & CDEF_HAVE_TOP);
@@ -189,13 +200,14 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
                         bot = &iptrs[0][8 * y_stride];
                     }
 
-                    dsp->ccso.prep[!!pl * uv_idx](ccso_lut_idx[pl], 64 >> (!!pl * ss_hor),
-                                                  iptrs[0], f->cur.p.stride[0],
-                                                  lr_bak[bit][0], top, bot,
-                                                  max_band, ext_filter, quant,
-                                                  edge_clf, bo_only,
-                                                  w >> (!!pl * ss_hor), 8 >> (!!pl * ss_ver),
-                                                  sb_edges HIGHBD_CALL_SUFFIX);
+                    dsp->ccso.prep_clf[pl_uv * uv_idx](ccso_lut_idx[pl],
+                                                       64 >> (pl_uv * ss_hor),
+                                                       iptrs[0], f->cur.p.stride[0],
+                                                       lr_bak[bit][0], top, bot,
+                                                       max_band, ext_filter, quant,
+                                                       edge_clf, w >> (pl_uv * ss_hor),
+                                                       8 >> (pl_uv * ss_ver), sb_edges
+                                                       HIGHBD_CALL_SUFFIX);
                 }
             }
 

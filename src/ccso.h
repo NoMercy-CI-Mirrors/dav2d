@@ -32,13 +32,18 @@
 
 #include "src/cdef.h"
 
-#define decl_ccso_prep_fn(name) \
+#define decl_ccso_prep_bo_fn(name) \
+void (name)(uint8_t *dst, ptrdiff_t dst_stride, const pixel *src, ptrdiff_t src_stride, \
+            unsigned max_band_log2, int w, int h HIGHBD_DECL_SUFFIX)
+typedef decl_ccso_prep_bo_fn(*ccso_prep_bo_fn);
+
+#define decl_ccso_prep_clf_fn(name) \
 void (name)(uint8_t *dst, ptrdiff_t dst_stride, const pixel *src, ptrdiff_t src_stride, \
             const_left_pixel_row_2px left, const pixel *top, const pixel *bottom, \
             unsigned max_band_log2, unsigned ext_filter, unsigned quant_step, \
-            int edge_cfl, int bo_only, int w, int h, enum CdefEdgeFlags edges \
+            int edge_clf, int w, int h, enum CdefEdgeFlags edges \
             HIGHBD_DECL_SUFFIX)
-typedef decl_ccso_prep_fn(*ccso_prep_fn);
+typedef decl_ccso_prep_clf_fn(*ccso_prep_clf_fn);
 
 #define decl_ccso_add_fn(name) \
 void (name)(pixel *dst, const ptrdiff_t dst_stride, const uint8_t *idx, \
@@ -48,7 +53,8 @@ void (name)(pixel *dst, const ptrdiff_t dst_stride, const uint8_t *idx, \
 typedef decl_ccso_add_fn(*ccso_add_fn);
 
 typedef struct Dav2dCcsoDSPContext {
-    ccso_prep_fn prep[3 /* 444/luma, 422, 420 */];
+    ccso_prep_bo_fn prep_bo[3 /* 444/luma, 422, 420 */];
+    ccso_prep_clf_fn prep_clf[3 /* 444/luma, 422, 420 */];
     ccso_add_fn add;
 } Dav2dCcsoDSPContext;
 
