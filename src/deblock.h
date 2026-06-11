@@ -43,6 +43,9 @@ void (name)(pixel *dst, ptrdiff_t stride, const uint16_t *mask, \
 typedef decl_deblock_sb_fn(*deblock_sb_fn);
 
 /*
+ * For all 3 variants, w4 and h4 should be swapped in calls for the
+ * rows variant.
+ *
  * For _seg and _dq, the "prev" arugment should be considered "const"
  * for the rows variant. For the cols variant, it'll be filled with
  * the right-most values in the current block to serve as left edge
@@ -56,7 +59,7 @@ typedef decl_setup_thr_sb_seg_fn(*setup_thr_sb_seg_fn);
 
 #define decl_setup_thr_sb_dq_fn(name) \
 void (name)(pixel (*dst_thr)[16 * 16], const uint16_t (*mask)[5][4], \
-            const pixel (*lut)[16], pixel (*prev)[16], int w4, int h4)
+            const pixel (*lut)[16], int w4, int h4, pixel (*prev)[16])
 typedef decl_setup_thr_sb_dq_fn(*setup_thr_sb_dq_fn);
 
 #define decl_setup_thr_sb_simple_fn(name) \
@@ -78,7 +81,7 @@ typedef struct Dav2dDeblockDSPContext {
      */
     setup_thr_sb_seg_fn setup_thr_sb_seg[2];
     setup_thr_sb_dq_fn setup_thr_sb_dq[2];
-    setup_thr_sb_simple_fn setup_thr_sb_simple[2];
+    setup_thr_sb_simple_fn setup_thr_sb_simple;
 } Dav2dDeblockDSPContext;
 
 bitfn_decls(void dav2d_deblock_dsp_init, Dav2dDeblockDSPContext *c);

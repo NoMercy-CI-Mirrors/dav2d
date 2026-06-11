@@ -416,7 +416,7 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
     if (f->frame_hdr->deblock.level_y[0]) {
         int l_qidx = -1; // left q_idx
         pixel lut[2][16];
-        pixel edge_thr[2][16 * 16];
+        ALIGN_STK_64(pixel, edge_thr, 2, [16 * 16]);
         pixel left_thr[2][16] = {{ 0 }};
         uint16_t ll_mask_mem[17];
         ll_mask_mem[0] = 0;
@@ -449,10 +449,10 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
                                             seg_stride, masks, lut,
                                             left_thr, w4, h4);
             } else if (cur_qidx != l_qidx) {
-                dsp->lf.setup_thr_sb_dq[0](edge_thr, masks, lut, left_thr,
-                                           w4, h4);
+                dsp->lf.setup_thr_sb_dq[0](edge_thr, masks, lut,
+                                           w4, h4, left_thr);
             } else {
-                dsp->lf.setup_thr_sb_simple[0](edge_thr, masks, lut, w4, h4);
+                dsp->lf.setup_thr_sb_simple(edge_thr, masks, lut, w4, h4);
             }
             l_qidx = cur_qidx;
             if (any_ll)
@@ -473,7 +473,7 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
     const ptrdiff_t uv_seg_stride = f->lf.segmap_uv ? f->lf.uv_segmap_stride : 0;
     const uint8_t *const uv_segmap =
         f->lf.segmap_uv ? &f->lf.segmap_uv[y64 * (16 >> ss_ver) * uv_seg_stride] : NULL;
-    pixel edge_thr[2][2][16 * 16];
+    ALIGN_STK_64(pixel, edge_thr, 2, [2][16 * 16]);
     pixel left_thr[2][2][16] = {{{ 0 }}};
     uint16_t ll_mask_mem[17];
     ll_mask_mem[0] = 0;
@@ -509,13 +509,12 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
                                             uv_w4, uv_h4);
         } else if (prev_qidx != cur_qidx) {
             for (int pl = 0; pl < 2; pl++)
-                dsp->lf.setup_thr_sb_dq[0](edge_thr[pl], masks,
-                                           lut[pl], left_thr[pl],
-                                           uv_w4, uv_h4);
+                dsp->lf.setup_thr_sb_dq[0](edge_thr[pl], masks, lut[pl],
+                                           uv_w4, uv_h4, left_thr[pl]);
         } else {
             for (int pl = 0; pl < 2; pl++)
-                dsp->lf.setup_thr_sb_simple[0](edge_thr[pl], masks,
-                                               lut[pl], uv_w4, uv_h4);
+                dsp->lf.setup_thr_sb_simple(edge_thr[pl], masks,
+                                            lut[pl], uv_w4, uv_h4);
         }
         prev_qidx = cur_qidx;
         if (any_ll)
@@ -559,7 +558,7 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
         pixel lut[2][16];
         pixel a_lut[2][16];
         pixel (*const a_lut_ptr)[16] = a_lflvl ? a_lut : NULL;
-        pixel edge_thr[2][16 * 16];
+        ALIGN_STK_64(pixel, edge_thr, 2, [16 * 16]);
         uint16_t ll_mask_mem[17];
         ll_mask_mem[0] = 0;
         const uint16_t *const ll_mask = any_ll ? ll_mask_mem : placeholder_ll_mask;
@@ -597,12 +596,12 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
                 assert(segmap);
                 dsp->lf.setup_thr_sb_seg[1](edge_thr, &segmap[x64 * 16],
                                             seg_stride, masks, lut,
-                                            a_lut_ptr, w4, h4);
+                                            a_lut_ptr, h4, w4);
             } else if (a_lflvl && a_qidx != cur_qidx) {
                 dsp->lf.setup_thr_sb_dq[1](edge_thr, masks, lut,
-                                           a_lut_ptr, w4, h4);
+                                           h4, w4, a_lut_ptr);
             } else {
-                dsp->lf.setup_thr_sb_simple[1](edge_thr, masks, lut, w4, h4);
+                dsp->lf.setup_thr_sb_simple(edge_thr, masks, lut, h4, w4);
             }
             filter_plane_rows_y(f, have_top, masks, ll_mask, edge_thr,
                                 ptr, f->cur.p.stride[0], w4, h4);
@@ -619,7 +618,7 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
     pixel lut[2][2][16];
     pixel a_lut[2][2][16];
     pixel (*const a_lut_ptr)[2][16] = a_lflvl ? a_lut : NULL;
-    pixel edge_thr[2][2][16 * 16];
+    ALIGN_STK_64(pixel, edge_thr, 2, [2][16 * 16]);
     uint16_t ll_mask_mem[17];
     ll_mask_mem[0] = 0;
     const uint16_t *const ll_mask = any_ll ? ll_mask_mem : placeholder_ll_mask;
@@ -659,16 +658,15 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
                                             uv_seg_stride, masks,
                                             lut[pl], a_lut_ptr ?
                                                 a_lut_ptr[pl] : NULL,
-                                            uv_w4, uv_h4);
+                                            uv_h4, uv_w4);
         } else if (a_lut_ptr && a_qidx != cur_qidx) {
             for (int pl = 0; pl < 2; pl++)
-                dsp->lf.setup_thr_sb_dq[1](edge_thr[pl], masks,
-                                           lut[pl], a_lut_ptr[pl],
-                                           uv_w4, uv_h4);
+                dsp->lf.setup_thr_sb_dq[1](edge_thr[pl], masks, lut[pl],
+                                           uv_h4, uv_w4, a_lut_ptr[pl]);
         } else {
             for (int pl = 0; pl < 2; pl++)
-                dsp->lf.setup_thr_sb_simple[1](edge_thr[pl], masks,
-                                               lut[pl], uv_w4, uv_h4);
+                dsp->lf.setup_thr_sb_simple(edge_thr[pl], masks,
+                                            lut[pl], uv_h4, uv_w4);
         }
         filter_plane_rows_uv(f, have_top, masks, ll_mask, edge_thr,
                              &p[1][uv_off], &p[2][uv_off], f->cur.p.stride[1],

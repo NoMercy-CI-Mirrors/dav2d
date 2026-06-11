@@ -284,69 +284,13 @@ static void setup_thr_cols_sb64_seg_c(pixel (*thr_dst)[16 * 16],
     }
 }
 
-static void setup_thr_cols_sb64_dq_c(pixel (*thr_dst)[16 * 16],
-                                     const uint16_t (*const mask)[5][4],
-                                     const pixel thr_lut[2][16],
-                                     pixel (*left_thr)[16],
-                                     const int w4, const int h4)
-{
-    assert(w4 <= 16 && h4 <= 16);
-    const ptrdiff_t dst_stride = 16;
-    const int prev_q_thr = left_thr[0][0];
-    const int prev_side_thr = left_thr[1][0];
-    const int cur_q_thr = thr_lut[0][0];
-    const int cur_side_thr = thr_lut[1][0];
-
-    const int l_edge_q_thr = cur_q_thr && prev_q_thr ?
-        (cur_q_thr + prev_q_thr + 1) >> 1 : cur_q_thr | prev_q_thr;
-    const int l_edge_side_thr = cur_side_thr && prev_side_thr ?
-        (cur_side_thr + prev_side_thr + 1) >> 1 : cur_side_thr | prev_side_thr;
-
-    for (int y4 = 0; y4 < h4; y4++) {
-        const int subpu = 3 * ((mask[0][4][0] >> y4) & 1);
-
-        // store transposed
-        thr_dst[0][y4] = l_edge_q_thr >> subpu;
-        thr_dst[1][y4] = l_edge_side_thr >> subpu;
-
-        for (int x4 = 1; x4 < w4; x4++) {
-            const int subpu = 3 * ((mask[x4][4][0] >> y4) & 1);
-
-            // store transposed
-            thr_dst[0][x4 * dst_stride + y4] = cur_q_thr >> subpu;
-            thr_dst[1][x4 * dst_stride + y4] = cur_side_thr >> subpu;
-        }
-    }
-
-    left_thr[0][0] = cur_q_thr;
-    left_thr[1][0] = cur_side_thr;
-}
-
-static void setup_thr_cols_sb64_simple_c(pixel (*thr_dst)[16 * 16],
-                                         const uint16_t (*const mask)[5][4],
-                                         const pixel thr_lut[2][16],
-                                         const int w4, const int h4)
-{
-    assert(w4 <= 16 && h4 <= 16);
-    const ptrdiff_t dst_stride = 16;
-    const int edge_q_thr = thr_lut[0][0];
-    const int edge_side_thr = thr_lut[1][0];
-    for (int y4 = 0; y4 < h4; y4++) {
-        for (int x4 = 0; x4 < w4; x4++) {
-            const int subpu = 3 * ((mask[x4][4][0] >> y4) & 1);
-            thr_dst[0][x4 * dst_stride + y4] = edge_q_thr >> subpu;
-            thr_dst[1][x4 * dst_stride + y4] = edge_side_thr >> subpu;
-        }
-    }
-}
-
 static void setup_thr_rows_sb64_seg_c(pixel (*thr_dst)[16 * 16],
                                       const uint8_t *const segmap,
                                       const ptrdiff_t seg_stride,
                                       const uint16_t (*const mask)[5][4],
                                       const pixel thr_lut[2][16],
                                       /*const*/ pixel above_thr_lut[2][16],
-                                      const int w4, const int h4)
+                                      const int h4, const int w4)
 {
     assert(w4 <= 16 && h4 <= 16);
     const ptrdiff_t dst_stride = 16;
@@ -388,8 +332,8 @@ static void setup_thr_rows_sb64_seg_c(pixel (*thr_dst)[16 * 16],
 static void setup_thr_rows_sb64_dq_c(pixel (*thr_dst)[16 * 16],
                                      const uint16_t (*const mask)[5][4],
                                      const pixel thr_lut[2][16],
-                                     /*const*/ pixel above_thr_lut[2][16],
-                                     const int w4, const int h4)
+                                     const int h4, const int w4,
+                                     /*const*/ pixel above_thr_lut[2][16])
 {
     assert(w4 <= 16 && h4 <= 16);
     const ptrdiff_t dst_stride = 16;
@@ -419,20 +363,31 @@ static void setup_thr_rows_sb64_dq_c(pixel (*thr_dst)[16 * 16],
     }
 }
 
-static void setup_thr_rows_sb64_simple_c(pixel (*thr_dst)[16 * 16],
-                                         const uint16_t (*const mask)[5][4],
-                                         const pixel thr_lut[2][16],
-                                         const int w4, const int h4)
+static void setup_thr_cols_sb64_dq_c(pixel (*thr_dst)[16 * 16],
+                                     const uint16_t (*const mask)[5][4],
+                                     const pixel thr_lut[2][16],
+                                     const int w4, const int h4,
+                                     pixel (*left_thr)[16])
+{
+    setup_thr_rows_sb64_dq_c(thr_dst, mask, thr_lut, w4, h4, left_thr);
+    left_thr[0][0] = thr_lut[0][0];
+    left_thr[1][0] = thr_lut[1][0];
+}
+
+static void setup_thr_sb64_simple_c(pixel (*thr_dst)[16 * 16],
+                                    const uint16_t (*const mask)[5][4],
+                                    const pixel thr_lut[2][16],
+                                    const int w4, const int h4)
 {
     assert(w4 <= 16 && h4 <= 16);
     const ptrdiff_t dst_stride = 16;
     const int edge_q_thr = thr_lut[0][0];
     const int edge_side_thr = thr_lut[1][0];
-    for (int x4 = 0; x4 < w4; x4++) {
-        for (int y4 = 0; y4 < h4; y4++) {
-            const int subpu = 3 * ((mask[y4][4][0] >> x4) & 1);
-            thr_dst[0][x4 + y4 * dst_stride] = edge_q_thr >> subpu;
-            thr_dst[1][x4 + y4 * dst_stride] = edge_side_thr >> subpu;
+    for (int y4 = 0; y4 < h4; y4++) {
+        for (int x4 = 0; x4 < w4; x4++) {
+            const int subpu = 3 * ((mask[x4][4][0] >> y4) & 1);
+            thr_dst[0][x4 * dst_stride + y4] = edge_q_thr >> subpu;
+            thr_dst[1][x4 * dst_stride + y4] = edge_side_thr >> subpu;
         }
     }
 }
@@ -449,15 +404,11 @@ COLD void bitfn(dav2d_deblock_dsp_init)(Dav2dDeblockDSPContext *const c) {
     c->deblock_sb[1][0] = deblock_h_sb64uv_c;
     c->deblock_sb[1][1] = deblock_v_sb64uv_c;
 
-#define init_setup_fn(idx, dir, type) \
-    c->setup_thr_sb_##type[idx] = setup_thr_##dir##_sb64_##type##_c
-#define init_setup_dir_fns(idx, dir) \
-    init_setup_fn(idx, dir, seg); \
-    init_setup_fn(idx, dir, dq); \
-    init_setup_fn(idx, dir, simple)
-
-    init_setup_dir_fns(0, cols);
-    init_setup_dir_fns(1, rows);
+    c->setup_thr_sb_seg[0] = setup_thr_cols_sb64_seg_c;
+    c->setup_thr_sb_seg[1] = setup_thr_rows_sb64_seg_c;
+    c->setup_thr_sb_dq[0] = setup_thr_cols_sb64_dq_c;
+    c->setup_thr_sb_dq[1] = setup_thr_rows_sb64_dq_c;
+    c->setup_thr_sb_simple = setup_thr_sb64_simple_c;
 
 #if HAVE_ASM
 #if ARCH_X86

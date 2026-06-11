@@ -49,7 +49,10 @@ mul1_lut_uv_edge:    dw 0, 1360, 816*2, 816*2, 816*2, 816*2, 816*2, 0
 mul2_lut_uv_edge:    dw 0,    0, 816*1, 816*1, 816*1, 816*1, 816*1, 0
 mul1_lut_y_edge:     dw 0, 1360, 816*2, 592*3, 448*4, 320*6, 320*6, 0
 
+pb_8x2_8x3: times 8 db 2
+            times 8 db 3
 side_shuf: db 0, 4, 8, 12, 3, 7, 11, 15
+pb_mask: db 1, 2, 4, 8, 16, 32, 64, 128
 
 mul_lut_offset: times 2 db 0, 1
 
@@ -61,6 +64,7 @@ pb_m3_4: times 2 db -3, 4
 pb_m5_6: times 2 db -5, 6
 pb_m6_7: times 2 db -6, 7
 pb_128: times 4 db 0x80
+pb_248: times 4 db 0xf8
 
 pw_12288: times 2 dw 12288
 pw_24576: times 2 dw 24576
@@ -69,6 +73,8 @@ pw_1360: times 2 dw 1360
 pw_4_3: dw 4, 3
 pw_45: dw 45, 45
 pw_45_40: dw 45, 40
+
+%define m(x) mangle(private_prefix %+ _ %+ x %+ SUFFIX)
 
 SECTION .text
 
@@ -1665,5 +1671,87 @@ cglobal deblock_h_sb_uv_8bpc, 6, 11, 16, 32 * 10, \
     add       q_thrq, 8
     add    side_thrq, 8
     sub           hd, 8
+    jg .loop
+    RET
+
+INIT_YMM avx2
+cglobal setup_thr_rows_sb64_dq_8bpc, 4, 5, 0, dst, mask, lut, h, w, plut
+    mov              r4, plutmp
+    vpbroadcastb     m0, [lutq+0*16]
+    vpbroadcastb     m1, [lutq+1*16]
+    vpbroadcastb    xm2, [r4+0*16]
+    vpbroadcastb    xm3, [r4+1*16]
+    jmp m(setup_thr_cols_sb64_dq_8bpc).body
+
+cglobal setup_thr_cols_sb64_dq_8bpc, 4, 5, 0, dst, mask, lut, w, h, plut
+    mov              r4, plutmp
+    vpbroadcastb     m0, [lutq+0*16]
+    vpbroadcastb     m1, [lutq+1*16]
+    vpbroadcastb    xm2, [r4+0*16]
+    vpbroadcastb    xm3, [r4+1*16]
+    movd      [r4+0*16], xm0
+    movd      [r4+1*16], xm1
+.body:
+    WIN64_SPILL_XMM   9
+    pxor            xm7, xm7
+    vpbroadcastd     m8, [pb_248]
+    pcmpeqb          m4, m7, m0
+    pcmpeqb          m5, m7, m1
+    pcmpeqb          m6, m7, m2
+    pcmpeqb          m7, m3
+    vpblendvb        m0, m2, m4
+    vpblendvb        m1, m3, m5
+    vpblendvb        m2, m0, m6
+    vpblendvb        m3, m1, m7
+    pavgb            m0, m2
+    pavgb            m1, m3
+    pand             m2, m0, m8
+    pand             m3, m1, m8
+    REPX   {psrlw x, 3}, m2, m3
+    vbroadcasti128   m4, [pb_8x2_8x3]
+    vpbroadcastq     m5, [pb_mask]
+
+    ; do one line with the lower lane being a blend of lut/plut
+    movd            xm6, [maskq+15*2]
+    vpbroadcastd     m7, [maskq+35*2]
+    vpblendd         m6, m7, 11110000b
+    pshufb           m6, m4
+    pand             m6, m5
+    pcmpeqb          m6, m5
+    vpblendvb        m7, m0, m2, m6
+    vpblendvb        m8, m1, m3, m6
+    mova   [dstq+0*256], m7
+    mova   [dstq+1*256], m8
+    REPX {vpermq x, x, q3232}, m0, m1, m2, m3
+    add           maskq, 20*4
+    add            dstq, mmsize
+    sub              wd, mmsize/16
+    jg m(setup_thr_sb64_simple_8bpc).loop
+    RET
+
+INIT_YMM avx2
+cglobal setup_thr_sb64_simple_8bpc, 4, 5, 9, dst, mask, lut, w, h
+    vpbroadcastd     m4, [pb_248]
+    vpbroadcastb     m0, [lutq+0*16]
+    vpbroadcastb     m1, [lutq+1*16]
+    pand             m2, m0, m4
+    pand             m3, m1, m4
+    REPX   {psrlw x, 3}, m2, m3
+    vbroadcasti128   m4, [pb_8x2_8x3]
+    vpbroadcastq     m5, [pb_mask]
+.loop:
+    movd            xm6, [maskq+15*2]
+    vpbroadcastd     m7, [maskq+35*2]
+    vpblendd         m6, m7, 11110000b
+    pshufb           m6, m4
+    pand             m6, m5
+    pcmpeqb          m6, m5
+    vpblendvb        m7, m0, m2, m6
+    vpblendvb        m8, m1, m3, m6
+    mova   [dstq+0*256], m7
+    mova   [dstq+1*256], m8
+    add           maskq, 20*4
+    add            dstq, mmsize
+    sub              wd, mmsize/16
     jg .loop
     RET
