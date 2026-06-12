@@ -280,9 +280,9 @@ static void init_deblock_thr_lut(const int hbd, const int n_seg,
 static void check_setup_thr_sb_seg(const setup_thr_sb_seg_fn fn, const int dir) {
     ALIGN_STK_64(pixel, c_dst, 2, [16 * 16]);
     ALIGN_STK_64(pixel, a_dst, 2, [16 * 16]);
-    ALIGN_STK_16(uint8_t, segmap, 17 * 16,);
     ALIGN_STK_64(pixel, lut, 3, [2][16]);
     uint16_t mask[16][5][4];
+    uint8_t segmap[17 * 17];
 
     declare_func(void, pixel (*dst_thr)[16 * 16], const uint8_t *seg_map,
                  ptrdiff_t seg_stride, const uint16_t (*mask)[5][4],
@@ -293,7 +293,8 @@ static void check_setup_thr_sb_seg(const setup_thr_sb_seg_fn fn, const int dir) 
         if (check_func(fn, "setup_thr_sb_seg_%s_%s_%dbpc", dir ? "rows" : "cols",
                        ss_names[ss_idx], BITDEPTH))
         {
-            const int w4 = 1 + (rnd() & (15 >> ss_hor));
+            const int max_w4 = 16 >> ss_hor;
+            const int w4 = (dir || rnd() & 1) ? 1 + (rnd() & (max_w4 - 1)) : max_w4;
             const int h4 = 1 + (rnd() & (15 >> ss_ver));
             const int hbd = BITDEPTH == 8 ? 0 : 1 + (rnd() & 1);
             const int qmax = 255 + 48 * hbd;
@@ -305,12 +306,18 @@ static void check_setup_thr_sb_seg(const setup_thr_sb_seg_fn fn, const int dir) 
             for (int n = 0; n < (16 >> (dir ? ss_ver : ss_hor)); n++)
                 mask[n][4][0] = rnd() & (0xffff >> ((dir ? ss_hor : ss_ver) * 16));
 
-            for (int n = 0; n < 16 * (16 + dir); n++)
-                segmap[n] = rnd() & 15;
+            for (int y = 0; y < 16 + dir; y++)
+                for (int x = 0; x < 16; x++)
+                    segmap[y * 17 + x] = rnd() & 15;
 
-            call_ref(c_dst, segmap + dir * 16, 16, mask, lut[0], lut[1],
+            const int have_top = !dir || rnd() & 1;
+            memset(c_dst, 0xff, 16 * 16 * 2 * sizeof(pixel));
+            memset(a_dst, 0xff, 16 * 16 * 2 * sizeof(pixel));
+            call_ref(c_dst, segmap + dir * 17, 17, mask, lut[0],
+                     have_top ? lut[1] : NULL,
                      dir ? h4 : w4, dir ? w4 : h4);
-            call_new(a_dst, segmap + dir * 16, 16, mask, lut[0], lut[2],
+            call_new(a_dst, segmap + dir * 17, 17, mask, lut[0],
+                     have_top ? lut[2] : NULL,
                      dir ? h4 : w4, dir ? w4 : h4);
             checkasm_check_pixel(c_dst[0], 16 * sizeof(pixel),
                                  a_dst[0], 16 * sizeof(pixel),
@@ -318,10 +325,11 @@ static void check_setup_thr_sb_seg(const setup_thr_sb_seg_fn fn, const int dir) 
             checkasm_check_pixel(c_dst[1], 16 * sizeof(pixel),
                                  a_dst[1], 16 * sizeof(pixel),
                                  dir ? w4 : h4, dir ? h4 : w4, "side_thr");
-            checkasm_check_pixel((pixel *) lut[1], 16 * sizeof(pixel),
-                                 (pixel *) lut[2], 16 * sizeof(pixel),
-                                 16, 2, "left_thr");
-            bench_new(alternate(c_dst, a_dst), segmap + dir * 16, 16, mask,
+            if (dir || w4 == max_w4)
+                checkasm_check_pixel((pixel *) lut[1], 16 * sizeof(pixel),
+                                     (pixel *) lut[2], 16 * sizeof(pixel),
+                                     dir ? 16 : h4, 2, "left_thr");
+            bench_new(alternate(c_dst, a_dst), segmap + dir * 17, 17, mask,
                       lut[0], lut[1], 16 >> ss_hor, 16 >> ss_ver);
         }
     }
@@ -356,6 +364,8 @@ static void check_setup_thr_sb_dq(const setup_thr_sb_dq_fn fn, const int dir) {
             for (int n = 0; n < (16 >> (dir ? ss_ver : ss_hor)); n++)
                 mask[n][4][0] = rnd() & (0xffff >> ((dir ? ss_hor : ss_ver) * 16));
 
+            memset(c_dst, 0xff, 16 * 16 * 2 * sizeof(pixel));
+            memset(a_dst, 0xff, 16 * 16 * 2 * sizeof(pixel));
             call_ref(c_dst, mask, lut[0], dir ? h4 : w4, dir ? w4 : h4, lut[1]);
             call_new(a_dst, mask, lut[0], dir ? h4 : w4, dir ? w4 : h4, lut[2]);
             checkasm_check_pixel(c_dst[0], 16 * sizeof(pixel),
@@ -402,6 +412,8 @@ static void check_setup_thr_sb_smp(const setup_thr_sb_simple_fn fn) {
             for (int n = 0; n < (16 >> ss_hor); n++)
                 mask[n][4][0] = rnd() & (0xffff >> (ss_ver * 16));
 
+            memset(c_dst, 0xff, 16 * 16 * 2 * sizeof(pixel));
+            memset(a_dst, 0xff, 16 * 16 * 2 * sizeof(pixel));
             call_ref(c_dst, mask, lut, w4, h4);
             call_new(a_dst, mask, lut, w4, h4);
             checkasm_check_pixel(c_dst[0], 16 * sizeof(pixel),

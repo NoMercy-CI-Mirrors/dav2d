@@ -1675,6 +1675,146 @@ cglobal deblock_h_sb_uv_8bpc, 6, 11, 16, 32 * 10, \
     RET
 
 INIT_YMM avx2
+cglobal setup_thr_cols_sb64_seg_8bpc, 6, 7, 14, 16 * 16, \
+                                      dst, segmap, segstride, mask, lut, lthr, w, h
+    ; transpose segmap
+    lea              r6, [segstrideq*3]
+    movu            xm0, [segmapq+segstrideq*0] ; a0-15|i0-15
+    movu            xm1, [segmapq+segstrideq*1] ; b0-15|j0-15
+    movu            xm2, [segmapq+segstrideq*2] ; c0-15|k0-15
+    movu            xm3, [segmapq+r6]           ; d0-15|l0-15
+    lea         segmapq, [segmapq+segstrideq*4]
+    movu            xm4, [segmapq+segstrideq*0] ; e0-15|m0-15
+    movu            xm5, [segmapq+segstrideq*1] ; f0-15|n0-15
+    movu            xm6, [segmapq+segstrideq*2] ; g0-15|o0-15
+    movu            xm7, [segmapq+r6]           ; h0-15|p0-15
+    lea         segmapq, [segmapq+segstrideq*4]
+    vinserti128      m0, [segmapq+segstrideq*0], 1
+    vinserti128      m1, [segmapq+segstrideq*1], 1
+    vinserti128      m2, [segmapq+segstrideq*2], 1
+    vinserti128      m3, [segmapq+r6], 1
+    lea         segmapq, [segmapq+segstrideq*4]
+    vinserti128      m4, [segmapq+segstrideq*0], 1
+    vinserti128      m5, [segmapq+segstrideq*1], 1
+    vinserti128      m6, [segmapq+segstrideq*2], 1
+    vinserti128      m7, [segmapq+r6], 1
+
+    punpckhbw        m8, m0, m1                 ; ab8-15|ij8-15
+    punpcklbw        m0, m1                     ; ab0-7 |ij0-7
+    punpckhbw        m1, m2, m3                 ; cd8-15|kl8-15
+    punpcklbw        m2, m3                     ; cd0-7 |kl0-7
+    punpckhbw        m3, m4, m5                 ; ef8-15|mn8-15
+    punpcklbw        m4, m5                     ; ef0-7 |mn0-7
+    punpckhbw        m5, m6, m7                 ; gh8-15|op8-15
+    punpcklbw        m6, m7                     ; gh0-7 |op0-7
+
+    punpckhwd        m7, m0, m2                 ; abcd4-7  |ijkl4-7
+    punpcklwd        m0, m2                     ; abcd0-3  |ijkl0-3
+    punpckhwd        m2, m8, m1                 ; abcd12-15|ijkl12-15
+    punpcklwd        m8, m1                     ; abcd8-11 |ijkl8-11
+    punpckhwd        m1, m4, m6                 ; efgh4-7  |mnop4-7
+    punpcklwd        m4, m6                     ; efgh0-3  |mnop0-3
+    punpckhwd        m6, m3, m5                 ; efgh12-15|mnop12-15
+    punpcklwd        m3, m5                     ; efgh8-11 |mnop8-11
+
+    punpckhdq        m5, m0, m4                 ; abcdefgh2-3  |ijklmnop2-3
+    punpckldq        m0, m4                     ; abcdefgh0-1  |ijklmnop0-1
+    punpckhdq        m4, m7, m1                 ; abcdefgh6-7  |ijklmnop6-7
+    punpckldq        m7, m1                     ; abcdefgh4-5  |ijklmnop4-5
+    punpckhdq        m1, m8, m3                 ; abcdefgh10-11|ijklmnop10-11
+    punpckldq        m8, m3                     ; abcdefgh8-9  |ijklmnop8-9
+    punpckhdq        m3, m2, m6                 ; abcdefgh14-15|ijklmnop14-15
+    punpckldq        m2, m6                     ; abcdefgh12-13|ijklmnop12-13
+
+    ; -> a-p0|1,2|3,4|5,6|7,8|9,10|11,12|13&14|15
+    REPX {vpermq x, x, q3120}, m5, m0, m4, m7, m1, m8, m3, m2
+
+    mov              wd, wm
+
+    mova [rsp+0*mmsize], m0
+    mova [rsp+1*mmsize], m5
+    mova [rsp+2*mmsize], m7
+    mova [rsp+3*mmsize], m4
+    mova [rsp+4*mmsize], m8
+    mova [rsp+5*mmsize], m1
+    mova [rsp+6*mmsize], m2
+    mova [rsp+7*mmsize], m3
+    mov         segmapq, rsp
+    mov      segstrideq, 16
+
+    vbroadcasti128   m0, [lthrq+0*16]           ; prev_q_thr
+    vbroadcasti128   m1, [lthrq+1*16]           ; prev_s_thr
+    call m(setup_thr_rows_sb64_seg_8bpc).body
+    ; back-up right-edge thr values in lthrq for re-use in next call
+    vextracti128 [lthrq+0*16], m0, 1
+    vextracti128 [lthrq+1*16], m1, 1
+    RET
+
+INIT_YMM avx2
+cglobal setup_thr_rows_sb64_seg_8bpc, 6, 7, 14, dst, segmap, segstride, \
+                                                mask, lut, plut, h, w
+    test          plutq, plutq
+    jz .notop
+    sub         segmapq, segstrideq
+    vbroadcasti128   m2, [segmapq]              ; segmap[above]
+    vbroadcasti128   m0, [plutq+0*16]           ; above_q_lut
+    vbroadcasti128   m1, [plutq+1*16]           ; above_s_lut
+    pshufb           m0, m2                     ; prev_q_thr
+    pshufb           m1, m2                     ; prev_s_thr
+    add         segmapq, segstrideq
+.call_body:
+    mov              hd, hm
+    call .body
+    RET
+.notop:
+    REPX    {pxor x, x}, xm0, xm1
+    jmp .call_body
+.body:
+    vbroadcasti128   m2, [lutq+0*16]            ; q_lut
+    vbroadcasti128   m3, [lutq+1*16]            ; s_lut
+    pxor           xm10, xm10
+    vbroadcasti128  m11, [pb_8x2_8x3]
+    vpbroadcastq    m12, [pb_mask]
+    vpbroadcastd    m13, [pb_248]
+.loop:
+    movu            xm5, [segmapq+segstrideq*0]
+    vinserti128      m5, [segmapq+segstrideq*1], 1
+    pshufb           m4, m2, m5                 ; cur_q_thr
+    pshufb           m5, m3, m5                 ; cur_s_thr
+    vperm2i128       m0, m4, 0x21               ; prev_q_thr
+    vperm2i128       m1, m5, 0x21               ; cur_q_thr
+    pcmpeqb          m6, m4, m10
+    pcmpeqb          m7, m5, m10
+    pcmpeqb          m8, m0, m10
+    pcmpeqb          m9, m1, m10
+    vpblendvb        m6, m4, m0, m6
+    vpblendvb        m7, m5, m1, m7
+    vpblendvb        m0, m4, m8
+    vpblendvb        m1, m5, m9
+    movd            xm8, [maskq+15*2]
+    vpbroadcastd     m9, [maskq+35*2]
+    pavgb            m0, m6
+    vpblendd         m8, m9, 11110000b
+    pavgb            m1, m7
+    pshufb           m8, m11
+    pand             m6, m0, m13
+    pand             m7, m1, m13
+    pand             m8, m12
+    REPX   {psrlw x, 3}, m6, m7
+    pcmpeqb          m8, m12
+    vpblendvb        m0, m6, m8
+    vpblendvb        m1, m7, m8
+    mova   [dstq+0*256], m0
+    mova   [dstq+1*256], m1
+    mova             m0, m4                     ; prev_q_thr = cur_q_thr
+    mova             m1, m5                     ; prev_s_thr = cur_s_thr
+    lea         segmapq, [segmapq+segstrideq*2]
+    add           maskq, 20*4
+    add            dstq, mmsize
+    sub              hd, mmsize/16
+    jg .loop
+    ret
+
 cglobal setup_thr_rows_sb64_dq_8bpc, 4, 5, 0, dst, mask, lut, h, w, plut
     mov              r4, plutmp
     vpbroadcastb     m0, [lutq+0*16]
