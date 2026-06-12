@@ -162,7 +162,9 @@ void dav2d_picture_copy_props(Dav2dPicture *const p,
                               Dav2dITUTT35 *const itut_t35, Dav2dRef *itut_t35_ref, size_t n_itut_t35,
                               const Dav2dDataProps *const props)
 {
+#if 0
     dav2d_data_props_copy(&p->m, props);
+#endif
 
     dav2d_ref_dec(&p->content_light_ref);
     p->content_light_ref = content_light_ref;
@@ -218,8 +220,10 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
         dav2d_ref_dec(&c->itut_t35_ref);
         c->itut_t35 = NULL;
         c->n_itut_t35 = 0;
+#if 0
     } else {
         dav2d_data_props_copy(&p->p.m, &f->tile[0].data.m);
+#endif
     }
 
     if (c->n_fc > 1) {

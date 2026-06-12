@@ -108,6 +108,7 @@ void dav2d_data_ref(Dav2dData *const dst, const Dav2dData *const src) {
     *dst = *src;
 }
 
+#if 0
 void dav2d_data_props_copy(Dav2dDataProps *const dst,
                            const Dav2dDataProps *const src)
 {
@@ -118,6 +119,7 @@ void dav2d_data_props_copy(Dav2dDataProps *const dst,
     *dst = *src;
     if (dst->user_data.ref) dav2d_ref_inc(dst->user_data.ref);
 }
+#endif
 
 void dav2d_data_props_set_defaults(Dav2dDataProps *const props) {
     assert(props != NULL);
