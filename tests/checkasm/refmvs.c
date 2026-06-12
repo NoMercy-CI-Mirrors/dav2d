@@ -496,7 +496,7 @@ static void check_splat_comp_warpmv(const Dav2dRefmvsDSPContext *const c) {
                             WEDGE_TMVP(s_src[0].bs, w, h, widx) : NULL;
                         const int w_swap = mask && rnd() & 1;
 
-                        int32_t matrix[6], *const mat[2] = { s_src[0].m, matrix };
+                        int32_t gmv_mat[2][6], *const mat[2] = { g ? gmv_mat[0] : s_src[0].m, gmv_mat[g] };
                         const int range = 0x3ff >> (!wide * 4);
                         const int bias = 0x1ff >> (!wide * 4);
                         for (int n = 0; n < 2; n++) {

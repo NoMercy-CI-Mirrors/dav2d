@@ -40,6 +40,22 @@ pw_warp_off_w64: times 2 dw 1, 1
                  times 2 dw 3, 1
                  times 2 dw 9, 1
                  times 2 dw 11, 1
+pw_gcwarp_off_w8: times 4 dw 1, 1
+                  times 4 dw 1, 5
+pw_gcwarp_off_w16: times 4 dw 1, 1
+                   times 4 dw 5, 1
+
+; the following pairs need to be immediately adjacent
+pw_cwarp_off_w8: times 2 dw 1, 1
+pw_warp_off_w8: times 2 dw 1, 1
+                times 4 dw 1, 3
+pw_cwarp_off_w16top: times 2 dw -3, 1
+pw_warp_off_w16top: times 2 dw -3, 1
+                    times 4 dw -1, 1
+pw_cwarp_off_w16bot: times 2 dw 1, -1
+pw_warp_off_w16bot: times 2 dw 1, -1
+                    times 4 dw 3, -1
+
 gmv_t8b_shuf: db 2, 3, 10, 11, 4, 5, 4, 5, 12, 13, 6, 7, 6, 7, 14, 15
 gmv_t2_shuf:  db 0, 1, 0, 1, 8, 9, 2, 3, 2, 3, 10, 11, 4, 5, 4, 5
 gmv_t8a_shuf: db 0, 1, 0, 1, 8, 9, 2, 3
@@ -59,17 +75,13 @@ t4_shufA: db 8, 10, 12, 14
           db 0, 2, 4, 6
 t4_shufB: db 4, 5, 6, 7, 0, 1, 8, 9, 10, 11, 2, 3, 12, 13, 14, 15
 pd_65536_0_0_65536: dd 65536, 0, 0, 65536
-pw_warp_off_w8: times 2 dw 1, 1
-                times 2 dw 1, 3
-pw_warp_off_w16top: times 2 dw -3, 1
-                    times 2 dw -1, 1
-pw_warp_off_w16bot: times 2 dw 1, -1
-                    times 2 dw 3, -1
+pd_m1_0: dd -1, 0
 
 pb_128: times 4 db 128
 pw_6: times 2 dw 6
 pw_257: times 2 dw 0x101
 pw_m128: times 2 dw -128
+pd_2: dd 2
 pd_4: dd 4
 pd_131: dd 131
 pd_1024: dd 1024
@@ -90,6 +102,8 @@ pd_0x40000: dd 0x40000
 JMP_TABLE splat_mv_avx2, t1, t1, t2, t4, t8, t16, t32
 JMP_TABLE splat_warpmv_avx2, gmv_t1, gmv_t2, gmv_t4, gmv_t8, gmv_t16, gmv_t16, \
                              t1, t2, t4, t8, t16, t16
+JMP_TABLE splat_comp_warpmv_avx2, gmv_t1, gmv_t2, gmv_t4, gmv_t8, gmv_t8, gmv_t8, \
+                                  t1, t2, t4, t8, t8, t8
 JMP_TABLE splat_comp_wedgemv_avx2, t1, t2, t4, t8
 
 SECTION .text
@@ -977,7 +991,7 @@ INIT_YMM avx2
     REPX {paddd x, m6}, m7, m8                      ; 1024 - (mvx/yi < 0)
     paddd           m7, m3
     paddd           m8, m4
-    REPX {psrad x, 11}, m7, m8                     ; warpmv
+    REPX {psrad x, 11}, m7, m8                      ; warpmv
     ; any clipped mv is INVALID_TRAJ so we can skip clipping
     pabsd           m9, m7
     pabsd          m10, m8
@@ -1191,6 +1205,867 @@ INIT_YMM avx2
     lea          tdstq, [tdstq+tstrideq*2]
     dec           bh4d
     jg .gmv_t16_yloop
+%if WIN64
+.gmv_end:
+    WIN64_RESTORE_XMM
+%endif
+    jmp mangle(private_prefix %+ _splat_mv_avx2).spatial
+
+INIT_YMM avx2
+cglobal splat_comp_warpmv, 5, 8, 3, sdst, ssrc, tdst, tstride, tsrc, bw4, bh4, \
+                                    mat1, mat2, tswap, wedge, wswap
+    test byte [ssrcq+refmvs_block.mf], 2
+    jz .gmv
+
+    test         tdstq, tdstq
+    jz .spatial_only
+    ; fall-through to spatial+temporal warp matrix code
+
+%if WIN64
+    PUSH            r8
+    %assign regs_used regs_used+1
+%else
+    PUSH            r9
+    %assign regs_used regs_used+2
+%endif
+    ALLOC_STACK mmsize*4, 16
+    DEFINE_ARGS sdst, ssrc, tdst, tstride, tsrc, bw4, bh4, \
+                mat1, mat2, tswap, wedge, wswap
+    mov             r6, mat2mp
+    mova            m0, [ssrcq+ 0]
+    mova            m1, [ssrcq+32]
+    vpbroadcastw   m13, [tsrcq+4]       ; t_src.ref
+    pxor          xm14, xm14
+    punpcklbw      m13, m14
+    punpcklwd      m13, m14
+
+    vbroadcasti128  m5, [pd_65536_0_0_65536]
+    vbroadcasti128  m4, [ssrcq+refmvs_block.mat+8]  ; mat[2-5]
+    vbroadcasti128  m7, [r6+8]
+    vpbroadcastd    m3, [ssrcq+refmvs_block.bx4]    ; bx4, by4 as words
+                                                    ; range is 0..0x3fff-w/h
+    REPX {psubd x, m5}, m4, m7                      ; m2-0x10000,m3,m4,m5-0x10000
+                                                    ; range is -0x7fc0,+0x7fc0
+    vpbroadcastq    m5, [ssrcq+refmvs_block.mat]    ; mat[0-1]
+    vpbroadcastq    m8, [r6]
+    packssdw        m4, m7                          ; dword->word (and duplicate)
+    punpcklqdq      m5, m8
+    vpbroadcastd    m8, tswapm
+    psubd          m14, m8
+    vpbroadcastd    m6, [pd_131]
+    psrad           m5, 2                           ; mat[0-1] >> 2
+    vpbroadcastq    m2, wswapmp
+    ; set up dynamic increment for wedge pointer (4 if wedge!=NULL)
+    mov             t0, wedgemp
+
+    lea             r6, [splat_comp_warpmv_avx2_table]
+    tzcnt          r7d, bw4m
+    movsxd          r7, [r6+r7*4+5*4]
+    add             r7, r6
+    mov           bh4d, bh4m
+    lea       tstrideq, [tstrideq*3]
+    shr           bh4d, 1
+    jmp             r7
+
+%macro CWARPMV_LOOP_START 1 ; size
+.t%1_loop:
+    vpbroadcastd    m9, [pd_1024]
+    psrad           m7, m3, 31
+    psrad           m8, m4, 31                      ; -(mvx/yi < 0)
+    REPX {paddd x, m9}, m7, m8                      ; 1024 - (mvx/yi < 0)
+    paddd           m7, m3
+    paddd           m8, m4
+    REPX {psrad x, 11}, m7, m8                     ; warpmv
+    pabsd           m9, m7
+    pabsd          m10, m8
+    cvtdq2ps       m11, m9
+    cvtdq2ps       m12, m10
+    REPX {psrld   x, 23}, m11, m12                  ; extract exponent bits
+    REPX {psubusw x, m6}, m11, m12                  ; nbits=imax(log2(absv)-4, 0)
+    vpsrlvd         m9, m11
+    vpsrlvd        m10, m12                         ; absv >> nbits [dwords]
+    packssdw       m11, m12                         ; nbits [words]
+    pxor           m12, m12
+    packssdw        m9, m10                         ; absv >> nbits [words]
+
+    ; clip
+    vpbroadcastd   m10, [pd_0xffff]
+    REPX {pminsd x, m10}, m7, m8
+    psubd          m10, m12, m10
+    REPX {pmaxsd x, m10}, m7, m8
+    ; write out to stack
+    mova [rsp+0*mmsize], m7
+    mova [rsp+1*mmsize], m8
+    vpbroadcastd   m10, [pw_6]
+    packssdw        m7, m8                          ; v [words]
+    pcmpgtw        m10, m11, m10
+    psllw          m11, 4                           ; 16*nbits
+    pcmpeqd        m10, m12                         ; nbits <= 6 for x+y comps
+    paddw           m9, m11
+    pcmpeqw        m11, m11
+    psignw          m9, m7
+
+    pblendvb        m8, m15, m9, m10                ; interleave -0x80 if invalid
+
+    pshufd          m9, m8, q2301
+    vpblendvb       m8, m9, m14                     ; apply t_swap
+
+    ; t0 is a pointer to the wedge array, but this pointer could be NULL.
+    ; We unconditionally add to this pointer, the max index is in the [0,1024]
+    ; range, which is well below the limits of the first page (4096). IOW, any
+    ; value below 1024 must originate from NULL.
+    ; The practical benefit of this is that we don't need to calculate a
+    ; conditional-add value, which would cost a few extra instructions.
+    cmp             t0, 1024
+    jl .t%1_no_wedge
+    vpmovzxbq       m9, [t0]                        ; d [range: 0-2]
+    vpbroadcastq    m7, [pd_m1_0]
+    pxor            m9, m2                          ; d^wswap [range: 0-3]
+    psllq           m9, 5
+    vpsllvq         m9, m7, m9                      ; if wswap^d==0: 4xm1,4x0
+                                                    ; if wswap^d==1: 4x0,4xm1
+                                                    ; else:          0
+    vpblendvb       m8, m15, m9                     ; mv w/ wedge-invalidation
+.t%1_no_wedge:
+    pcmpeqd         m7, m8, m15                     ; is mv0 or mv1 invalid
+    pshufd          m9, m8, q2301                   ; mv[1,0]
+    vpblendvb       m8, m9, m7                      ; if both mvs are valid: mv[0,1]
+                                                    ; if mv1 is invalid: mv[0,0]
+                                                    ; if mv0 is invalid: mv[1,1]
+                                                    ; if both mvs are invalid: -0x80
+    pshufd          m9, m13, q2301                  ; ref[1,0]
+    vpblendvb       m9, m13, m9, m7                 ; if both mvs are valid: ref[0,1]
+                                                    ; if mv1 is invalid: ref[0,0]
+                                                    ; if mv0 is invalid: ref[1,1]
+    pcmpeqq         m7, m8, m15                     ; are both mvs invalid
+    por             m7, m9                          ; if both mvs are valid: ref[0,1]
+                                                    ; if mv1 is invalid: ref[0,0]
+                                                    ; if mv0 is invalid: ref[1,1]
+                                                    ; if both mvs are invalid: -1
+    packsswb        m8, m7                          ; word->byte, and interleave refs
+%endmacro
+
+.t1:
+    vpbroadcastd   m15, [pw_m128]
+    paddw           m3, [pw_gcwarp_off_w8]
+    pmaddwd         m3, m4
+    paddd           m3, m5
+    vpbroadcastd    m5, [pd_0x20000]
+    pmaddwd         m5, m4
+    paddd           m4, m3, m5
+    pslld           m5, 2
+    CWARPMV_LOOP_START 1
+    vbroadcasti128  m7, [t2_shuf]
+    pshufb          m8, m7
+    vpblendd        m0, [rsp+0*16], 00001111b
+    movd     [tdstq+0], xm8
+    pextrw   [tdstq+4], xm8, 2
+    mova [sdstq+0*64+0*64*128+ 0], m0
+    mova [sdstq+0*64+0*64*128+32], m1
+    mova [sdstq+1*64+0*64*128+ 0], m0
+    mova [sdstq+1*64+0*64*128+32], m1
+    mova [sdstq+0*64+1*64*128+ 0], m0
+    mova [sdstq+0*64+1*64*128+32], m1
+    mova [sdstq+1*64+1*64*128+ 0], m0
+    mova [sdstq+1*64+1*64*128+32], m1
+    cmp           bh4d, 1
+    je .t_end
+    vpblendd        m0, [rsp+2*16], 00001111b
+    pextrw [tdstq+tstrideq*2+0], xm8, 3
+    pextrd [tdstq+tstrideq*2+2], xm8, 2
+    mova [sdstq+0*64+2*64*128+ 0], m0
+    mova [sdstq+0*64+2*64*128+32], m1
+    mova [sdstq+1*64+2*64*128+ 0], m0
+    mova [sdstq+1*64+2*64*128+32], m1
+    mova [sdstq+0*64+3*64*128+ 0], m0
+    mova [sdstq+0*64+3*64*128+32], m1
+    mova [sdstq+1*64+3*64*128+ 0], m0
+    mova [sdstq+1*64+3*64*128+32], m1
+    cmp           bh4d, 2
+    je .t_end
+    vextracti128   xm8, m8, 1
+    vpblendd        m0, [rsp+1*16], 00001111b
+    lea          tdstq, [tdstq+tstrideq*4]
+    movd     [tdstq+0], xm8
+    pextrw   [tdstq+4], xm8, 2
+    pextrw [tdstq+tstrideq*2+0], xm8, 3
+    pextrd [tdstq+tstrideq*2+2], xm8, 2
+    mova [sdstq+0*64+4*64*128+ 0], m0
+    mova [sdstq+0*64+4*64*128+32], m1
+    mova [sdstq+1*64+4*64*128+ 0], m0
+    mova [sdstq+1*64+4*64*128+32], m1
+    mova [sdstq+0*64+5*64*128+ 0], m0
+    mova [sdstq+0*64+5*64*128+32], m1
+    mova [sdstq+1*64+5*64*128+ 0], m0
+    mova [sdstq+1*64+5*64*128+32], m1
+    vpblendd        m0, [rsp+3*16], 00001111b
+    mova [sdstq+0*64+6*64*128+ 0], m0
+    mova [sdstq+0*64+6*64*128+32], m1
+    mova [sdstq+1*64+6*64*128+ 0], m0
+    mova [sdstq+1*64+6*64*128+32], m1
+    mova [sdstq+0*64+7*64*128+ 0], m0
+    mova [sdstq+0*64+7*64*128+32], m1
+    mova [sdstq+1*64+7*64*128+ 0], m0
+    mova [sdstq+1*64+7*64*128+32], m1
+    paddd           m3, m5
+    paddd           m4, m5
+    lea          tdstq, [tdstq+tstrideq*4]
+    add          sdstq, 8*64*128
+    add             t0, 4
+    sub           bh4d, 4
+    jg .t1_loop
+    jmp .t_end
+
+.t2:
+    vpbroadcastd   m15, [pw_m128]
+    paddw           m3, [pw_cwarp_off_w8]
+    pmaddwd         m3, m4
+    paddd           m3, m5
+    vpbroadcastd    m5, [pd_2]
+    pmaddwd         m7, m5, m4
+    pslld           m5, 17          ; 0x40000
+    pmaddwd         m5, m4
+    paddd           m4, m3, m7
+    CWARPMV_LOOP_START 2
+    vbroadcasti128  m7, [t2_shuf]
+    pshufb          m8, m7
+    vpblendd        m9, m0, [rsp+2*16], 00001111b
+    vpblendd        m0, [rsp+0*16], 00001111b
+    movq     [tdstq+0], xm8
+    pextrd   [tdstq+8], xm8, 2
+    mova [sdstq+1*64+0*64*128+ 0], m0
+    mova [sdstq+1*64+0*64*128+32], m1
+    mova [sdstq+2*64+0*64*128+ 0], m9
+    mova [sdstq+2*64+0*64*128+32], m1
+    mova [sdstq+3*64+0*64*128+ 0], m9
+    mova [sdstq+3*64+0*64*128+32], m1
+    mova [sdstq+1*64+1*64*128+ 0], m0
+    mova [sdstq+1*64+1*64*128+32], m1
+    mova [sdstq+2*64+1*64*128+ 0], m9
+    mova [sdstq+2*64+1*64*128+32], m1
+    mova [sdstq+3*64+1*64*128+ 0], m9
+    mova [sdstq+3*64+1*64*128+32], m1
+    add          sdstq, 2*64*128
+    cmp           bh4d, 1
+    je .t2_end
+    vextracti128   xm8, m8, 1
+    vpblendd        m9, m0, [rsp+3*16], 00001111b
+    vpblendd        m0, [rsp+1*16], 00001111b
+    movq   [tdstq+tstrideq*2+0], xm8
+    pextrd [tdstq+tstrideq*2+8], xm8, 2
+    mova [sdstq+1*64+0*64*128+ 0], m0
+    mova [sdstq+1*64+0*64*128+32], m1
+    mova [sdstq+2*64+0*64*128+ 0], m9
+    mova [sdstq+2*64+0*64*128+32], m1
+    mova [sdstq+3*64+0*64*128+ 0], m9
+    mova [sdstq+3*64+0*64*128+32], m1
+    mova [sdstq+1*64+1*64*128+ 0], m0
+    mova [sdstq+1*64+1*64*128+32], m1
+    mova [sdstq+2*64+1*64*128+ 0], m9
+    mova [sdstq+2*64+1*64*128+32], m1
+    mova [sdstq+3*64+1*64*128+ 0], m9
+    mova [sdstq+3*64+1*64*128+32], m1
+    paddd           m3, m5
+    paddd           m4, m5
+    lea          tdstq, [tdstq+tstrideq*4]
+    add          sdstq, 2*64*128
+    add             t0, 4
+    sub           bh4d, 2
+    jg .t2_loop
+.t2_end:
+    mova [sdstq+0*64-1*64*128+ 0], m0
+    mova [sdstq+0*64-1*64*128+32], m1
+    jmp .t_end
+
+.t4:
+    vpbroadcastd   m15, [pw_m128]
+    paddw           m3, [pw_gcwarp_off_w16]
+    pmaddwd         m3, m4
+    paddd           m3, m5
+    vpbroadcastd    m5, [pd_2]
+    pmaddwd         m7, m5, m4
+    pslld           m5, 16          ; 0x20000
+    pmaddwd         m5, m4
+    paddd           m4, m3, m7
+    CWARPMV_LOOP_START 4
+    vbroadcasti128  m7, [t2_shuf]
+    pshufb          m8, m7
+    vextracti128   xm7, m8, 1
+    vpblendd        m9, m0, [rsp+3*16], 00001111b
+    vpblendd        m0, [rsp+1*16], 00001111b
+    movq    [tdstq+ 0], xm8
+    pextrd  [tdstq+ 8], xm8, 2
+    movq    [tdstq+12], xm7
+    pextrd  [tdstq+20], xm7, 2
+    mova [sdstq+5*64+0*64*128+ 0], m0
+    mova [sdstq+5*64+0*64*128+32], m1
+    mova [sdstq+6*64+0*64*128+ 0], m9
+    mova [sdstq+6*64+0*64*128+32], m1
+    mova [sdstq+7*64+0*64*128+ 0], m9
+    mova [sdstq+7*64+0*64*128+32], m1
+    mova [sdstq+5*64+1*64*128+ 0], m0
+    mova [sdstq+5*64+1*64*128+32], m1
+    mova [sdstq+6*64+1*64*128+ 0], m9
+    mova [sdstq+6*64+1*64*128+32], m1
+    mova [sdstq+7*64+1*64*128+ 0], m9
+    mova [sdstq+7*64+1*64*128+32], m1
+    paddd           m3, m5
+    paddd           m4, m5
+    lea          tdstq, [tdstq+tstrideq*2]
+    add          sdstq, 2*64*128
+    add             t0, 4
+    dec           bh4d
+    jg .t4_loop
+    vpblendd        m8, m0, [rsp+0*16], 00001111b
+    vpblendd        m7, m0, [rsp+2*16], 00001111b
+    mova [sdstq+0*64-1*64*128+ 0], m8
+    mova [sdstq+0*64-1*64*128+32], m1
+    mova [sdstq+1*64-1*64*128+ 0], m8
+    mova [sdstq+1*64-1*64*128+32], m1
+    mova [sdstq+2*64-1*64*128+ 0], m7
+    mova [sdstq+2*64-1*64*128+32], m1
+    mova [sdstq+3*64-1*64*128+ 0], m7
+    mova [sdstq+3*64-1*64*128+32], m1
+    mova [sdstq+4*64-1*64*128+ 0], m0
+    mova [sdstq+4*64-1*64*128+32], m1
+    jmp .t_end
+
+.t8: ; also use for .t16/32
+%if WIN64
+    mov            r7d, bw4m
+    lea             r7, [r7*3]
+%else
+    lea            r7d, [bw4d*3]
+%endif
+    vpbroadcastd   m15, [pw_m128]
+    paddw           m3, [pw_gcwarp_off_w16]
+    pmaddwd         m3, m4
+    paddd           m3, m5
+    vpbroadcastd    m7, [pd_2]
+    pslld          m10, m7, 16      ; 0x20000
+    pmaddwd         m7, m4
+    pmaddwd        m10, m4
+    pslld           m5, m7, 2
+    mova [rsp+2*mmsize], m10
+    dec           bh4d
+    jz .t8_lastline
+    rorx           r1d, r5m, 26
+    add          sdstq, r1
+.t8_yloop:
+    paddd           m4, m3, m7
+    mova [rsp+3*mmsize], m3
+    xor            r1d, r1d
+    CWARPMV_LOOP_START 8
+    vbroadcasti128  m7, [t2_shuf]
+    pshufb          m8, m7
+    vextracti128   xm7, m8, 1
+    movq   [tdstq+r1+ 0], xm8
+    pextrd [tdstq+r1+ 8], xm8, 2
+    movq   [tdstq+r1+12], xm7
+    pextrd [tdstq+r1+20], xm7, 2
+    paddd           m3, m5
+    paddd           m4, m5
+    add             t0, 4
+    add            r1d, 24
+    cmp            r1d, r7d
+    jl .t8_loop
+    vpblendd       m10, m0, [rsp+1*16], 00001111b
+    vpblendd        m0, [rsp+3*16], 00001111b
+    mova [sdstq-3*64+0*64*128+ 0], m10
+    mova [sdstq-3*64+0*64*128+32], m1
+    mova [sdstq-2*64+0*64*128+ 0], m0
+    mova [sdstq-2*64+0*64*128+32], m1
+    mova [sdstq-1*64+0*64*128+ 0], m0
+    mova [sdstq-1*64+0*64*128+32], m1
+    mova [sdstq-3*64+1*64*128+ 0], m10
+    mova [sdstq-3*64+1*64*128+32], m1
+    mova [sdstq-2*64+1*64*128+ 0], m0
+    mova [sdstq-2*64+1*64*128+32], m1
+    mova [sdstq-1*64+1*64*128+ 0], m0
+    mova [sdstq-1*64+1*64*128+32], m1
+    mova            m3, [rsp+2*mmsize]
+    paddd           m3, [rsp+3*mmsize]
+    psrad           m7, m5, 2
+    lea          tdstq, [tdstq+tstrideq*2]
+    add          sdstq, 2*64*128
+    dec           bh4d
+    jg .t8_yloop
+    rorx           r1d, r5m, 26
+    sub          sdstq, r1
+.t8_lastline:
+    paddd           m4, m3, m7
+    xor            r1d, r1d
+    CWARPMV_LOOP_START 8l
+    vbroadcasti128  m7, [t2_shuf]
+    pshufb          m8, m7
+    vextracti128   xm7, m8, 1
+    vpblendd        m9, m0, [rsp+0*16], 00001111b
+    vpblendd       m10, m0, [rsp+1*16], 00001111b
+    vpblendd       m11, m0, [rsp+2*16], 00001111b
+    vpblendd        m0, [rsp+3*16], 00001111b
+    movq   [tdstq+r1+ 0], xm8
+    pextrd [tdstq+r1+ 8], xm8, 2
+    movq   [tdstq+r1+12], xm7
+    pextrd [tdstq+r1+20], xm7, 2
+    mova [sdstq+0*64+1*64*128+ 0], m9
+    mova [sdstq+0*64+1*64*128+32], m1
+    mova [sdstq+1*64+1*64*128+ 0], m9
+    mova [sdstq+1*64+1*64*128+32], m1
+    mova [sdstq+2*64+1*64*128+ 0], m11
+    mova [sdstq+2*64+1*64*128+32], m1
+    mova [sdstq+3*64+1*64*128+ 0], m11
+    mova [sdstq+3*64+1*64*128+32], m1
+    mova [sdstq+4*64+1*64*128+ 0], m10
+    mova [sdstq+4*64+1*64*128+32], m1
+    mova [sdstq+5*64+1*64*128+ 0], m10
+    mova [sdstq+5*64+1*64*128+32], m1
+    mova [sdstq+6*64+1*64*128+ 0], m0
+    mova [sdstq+6*64+1*64*128+32], m1
+    mova [sdstq+7*64+1*64*128+ 0], m0
+    mova [sdstq+7*64+1*64*128+32], m1
+    paddd           m3, m5
+    paddd           m4, m5
+    add          sdstq, 8*64
+    add             t0, 4
+    add            r1d, 24
+    cmp            r1d, r7d
+    jl .t8l_loop
+    mova [sdstq-3*64+0*64*128+ 0], m10
+    mova [sdstq-3*64+0*64*128+32], m1
+    mova [sdstq-2*64+0*64*128+ 0], m0
+    mova [sdstq-2*64+0*64*128+32], m1
+    mova [sdstq-1*64+0*64*128+ 0], m0
+    mova [sdstq-1*64+0*64*128+32], m1
+.t_end:
+    RET
+    %assign stack_offset stack_offset-gprsize
+%if WIN64
+    %assign regs_used regs_used-1
+%else
+    %assign regs_used regs_used-2
+%endif
+    RESET_STACK_STATE
+    DEFINE_ARGS sdst, ssrc, tdst, tstride, tsrc, bw4, bh4, \
+                mat1, mat2, tswap, wedge, wswap
+
+.spatial_only:
+    mov             r6, mat2mp
+    mova            m0, [ssrcq+ 0]
+    mova            m1, [ssrcq+32]
+    vbroadcasti128  m4, [pd_65536_0_0_65536]
+    vbroadcasti128  m3, [ssrcq+refmvs_block.mat+8]  ; mat[2-5]
+    vbroadcasti128  m5, [r6+8]
+    vpbroadcastd    m2, [ssrcq+refmvs_block.bx4]    ; bx4, by4 as words
+                                                    ; range is 0..0x3fff-w/h
+    REPX {psubd x, m4}, m3, m5                      ; m2-0x10000,m3,m4,m5-0x10000
+                                                    ; range is -0x7fc0,+0x7fc0
+    vpbroadcastq    m4, [ssrcq+refmvs_block.mat]    ; mat[0-1]
+    packssdw        m3, m5                          ; dword->word
+    vpbroadcastq    m5, [r6]
+    punpckhqdq      m4, m5
+    vpbroadcastd    m5, [pd_1024]
+    psrad           m4, 2                           ; mat[0-1] >> 2
+    mov           bh4d, bh4m
+    cmp     dword bw4m, 2
+    jg .s3
+    ; fall-through
+.s2:
+    ; it's in theory possible to unroll using the higher land also, but this
+    ; just leads to duplicate write-out code without any additional perf gains
+    WIN64_SPILL_XMM  8
+    paddw           m2, [pw_cwarp_off_w8]           ; bx4 + 1, by4 + 1/3
+                                                    ; range is 1-0x3fff [14bits]
+    vpbroadcastd    m6, [pd_0xffff]
+    vpbroadcastd    m7, [pd_0x40000]
+    pmaddwd         m2, m3
+    paddd           m2, m4
+    pmaddwd         m3, m7
+    pxor            m7, m7
+    psubd           m7, m6                          ; -0xffff
+.s2_loop:
+    psrad           m4, m2, 31                      ; -(mvx/yi < 0)
+    paddd           m4, m5                          ; 1024 - (mvx/yi < 0)
+    paddd           m4, m2                          ; mvx/yi + 1024 - (mvx/yi < 0)
+    psrad           m4, 11                          ; warpmv (unclipped)
+    pmaxsd          m4, m7
+    pminsd          m4, m6                          ; warpmv (clipped)
+    vpblendd        m0, m4, 00001111b
+    mova [sdstq+32*0+0*64*128], m0
+    mova [sdstq+32*1+0*64*128], m1
+    mova [sdstq+32*2+0*64*128], m0
+    mova [sdstq+32*3+0*64*128], m1
+    mova [sdstq+32*0+1*64*128], m0
+    mova [sdstq+32*1+1*64*128], m1
+    mova [sdstq+32*2+1*64*128], m0
+    mova [sdstq+32*3+1*64*128], m1
+    cmp           bh4d, 2
+    je .s2_break
+    vperm2i128      m0, m4, 0x13
+    mova [sdstq+32*0+2*64*128], m0
+    mova [sdstq+32*1+2*64*128], m1
+    mova [sdstq+32*2+2*64*128], m0
+    mova [sdstq+32*3+2*64*128], m1
+    mova [sdstq+32*0+3*64*128], m0
+    mova [sdstq+32*1+3*64*128], m1
+    mova [sdstq+32*2+3*64*128], m0
+    mova [sdstq+32*3+3*64*128], m1
+    paddd           m2, m3
+    add          sdstq, 128*64*4
+    sub           bh4d, 4
+    jg .s2_loop
+.s2_break:
+    WIN64_RESTORE_XMM
+    RET
+
+.s3:
+    WIN64_SPILL_XMM 11
+    vpbroadcastd    m9, bh4m
+    paddw           m8, m2, [pw_cwarp_off_w16bot]   ; bx4 + 1/3, by4 - 1
+    pslld           m9, 16
+    vpbroadcastd    m6, [pd_0xffff]
+    vpbroadcastd    m7, [pd_4]
+    paddw           m8, m9
+    pmaddwd         m8, m3
+    paddd           m8, m4
+    pmaddwd         m9, m3, m7
+    pxor            m7, m7
+    psubd           m7, m6                          ; -0xffff
+    sub           bh4d, 2
+    jz .last_line
+    paddw           m2, [pw_cwarp_off_w16top]       ; bx4 - 3/1, by4 + 1
+                                                    ; range is 1-0x3fff [14bits]
+%if WIN64
+    vpbroadcastd   m10, bw4m
+%else
+    movd          xm10, bw4d
+    vpbroadcastd   m10, xm10
+%endif
+    paddw           m2, m10
+    pmaddwd         m2, m3
+    paddd           m2, m4
+    vpbroadcastd    m4, [pd_0x20000]
+    pmaddwd         m3, m4
+    rorx          bw4d, bw4m, 26
+    add          sdstq, bw4q
+    neg           bw4q
+.s3_loop:
+    psrad           m4, m2, 31                      ; -(mvx/yi < 0)
+    paddd           m4, m5                          ; 1024 - (mvx/yi < 0)
+    paddd           m4, m2                          ; mvx/yi + 1024 - (mvx/yi < 0)
+    psrad           m4, 11                          ; warpmv (unclipped)
+    pmaxsd          m4, m7
+    pminsd          m4, m6                          ; warpmv (clipped)
+    vpblendd        m0, m4, 00001111b
+    mova  [sdstq-32*6+128*64*0], m0
+    mova  [sdstq-32*5+128*64*0], m1
+    mova  [sdstq-32*6+128*64*1], m0
+    mova  [sdstq-32*5+128*64*1], m1
+    vperm2i128      m0, m4, 0x13
+    mova  [sdstq-32*4+128*64*0], m0
+    mova  [sdstq-32*3+128*64*0], m1
+    mova  [sdstq-32*2+128*64*0], m0
+    mova  [sdstq-32*1+128*64*0], m1
+    mova  [sdstq-32*4+128*64*1], m0
+    mova  [sdstq-32*3+128*64*1], m1
+    mova  [sdstq-32*2+128*64*1], m0
+    mova  [sdstq-32*1+128*64*1], m1
+    paddd           m2, m3
+    add          sdstq, 128*64*2
+    sub           bh4d, 2
+    jg .s3_loop
+    jmp .last_line_loop
+.last_line:
+    rorx          bw4d, bw4m, 26
+    add          sdstq, bw4q
+    neg           bw4q
+.last_line_loop:
+    psrad           m4, m8, 31                      ; -(mvx/yi < 0)
+    paddd           m4, m5                          ; 1024 - (mvx/yi < 0)
+    paddd           m4, m8                          ; mvx/yi + 1024 - (mvx/yi < 0)
+    psrad           m4, 11                          ; warpmv (unclipped)
+    pmaxsd          m4, m7
+    pminsd          m4, m6                          ; warpmv (clipped)
+    vpblendd        m0, m4, 00001111b
+    mova [sdstq+bw4q+0*32+128*64], m0
+    mova [sdstq+bw4q+1*32+128*64], m1
+    mova [sdstq+bw4q+2*32+128*64], m0
+    mova [sdstq+bw4q+3*32+128*64], m1
+    vperm2i128      m4, m0, 0x31
+    mova [sdstq+bw4q+4*32+128*64], m4
+    mova [sdstq+bw4q+5*32+128*64], m1
+    mova [sdstq+bw4q+6*32+128*64], m4
+    mova [sdstq+bw4q+7*32+128*64], m1
+    paddd           m8, m9
+    add           bw4q, 64*4
+    jl .last_line_loop
+    mova  [sdstq-32*6], m0
+    mova  [sdstq-32*5], m1
+    mova  [sdstq-32*4], m4
+    mova  [sdstq-32*3], m1
+    mova  [sdstq-32*2], m4
+    mova  [sdstq-32*1], m1
+    WIN64_RESTORE_XMM
+    RET
+
+.gmv:
+    ; for global motion, only temporal MVs are warp-adjusted
+    test         tdstq, tdstq
+    jz mangle(private_prefix %+ _splat_mv_avx2).spatial
+
+    ; temporal loop
+%if WIN64
+    WIN64_SPILL_XMM 16
+    %define GMV_END .gmv_end
+%else
+    %define GMV_END mangle(private_prefix %+ _splat_mv_avx2).spatial
+%endif
+    movifnidn    mat1q, mat1mp
+    mov             r6, mat2mp
+    vpbroadcastd    m0, [pd_131]
+    vpbroadcastw    m1, [tsrcq+4]       ; t_src.ref
+    pxor          xm13, xm13
+    punpcklbw       m1, m13
+    punpcklwd       m1, m13
+
+    vbroadcasti128  m5, [pd_65536_0_0_65536]
+    vbroadcasti128  m4, [mat1q+8]                   ; mat[2-5]
+    vbroadcasti128  m7, [r6+8]
+    vpbroadcastd    m3, [ssrcq+refmvs_block.bx4]    ; bx4, by4 as words
+                                                    ; range is 0..0x3fff-w/h
+    REPX {psubd x, m5}, m4, m7                      ; m2-0x10000,m3,m4,m5-0x10000
+                                                    ; range is -0x7fc0,+0x7fc0
+    vpbroadcastq    m5, [mat1q]                     ; mat[0-1]
+    vpbroadcastq    m8, [r6]
+    packssdw        m4, m7                          ; dword->word (and duplicate)
+    punpcklqdq      m5, m8
+    cmp    byte tswapm, 0
+    je .no_swap_t
+    REPX {pshufd x, x, q1032}, m4, m5
+.no_swap_t:
+    vpbroadcastd    m6, [pd_1024]
+    psrad           m5, 2                           ; mat[0-1] >> 2
+    vpbroadcastq    m2, wswapmp
+    ; set up dynamic increment for wedge pointer (4 if wedge!=NULL)
+    mov             t0, wedgemp
+
+    lea             r6, [splat_comp_warpmv_avx2_table]
+    tzcnt          r7d, bw4m
+    movsxd          r7, [r6+r7*4-4]
+    add             r7, r6
+    mov           bh4d, bh4m
+    lea       tstrideq, [tstrideq*3]
+    shr           bh4d, 1
+    jmp             r7
+
+%macro CWARPGMV_LOOP_START 1-3 1, 1 ; size, have_zero [in m13],
+                                    ; have pw_6 [in m14]
+.gmv_t%1_loop:
+    psrad           m7, m3, 31
+    psrad           m8, m4, 31                      ; -(mvx/yi < 0)
+    REPX {paddd x, m6}, m7, m8                      ; 1024 - (mvx/yi < 0)
+    paddd           m7, m3
+    paddd           m8, m4
+    REPX {psrad x, 11}, m7, m8                     ; warpmv
+    ; any clipped mv is INVALID_TRAJ so we can skip clipping
+    pabsd           m9, m7
+    pabsd          m10, m8
+    cvtdq2ps       m11, m9
+    cvtdq2ps       m12, m10
+    REPX {psrld   x, 23}, m11, m12                  ; extract exponent bits
+    REPX {psubusw x, m0}, m11, m12                  ; nbits=imax(log2(absv)-4, 0)
+    vpsrlvd         m9, m11
+    vpsrlvd        m10, m12                         ; absv >> nbits [dwords]
+    packssdw       m11, m12                         ; nbits [words]
+%if %2 == 0
+    pxor           m12, m12
+%endif
+    packssdw        m9, m10                         ; absv >> nbits [words]
+%if %3 == 0
+    vpbroadcastd   m10, [pw_6]
+%endif
+    packssdw        m7, m8                          ; v [words]
+%if %3
+    pcmpgtw        m10, m11, m14
+%else
+    pcmpgtw        m10, m11, m10
+%endif
+    psllw          m11, 4                           ; 16*nbits
+%if %2
+    pcmpeqd        m10, m13                         ; nbits <= 6 for x+y comps
+%else
+    pcmpeqd        m10, m12                         ; nbits <= 6 for x+y comps
+%endif
+    paddw           m9, m11
+    pcmpeqw        m11, m11
+    psignw          m9, m7
+
+    pblendvb        m8, m15, m9, m10                ; interleave -0x80 if invalid
+
+    ; t0 is a pointer to the wedge array, but this pointer could be NULL.
+    ; We unconditionally add to this pointer, the max index is in the [0,1024]
+    ; range, which is well below the limits of the first page (4096). IOW, any
+    ; value below 1024 must originate from NULL.
+    ; The practical benefit of this is that we don't need to calculate a
+    ; conditional-add value, which would cost a few extra instructions.
+    cmp             t0, 1024
+    jl .gmv_t%1_no_wedge
+    vpmovzxbq       m9, [t0]                        ; d [range: 0-2]
+    vpbroadcastq    m7, [pd_m1_0]
+    pxor            m9, m2                          ; d^wswap [range: 0-3]
+    psllq           m9, 5
+    vpsllvq         m9, m7, m9                      ; if wswap^d==0: 4xm1,4x0
+                                                    ; if wswap^d==1: 4x0,4xm1
+                                                    ; else:          0
+    vpblendvb       m8, m15, m9                     ; mv w/ wedge-invalidation
+.gmv_t%1_no_wedge:
+    pcmpeqd         m7, m8, m15                     ; is mv0 or mv1 invalid
+    pshufd          m9, m8, q2301                   ; mv[1,0]
+    vpblendvb       m8, m9, m7                      ; if both mvs are valid: mv[0,1]
+                                                    ; if mv1 is invalid: mv[0,0]
+                                                    ; if mv0 is invalid: mv[1,1]
+                                                    ; if both mvs are invalid: -0x80
+    pshufd          m9, m1, q2301                   ; ref[1,0]
+    vpblendvb       m9, m1, m9, m7                  ; if both mvs are valid: ref[0,1]
+                                                    ; if mv1 is invalid: ref[0,0]
+                                                    ; if mv0 is invalid: ref[1,1]
+    pcmpeqq         m7, m8, m15                     ; are both mvs invalid
+    por             m7, m9                          ; if both mvs are valid: ref[0,1]
+                                                    ; if mv1 is invalid: ref[0,0]
+                                                    ; if mv0 is invalid: ref[1,1]
+                                                    ; if both mvs are invalid: -1
+    packsswb        m8, m7                          ; word->byte, and interleave refs
+%endmacro
+
+.gmv_t1:
+    vpbroadcastd   m14, [pw_6]
+    vpbroadcastd   m15, [pw_m128]
+    paddw           m3, [pw_gcwarp_off_w8]
+    pmaddwd         m3, m4
+    paddd           m3, m5
+    vpbroadcastd    m5, [pd_0x20000]
+    pmaddwd         m5, m4
+    paddd           m4, m3, m5
+    pslld           m5, 2
+    CWARPGMV_LOOP_START 1
+    vbroadcasti128  m7, [t2_shuf]
+    pshufb          m8, m7
+    movd     [tdstq+0], xm8
+    pextrw   [tdstq+4], xm8, 2
+    cmp           bh4d, 1
+    je GMV_END
+    pextrw [tdstq+tstrideq*2+0], xm8, 3
+    pextrd [tdstq+tstrideq*2+2], xm8, 2
+    cmp           bh4d, 2
+    je GMV_END
+    vextracti128   xm8, m8, 1
+    lea          tdstq, [tdstq+tstrideq*4]
+    movd     [tdstq+0], xm8
+    pextrw   [tdstq+4], xm8, 2
+    pextrw [tdstq+tstrideq*2+0], xm8, 3
+    pextrd [tdstq+tstrideq*2+2], xm8, 2
+    paddd           m3, m5
+    paddd           m4, m5
+    lea          tdstq, [tdstq+tstrideq*4]
+    add             t0, 4
+    sub           bh4d, 4
+    jg .gmv_t1_loop
+    jmp GMV_END
+
+.gmv_t2:
+    vpbroadcastd   m14, [pw_6]
+    vpbroadcastd   m15, [pw_m128]
+    paddw           m3, [pw_cwarp_off_w8]
+    pmaddwd         m3, m4
+    paddd           m3, m5
+    vpbroadcastd    m5, [pd_2]
+    pmaddwd         m7, m5, m4
+    pslld           m5, 17          ; 0x40000
+    pmaddwd         m5, m4
+    paddd           m4, m3, m7
+    CWARPGMV_LOOP_START 2
+    vbroadcasti128  m7, [t2_shuf]
+    pshufb          m8, m7
+    movq     [tdstq+0], xm8
+    pextrd   [tdstq+8], xm8, 2
+    cmp           bh4d, 1
+    je GMV_END
+    vextracti128   xm8, m8, 1
+    movq   [tdstq+tstrideq*2+0], xm8
+    pextrd [tdstq+tstrideq*2+8], xm8, 2
+    paddd           m3, m5
+    paddd           m4, m5
+    lea          tdstq, [tdstq+tstrideq*4]
+    add             t0, 4
+    sub           bh4d, 2
+    jg .gmv_t2_loop
+    jmp GMV_END
+
+.gmv_t4:
+    vpbroadcastd   m14, [pw_6]
+    vpbroadcastd   m15, [pw_m128]
+    paddw           m3, [pw_gcwarp_off_w16]
+    pmaddwd         m3, m4
+    paddd           m3, m5
+    vpbroadcastd    m5, [pd_2]
+    pmaddwd         m7, m5, m4
+    pslld           m5, 16          ; 0x20000
+    pmaddwd         m5, m4
+    paddd           m4, m3, m7
+    CWARPGMV_LOOP_START 4
+    vbroadcasti128  m7, [t2_shuf]
+    pshufb          m8, m7
+    vextracti128   xm7, m8, 1
+    movq    [tdstq+ 0], xm8
+    pextrd  [tdstq+ 8], xm8, 2
+    movq    [tdstq+12], xm7
+    pextrd  [tdstq+20], xm7, 2
+    paddd           m3, m5
+    paddd           m4, m5
+    lea          tdstq, [tdstq+tstrideq*2]
+    add             t0, 4
+    dec           bh4d
+    jg .gmv_t4_loop
+    jmp GMV_END
+
+.gmv_t8: ; also use for .gmv_t16/32
+%if WIN64
+    mov            r7d, bw4m
+    lea             r7, [r7*3]
+%else
+    lea            r7d, [bw4d*3]
+%endif
+    vpbroadcastd   m15, [pw_m128]
+    paddw           m3, [pw_gcwarp_off_w16]
+    pmaddwd         m3, m4
+    paddd           m3, m5
+    vpbroadcastd    m7, [pd_2]
+    pslld          m14, m7, 16      ; 0x20000
+    pmaddwd         m7, m4
+    pmaddwd        m14, m4
+    pslld           m5, m7, 2
+.gmv_t8_yloop:
+    paddd           m4, m3, m7
+    mova           m13, m3
+    xor            r4d, r4d
+    CWARPGMV_LOOP_START 8, 0, 0
+    vbroadcasti128  m7, [t2_shuf]
+    pshufb          m8, m7
+    vextracti128   xm7, m8, 1
+    movq   [tdstq+r4+ 0], xm8
+    pextrd [tdstq+r4+ 8], xm8, 2
+    movq   [tdstq+r4+12], xm7
+    pextrd [tdstq+r4+20], xm7, 2
+    paddd           m3, m5
+    paddd           m4, m5
+    add             t0, 4
+    add            r4d, 24
+    cmp            r4d, r7d
+    jl .gmv_t8_loop
+    paddd           m3, m13, m14
+    psrad           m7, m5, 2
+    lea          tdstq, [tdstq+tstrideq*2]
+    dec           bh4d
+    jg .gmv_t8_yloop
 %if WIN64
 .gmv_end:
     WIN64_RESTORE_XMM
