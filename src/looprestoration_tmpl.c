@@ -118,7 +118,7 @@ static void backup_row(pixel *dst, const pixel *src, const pixel *left, const in
 {
     if (edges & LR_HAVE_LEFT)
         for (int x = -edge_len; x < 0; x++)
-            dst[x] = left[x + 6];
+            dst[x] = left[x + 8];
     else
         for (int x = -edge_len; x < 0; x++)
             dst[x] = src[0];
@@ -234,7 +234,7 @@ static void backup_row_luma(pixel *dst, const pixel *src, const ptrdiff_t src_st
 }
 
 static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
-                                 const pixel (*left)[6],
+                                 const pixel (*left)[8],
                                  const pixel *lpf, const pixel *lpf_bottom,
                                  const int w, int h, const WienerParams *params,
                                  const enum LrEdgeFlags edges,
@@ -317,7 +317,7 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
 }
 
 static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
-                                  const pixel (*left)[6], // FIXME this can be 2
+                                  const pixel (*left)[8], // FIXME this can be 2
                                   const pixel *lpf, const pixel *lpf_bottom,
                                   const int w, int h, const WienerParams *params,
                                   const enum LrEdgeFlags edges,
@@ -504,7 +504,7 @@ static int get_class_lut_idx(const pixel *ptrs[10], const uint16_t *noskip_mask,
 }
 
 static void wiener_multi(pixel *p, const ptrdiff_t stride,
-                         const pixel (*left)[6],
+                         const pixel (*left)[8],
                          const pixel *lpf, const pixel *lpf_bottom,
                          const int w, int h,
                          const int8_t (*filters_user)[18],
@@ -640,7 +640,7 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
 }
 
 static void ns_wiener_multi_c(pixel *p, const ptrdiff_t stride,
-                              const pixel (*left)[6],
+                              const pixel (*left)[8],
                               const pixel *lpf, const pixel *lpf_bottom,
                               const int w, int h, const WienerParams *params,
                               const enum LrEdgeFlags edges,
@@ -654,7 +654,7 @@ static void ns_wiener_multi_c(pixel *p, const ptrdiff_t stride,
 }
 
 static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
-                        const pixel (*left)[6],
+                        const pixel (*left)[8],
                         const pixel *lpf, const pixel *lpf_bottom,
                         const int w, int h, const WienerParams *params,
                         const enum LrEdgeFlags edges,
@@ -693,7 +693,7 @@ static void compute_gradient_row(uint16_t (*dst)[4], const pixel **src,
 
 static void gdf_prep_c(int8_t *dst, const ptrdiff_t dst_stride,
                        const pixel *p, const ptrdiff_t stride,
-                       const pixel (*left)[6], const pixel *lpf,
+                       const pixel (*left)[8], const pixel *lpf,
                        const pixel *lpf_bottom, const int w, const int h,
                        const int ref_dst_idx, const int qp_idx,
                        enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)

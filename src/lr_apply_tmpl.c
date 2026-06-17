@@ -40,7 +40,7 @@ enum FirstSbInTileRow {
 };
 
 static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
-                      const pixel (*left)[6], int x, int y,
+                      const pixel (*left)[8], int x, int y,
                       const int plane, const int w, const int row_h,
                       const Av2RestorationUnit *const lr, enum LrEdgeFlags edges,
                       const enum FirstSbInTileRow first_sby_in_tile_row,
@@ -202,11 +202,11 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     }
 }
 
-static void backupNxU(pixel (*dst)[6], const pixel *src, const ptrdiff_t src_stride,
+static void backupNxU(pixel (*dst)[8], const pixel *src, const ptrdiff_t src_stride,
                       int u, const int n)
 {
     for (; u > 0; u--, dst++, src += PXSTRIDE(src_stride))
-        pixel_copy(&dst[0][6 - n], src - n, n);
+        pixel_copy(&dst[0][8 - n], src - n, n);
 }
 
 static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
@@ -236,7 +236,7 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *p, const int y,
     const int shift_hor = 8 - ss_hor;
 
     /* maximum sbrow height is 256 + 8 rows offset */
-    ALIGN_STK_16(pixel, pre_lr_border, 2, [256 + 8][6]);
+    ALIGN_STK_16(pixel, pre_lr_border, 2, [256 + 8][8]);
     const Av2RestorationUnit *lr[2];
 
     enum LrEdgeFlags edges = (y > 0 ? LR_HAVE_TOP : 0) | LR_HAVE_RIGHT;

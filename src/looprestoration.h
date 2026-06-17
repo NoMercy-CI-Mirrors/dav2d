@@ -131,7 +131,7 @@ enum LrEdgeFlags {
 };
 
 #ifdef BITDEPTH
-typedef const pixel (*const_left_pixel_row)[6];
+typedef const pixel (*const_left_pixel_row)[8];
 #else
 typedef const void *const_left_pixel_row;
 #endif
