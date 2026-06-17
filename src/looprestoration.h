@@ -145,7 +145,7 @@ typedef union WienerParams {
     } single;
     struct {
         union {
-            const int8_t (*user)[18];
+            const int8_t (*user)[16];
             const int16_t (*pretrained)[13];
         } filters;
         const uint8_t *class_lut;
@@ -169,7 +169,7 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
             const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 typedef decl_wiener_filter_fn(*wienerfilter_fn);
 
-#define decl_gdf_prep_fn(name) \
+#define decl_gdf_prep_fn(name)  \
 void (name)(int8_t *dst, ptrdiff_t dst_stride, \
             const pixel *p, ptrdiff_t stride, \
             const_left_pixel_row left, \

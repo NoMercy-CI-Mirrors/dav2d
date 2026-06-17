@@ -80,6 +80,9 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     const enum Dav2dRestorationType wiener_type =
         (f->c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) ? lr->type : DAV2D_RESTORATION_NONE;
 
+    // TODO: We copy from a 16x18 array. That array should be 16x16 in the first place.
+    int8_t luma_filters[16][16];
+
     if (wiener_type == DAV2D_RESTORATION_NS_WIENER) {
         if (pd->frame_filters_on) {
             if (pd->num_classes == 1) {
@@ -91,7 +94,10 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                 wiener_params.multi.class_lut = f->lf.ns_subclass_lut;
                 wiener_params.multi.qval_approx =
                     &f->lf.wiener_qval_approx_data;
-                wiener_params.multi.filters.user = pd->filter;
+                wiener_params.multi.filters.user = luma_filters;
+                for (int i = 0; i < 16; i++) {
+                    memcpy(luma_filters[i], pd->filter[i], sizeof(luma_filters[i]));
+                }
             }
         } else {
             wiener_fn = dsp->lr.ns_wiener_single[chroma];
