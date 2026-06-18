@@ -139,9 +139,6 @@ typedef const void *const_left_pixel_row;
 typedef union WienerParams {
     struct {
         const int8_t *filter;
-        const pixel *luma, *luma_top, *luma_bottom;
-        ptrdiff_t stride;
-        int ss_ver, ss_hor, ds_flt;
     } single;
     struct {
         union {
@@ -169,6 +166,18 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
             const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 typedef decl_wiener_filter_fn(*wienerfilter_fn);
 
+#define decl_wiener_filter_uv_fn(name) \
+void (name)(pixel *dst, ptrdiff_t dst_stride, \
+            const_left_pixel_row left, \
+            const pixel *top, const pixel *bottom, \
+            const pixel *luma, const pixel *luma_top, const pixel *luma_bottom, \
+            ptrdiff_t luma_stride, \
+            const int8_t *filter, \
+            int w, int h, int ss_ver, int ss_hor, int ds_flt, \
+            enum LrEdgeFlags edges, \
+            const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
+typedef decl_wiener_filter_uv_fn(*wienerfilter_uv_fn);
+
 #define decl_gdf_prep_fn(name)  \
 void (name)(int8_t *dst, ptrdiff_t dst_stride, \
             const pixel *p, ptrdiff_t stride, \
@@ -186,9 +195,10 @@ void (name)(pixel *p, ptrdiff_t dst_stride, \
 typedef decl_gdf_add_fn(*gdf_add_fn);
 
 typedef struct Dav2dLoopRestorationDSPContext {
-    wienerfilter_fn ns_wiener_single[2 /* y, uv */];
+    wienerfilter_fn ns_wiener_single;
     wienerfilter_fn ns_wiener_multi;
     wienerfilter_fn pc_wiener;
+    wienerfilter_uv_fn wiener_uv;
     gdf_prep_fn gdf_prep;
     gdf_add_fn gdf_add;
 } Dav2dLoopRestorationDSPContext;

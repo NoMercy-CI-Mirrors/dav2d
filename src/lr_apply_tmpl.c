@@ -80,14 +80,21 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     const enum Dav2dRestorationType wiener_type =
         (f->c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) ? lr->type : DAV2D_RESTORATION_NONE;
 
+    const int8_t *uv_filter = NULL;
+    const int ds_flt = f->seq_hdr->cfl_ds_filter_index;
+
     // TODO: We copy from a 16x18 array. That array should be 16x16 in the first place.
     int8_t luma_filters[16][16];
 
     if (wiener_type == DAV2D_RESTORATION_NS_WIENER) {
         if (pd->frame_filters_on) {
             if (pd->num_classes == 1) {
-                wiener_fn = dsp->lr.ns_wiener_single[chroma];
-                wiener_params.single.filter = pd->filter[0];
+                if (chroma) {
+                    uv_filter = pd->filter[0];
+                } else {
+                    wiener_fn = dsp->lr.ns_wiener_single;
+                    wiener_params.single.filter = pd->filter[0];
+                }
             } else {
                 multi_wiener = 1;
                 wiener_fn = dsp->lr.ns_wiener_multi;
@@ -100,8 +107,12 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                 }
             }
         } else {
-            wiener_fn = dsp->lr.ns_wiener_single[chroma];
-            wiener_params.single.filter = lr->ns_filter[0];
+            if (chroma) {
+                uv_filter = lr->ns_filter[0];
+            } else {
+                wiener_fn = dsp->lr.ns_wiener_single;
+                wiener_params.single.filter = lr->ns_filter[0];
+            }
         }
     } else if (wiener_type == DAV2D_RESTORATION_PC_WIENER) {
         multi_wiener = 1;
@@ -135,21 +146,9 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     const pixel *llpfb = have_tt ? llpf + 6 * PXSTRIDE(lstride) :
         &f->lf.lr_db_line[0][(!f->lf.top_lr_db_toggle * 4 + 2) *
                              PXSTRIDE(lstride) + (x << ss_hor)];
-    if (chroma) {
-        wiener_params.single.ss_ver = ss_ver;
-        wiener_params.single.ss_hor = ss_hor;
-        wiener_params.single.stride = lstride;
-        wiener_params.single.ds_flt = f->seq_hdr->cfl_ds_filter_index;
-    }
 
     int8_t gdf_err[64*64];
     while (y + stripe_h <= row_h) {
-        if (chroma) {
-            wiener_params.single.luma =
-                &((pixel *) f->lf.p[0])[(x << ss_hor) + (y << ss_ver) * PXSTRIDE(lstride)];
-            wiener_params.single.luma_top = llpf;
-            wiener_params.single.luma_bottom = llpfb;
-        }
         // Change the HAVE_BOTTOM bit in edges to (by64 + 1 != f->sb64h || y + stripe_h != row_h)
         edges ^= (-(by64 + 1 != f->sb64h || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
         const int inc =
@@ -182,11 +181,18 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
             ll_mask = ll_uv_mask_mem;
         }
         if (wiener_fn) {
-            wiener_fn(p, stride, left, top ? top + (2 * !chroma) * PXSTRIDE(stride) : lpf,
+            wiener_fn(p, stride, left, top ? top + 2 * PXSTRIDE(stride) : lpf,
                       lpfb, w, stripe_h, &wiener_params,
                       edges, ll_mask HIGHBD_CALL_SUFFIX);
             if (multi_wiener)
                 wiener_params.multi.noskip_mask += stripe_h >> 2;
+        } else if (uv_filter) {
+            const pixel *luma_uv =
+                &((pixel *) f->lf.p[0])[(x << ss_hor) + (y << ss_ver) * PXSTRIDE(lstride)];
+            dsp->lr.wiener_uv(p, stride, left, top ? top : lpf, lpfb,
+                              luma_uv, llpf, llpfb, lstride,
+                              uv_filter, w, stripe_h, ss_hor, ss_ver, ds_flt,
+                              edges, ll_mask HIGHBD_CALL_SUFFIX);
         }
         if (gdf) {
             dsp->lr.gdf_add(p, stride, gdf_err, 64, w, stripe_h, gdf_scale,
