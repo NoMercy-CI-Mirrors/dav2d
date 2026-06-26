@@ -38,8 +38,11 @@ pb_left_emu_2: db 2, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
                db 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 band_mask: dw 0x0000, 0x0080, 0x00c0, 0x00e0, 0x00f0, 0x00f8, 0x00fc, 0x00fe
 band_mul:  dw 0x0100, 0x0200, 0x0400, 0x0800, 0x1000, 0x2000, 0x4000, 0x8000
+ccso_llm_mul: dw 128, 32768, 64, 16384, 32, 8192, 16, 4096
+              dw   8,  2048,  4,  1024,  2,  512,  1,  256
 
 pb_1: times 4 db 1
+pb_127: times 4 db 127
 pw_255: times 2 dw 255
 
 %macro JMP_TABLE 2-*
@@ -58,6 +61,69 @@ JMP_TABLE ccso_prep_420_clf_8bpc, f0, f1, f2, f3, f4, f5, f6
 %define m(x) mangle(private_prefix %+ _ %+ x %+ SUFFIX)
 
 SECTION .text
+
+%macro CCSO_ADD 2 ; lineq_p, idx_lineq_p
+    mova               m4, %2
+    psrlw              m3, m4, 1
+    pand               m3, m5      ; byte_idx
+    paddb              m0, m4, m4  ; byte_idx & 32
+    pshufb             m1, m6, m3
+    pshufb             m2, m8, m3
+    pblendvb           m1, m2, m0
+    pshufb             m2, m7, m3
+    pshufb             m3, m9, m3
+    pblendvb           m2, m3, m0
+    mova               m3, %1
+    paddb              m0, m0      ; byte_idx & 16
+    pblendvb           m1, m2, m0  ; offset_idxs[byte_idx]
+    psllw              m4, 7       ; half_idx
+    psrlw              m2, m1, 4
+    pblendvb           m1, m2, m4
+    pshufb             m1, m10, m1 ; offset_lut[offset_idx]
+    pabsb              m2, m1
+    paddusb            m0, m3, m1
+    psubusb            m2, m3, m2
+    pblendvb           m0, m2, m1
+    vblendvps          m0, m3, m11 ; ll_mask
+    mova               %1, m0
+%endmacro
+
+INIT_YMM avx2
+cglobal ccso_add_8bpc, 9, 11, 13, line, dst_stride, idx_line, idx_stride, \
+                                  offset_idxs, offset_lut, w, h, ll_mask
+    mova              m12, [ccso_llm_mul]
+    mov                hd, hm
+    movifnidn          wd, wm
+    lea          ll_maskq, [ll_maskq+hq*2]
+    neg                hq
+    vpbroadcastd       m5, [pb_127]
+    vbroadcasti128     m6, [offset_idxsq+16*0]
+    vbroadcasti128     m7, [offset_idxsq+16*1]
+    vbroadcasti128     m8, [offset_idxsq+16*2]
+    vbroadcasti128     m9, [offset_idxsq+16*3]
+    vpbroadcastq      m10, [offset_lutq]
+    lea                r9, [idx_strideq*3]
+    lea               r10, [dst_strideq*3]
+.loop:
+    vpbroadcastw      m11, [ll_maskq+hq*2]
+    pmullw            m11, m12
+    CCSO_ADD [lineq+dst_strideq*0+32*0], [idx_lineq+idx_strideq*0+32*0]
+    CCSO_ADD [lineq+dst_strideq*1+32*0], [idx_lineq+idx_strideq*1+32*0]
+    CCSO_ADD [lineq+dst_strideq*2+32*0], [idx_lineq+idx_strideq*2+32*0]
+    CCSO_ADD [lineq+r10          +32*0], [idx_lineq+r9           +32*0]
+    cmp                wd, 32
+    jle .loop_end
+    pslld             m11, 16
+    CCSO_ADD [lineq+dst_strideq*0+32*1], [idx_lineq+idx_strideq*0+32*1]
+    CCSO_ADD [lineq+dst_strideq*1+32*1], [idx_lineq+idx_strideq*1+32*1]
+    CCSO_ADD [lineq+dst_strideq*2+32*1], [idx_lineq+idx_strideq*2+32*1]
+    CCSO_ADD [lineq+r10          +32*1], [idx_lineq+r9           +32*1]
+.loop_end:
+    lea             lineq, [lineq+dst_strideq*4]
+    lea         idx_lineq, [idx_lineq+idx_strideq*4]
+    add                hq, 4
+    jl .loop
+    RET
 
 INIT_YMM avx2
 cglobal ccso_prep_444_bo_8bpc, 3, 5, 4, dst, src, ss, mbl2
