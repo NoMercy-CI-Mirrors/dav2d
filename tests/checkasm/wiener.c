@@ -86,9 +86,7 @@ static void init_filter(int8_t* filter, const int chroma) {
     }
 }
 
-static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c,
-                                const int bpc)
-{
+static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
     PIXEL_RECT(top, 64, 4);
@@ -105,9 +103,10 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c,
                  const WienerParams *params, enum LrEdgeFlags edges,
                  const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
 
-    if (check_func(c->ns_wiener_single, "wiener_single_%dbpc", bpc)) {
+    if (check_func(c->ns_wiener_single, "wiener_single_%dbpc", BITDEPTH)) {
         const int base_w = 8 * (1 + (rnd() & 7));
         const int base_h = 8 * (1 + (rnd() & 7));
+        const int bpc = BITDEPTH == 8 ? 8 : 10 + (rnd() & 2);
         const int bitdepth_max = (1 << bpc) - 1;
         init_filter(filter, 0);
 
@@ -160,9 +159,7 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c,
     }
 }
 
-static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c,
-                               const int bpc)
-{
+static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
     PIXEL_RECT(top, 64, 4);
@@ -183,9 +180,10 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c,
                  const WienerParams *params, enum LrEdgeFlags edges,
                  const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
 
-    if (check_func(c->ns_wiener_multi, "wiener_multi_user_%dbpc", bpc)) {
+    if (check_func(c->ns_wiener_multi, "wiener_multi_user_%dbpc", BITDEPTH)) {
         const int base_w = 8 * (1 + (rnd() & 7));
         const int base_h = 8 * (1 + (rnd() & 7));
+        const int bpc = BITDEPTH == 8 ? 8 : 10 + (rnd() & 2);
         const int bitdepth_max = (1 << bpc) - 1;
 
         CLEAR_PIXEL_RECT(c_dst);
@@ -261,9 +259,7 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c,
     }
 }
 
-static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c,
-                                    const int bpc)
-{
+static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
     PIXEL_RECT(top, 64, 4);
@@ -282,9 +278,10 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c,
                  const WienerParams *params, enum LrEdgeFlags edges,
                  const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
 
-    if (check_func(c->pc_wiener, "wiener_multi_pretrained_%dbpc", bpc)) {
+    if (check_func(c->pc_wiener, "wiener_multi_pretrained_%dbpc", BITDEPTH)) {
         const int base_w = 8 * (1 + (rnd() & 7));
         const int base_h = 8 * (1 + (rnd() & 7));
+        const int bpc = BITDEPTH == 8 ? 8 : 10 + (rnd() & 2);
         const int bitdepth_max = (1 << bpc) - 1;
 
         CLEAR_PIXEL_RECT(c_dst);
@@ -352,18 +349,12 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c,
 }
 
 void bitfn(checkasm_check_wiener)(void) {
+    Dav2dLoopRestorationDSPContext c;
+    bitfn(dav2d_loop_restoration_dsp_init)(&c);
+
     dav2d_init_wiener_classes();
-#if BITDEPTH == 16
-    const int bpc_min = 10, bpc_max = 12;
-#else
-    const int bpc_min = 8, bpc_max = 8;
-#endif
-    for (int bpc = bpc_min; bpc <= bpc_max; bpc += 2) {
-        Dav2dLoopRestorationDSPContext c;
-        bitfn(dav2d_loop_restoration_dsp_init)(&c, bpc);
-        check_wiener_single(&c, bpc);
-        check_wiener_multi(&c, bpc);
-        check_wiener_pretrained(&c, bpc);
-    }
+    check_wiener_single(&c);
+    check_wiener_multi(&c);
+    check_wiener_pretrained(&c);
     report("wiener");
 }

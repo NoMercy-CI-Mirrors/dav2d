@@ -5299,7 +5299,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             dav2d_itx_dsp_init_##bd##bpc(&dsp->itx); \
             dav2d_stx_dsp_init_##bd##bpc(&dsp->stx); \
             dav2d_deblock_dsp_init_##bd##bpc(&dsp->lf); \
-            dav2d_loop_restoration_dsp_init_##bd##bpc(&dsp->lr, bpc); \
+            dav2d_loop_restoration_dsp_init_##bd##bpc(&dsp->lr); \
             dav2d_mc_dsp_init_##bd##bpc(&dsp->mc); \
             dav2d_film_grain_dsp_init_##bd##bpc(&dsp->fg); \
             break

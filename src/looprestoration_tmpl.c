@@ -869,26 +869,23 @@ static void gdf_add_c(pixel *p_line, const ptrdiff_t stride,
 #endif
 #endif
 
-COLD void bitfn(dav2d_loop_restoration_dsp_init)(Dav2dLoopRestorationDSPContext *const c,
-                                                 const int bpc)
-{
+COLD void bitfn(dav2d_loop_restoration_dsp_init)(Dav2dLoopRestorationDSPContext *const c) {
     c->ns_wiener_single = ns_wiener_single_y_c;
     c->ns_wiener_multi = ns_wiener_multi_c;
     c->pc_wiener = pc_wiener_c;
     c->wiener_uv = ns_wiener_single_uv_c;
-
     c->gdf_add = gdf_add_c;
     c->gdf_prep = gdf_prep_c;
 
 #if HAVE_ASM && 0
 #if ARCH_AARCH64 || ARCH_ARM
-    loop_restoration_dsp_init_arm(c, bpc);
+    loop_restoration_dsp_init_arm(c);
 #elif ARCH_LOONGARCH64
-    loop_restoration_dsp_init_loongarch(c, bpc);
+    loop_restoration_dsp_init_loongarch(c);
 #elif ARCH_PPC64LE
-    loop_restoration_dsp_init_ppc(c, bpc);
+    loop_restoration_dsp_init_ppc(c);
 #elif ARCH_X86
-    loop_restoration_dsp_init_x86(c, bpc);
+    loop_restoration_dsp_init_x86(c);
 #endif
 #endif
 }

@@ -199,6 +199,6 @@ typedef struct Dav2dLoopRestorationDSPContext {
     gdf_add_fn gdf_add;
 } Dav2dLoopRestorationDSPContext;
 
-bitfn_decls(void dav2d_loop_restoration_dsp_init, Dav2dLoopRestorationDSPContext *c, int bpc);
+bitfn_decls(void dav2d_loop_restoration_dsp_init, Dav2dLoopRestorationDSPContext *c);
 
 #endif /* DAV2D_SRC_LOOPRESTORATION_H */
