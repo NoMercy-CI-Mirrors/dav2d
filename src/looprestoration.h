@@ -178,20 +178,16 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
             const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 typedef decl_wiener_filter_uv_fn(*wienerfilter_uv_fn);
 
-#define decl_gdf_prep_fn(name)  \
-void (name)(int8_t *dst, ptrdiff_t dst_stride, \
-            const pixel *p, ptrdiff_t stride, \
-            const_left_pixel_row left, \
-            const pixel *top, const pixel *bottom, int w, int h, \
-            int ref_dst_idx, int qp_idx, \
-            enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+#define decl_gdf_prep_fn(name) \
+void (name)(int8_t *dst, const pixel *p, ptrdiff_t stride, \
+            const_left_pixel_row left, const pixel *top, \
+            const pixel *bottom, int w, int h, int ref_dst_idx, \
+            int qp_idx, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_gdf_prep_fn(*gdf_prep_fn);
 
 #define decl_gdf_add_fn(name) \
-void (name)(pixel *p, ptrdiff_t dst_stride, \
-            const int8_t *err, const ptrdiff_t err_stride, \
-            const int w, const int h, const int scale, \
-            const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
+void (name)(pixel *p, ptrdiff_t dst_stride, const int8_t *err, int w, int h, \
+            int scale, const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 typedef decl_gdf_add_fn(*gdf_add_fn);
 
 typedef struct Dav2dLoopRestorationDSPContext {

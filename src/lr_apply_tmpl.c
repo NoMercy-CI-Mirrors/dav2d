@@ -29,6 +29,7 @@
 
 #include <stdio.h>
 
+#include "common/attributes.h"
 #include "common/intops.h"
 
 #include "src/lr_apply.h"
@@ -147,7 +148,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         &f->lf.lr_db_line[0][(!f->lf.top_lr_db_toggle * 4 + 2) *
                              PXSTRIDE(lstride) + (x << ss_hor)];
 
-    int8_t gdf_err[64*64];
+    ALIGN_STK_64(int8_t, gdf_err, 64 * 64,);
     while (y + stripe_h <= row_h) {
         // Change the HAVE_BOTTOM bit in edges to (by64 + 1 != f->sb64h || y + stripe_h != row_h)
         edges ^= (-(by64 + 1 != f->sb64h || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
@@ -160,8 +161,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                   f->lf.mask[sb256_idx].gdf[(((y + inc) >> 4) & 12) + sb64x_idx];
 
         if (gdf) {
-            dsp->lr.gdf_prep(gdf_err, 64, p, stride, left, top ? top : lpf, lpfb,
-                             w, stripe_h, ref_dst_idx, qp_idx, edges HIGHBD_CALL_SUFFIX);
+            dsp->lr.gdf_prep(gdf_err, p, stride, left, top ? top : lpf, lpfb, w,
+                             stripe_h, ref_dst_idx, qp_idx, edges HIGHBD_CALL_SUFFIX);
         }
         const int y4 = ((y << ss_ver) & 255) >> 2;
         const uint16_t (*ll_mask)[4];
@@ -195,7 +196,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                               edges, ll_mask HIGHBD_CALL_SUFFIX);
         }
         if (gdf) {
-            dsp->lr.gdf_add(p, stride, gdf_err, 64, w, stripe_h, gdf_scale,
+            dsp->lr.gdf_add(p, stride, gdf_err, w, stripe_h, gdf_scale,
                             ll_mask HIGHBD_CALL_SUFFIX);
         }
         // this loop runs twice at the bottom of a frame, if e.g. the sequence

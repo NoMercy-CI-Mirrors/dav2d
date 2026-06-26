@@ -690,13 +690,16 @@ static void compute_gradient_row(uint16_t (*dst)[4], const pixel **src,
     }
 }
 
-static void gdf_prep_c(int8_t *dst, const ptrdiff_t dst_stride,
-                       const pixel *p, const ptrdiff_t stride,
+static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
                        const pixel (*left)[8], const pixel *lpf,
                        const pixel *lpf_bottom, const int w, const int h,
                        const int ref_dst_idx, const int qp_idx,
                        enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 {
+    assert(w > 0 && w <= 64);
+    assert(h > 0 && h <= 64);
+    assert(ref_dst_idx >= 0 && ref_dst_idx < 6);
+    assert(qp_idx >= 0 && qp_idx < 6);
     const int bitdepth = bitdepth_from_max(bitdepth_max);
     const int down_shift = bitdepth == 12 ? 2 : 0;
     const int up_shift = bitdepth == 8 ? 2 : 0;
@@ -820,16 +823,19 @@ static void gdf_prep_c(int8_t *dst, const ptrdiff_t dst_stride,
         }
 
         for (int r = 0; r < 12; r++) ptrs[r] = ptrs[r+1];
-        dst += dst_stride;
+        dst += 64;
         p += PXSTRIDE(stride);
     }
 }
 
 static void gdf_add_c(pixel *p_line, const ptrdiff_t stride,
-                      const int8_t *err_line, const ptrdiff_t err_stride,
+                      const int8_t *err_line,
                       const int w, const int h, const int scale,
-                      const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
+                      const uint16_t (*const ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
+    assert(w > 0 && w <= 64);
+    assert(h > 0 && h <= 64);
+    assert(scale > 0 && scale <= 4);
     const int shift = 12 - bitdepth_from_max(bitdepth_max);
     const int rnd = 1 << shift >> 1;
     for (int by = 0; by < h >> 2; by++) {
@@ -843,11 +849,11 @@ static void gdf_add_c(pixel *p_line, const ptrdiff_t stride,
                     p[x] = iclip_pixel(p[x] + apply_sign((abs(diff) + rnd) >> shift, diff));
                 }
                 p += PXSTRIDE(stride);
-                err += err_stride;
+                err += 64;
             }
         }
         p_line += PXSTRIDE(stride) * 4;
-        err_line += err_stride * 4;
+        err_line += 64 * 4;
     }
 }
 
