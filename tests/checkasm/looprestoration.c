@@ -41,6 +41,14 @@ static int to_binary(int x) { /* 0-63 -> 000000-111111 */
         625 * (x & 16) + 3125 * (x & 32);
 }
 
+static int is_edge_combination_valid(const enum LrEdgeFlags edges) {
+    if ((edges & LR_HAVE_TOP) && (edges & LR_HAVE_TOP_INTEGRATED))
+        return 0;
+    if ((edges & LR_HAVE_BOTTOM) && (edges & LR_HAVE_BOTTOM_INTEGRATED))
+        return 0;
+    return 1;
+}
+
 static void init_tmp(pixel *buf, const ptrdiff_t stride,
                      const int w, const int h, const int bitdepth_max)
 {
@@ -117,11 +125,8 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
         init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
         for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
-            if ((edges & LR_HAVE_TOP && edges & LR_HAVE_TOP_INTEGRATED) ||
-                (edges & LR_HAVE_BOTTOM && edges & LR_HAVE_BOTTOM_INTEGRATED))
-            {
+            if (!is_edge_combination_valid(edges))
                 continue;
-            }
 
             for (int i = 0; i < 64; i++)
                 ll_mask[i][0] = rnd() & 0xffff;
@@ -145,7 +150,7 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
                                                   a_dst, a_dst_stride,
                                                   w, h, "dst", 64, 1))
             {
-                fprintf(stderr, "size = %dx%d, edges = %04d\n",
+                fprintf(stderr, "size = %dx%d, edges = %06d\n",
                         w, h, to_binary(edges));
                 break;
             }
@@ -193,11 +198,8 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
         init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
         for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
-            if ((edges & LR_HAVE_TOP && edges & LR_HAVE_TOP_INTEGRATED) ||
-                (edges & LR_HAVE_BOTTOM && edges & LR_HAVE_BOTTOM_INTEGRATED))
-            {
+            if (!is_edge_combination_valid(edges))
                 continue;
-            }
 
             for (int i = 0; i < 16; i++)
                 init_filter(filters[i], 0);
@@ -291,11 +293,8 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c) {
         init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
         for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
-            if ((edges & LR_HAVE_TOP && edges & LR_HAVE_TOP_INTEGRATED) ||
-                (edges & LR_HAVE_BOTTOM && edges & LR_HAVE_BOTTOM_INTEGRATED))
-            {
+            if (!is_edge_combination_valid(edges))
                 continue;
-            }
 
             for (int i = 0; i < 64; i++) {
                 ll_mask[i][0] = rnd() & 0xffff;
@@ -345,6 +344,60 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c) {
                           HIGHBD_TAIL_SUFFIX);
             }
         }
+    }
+}
+
+static void check_gdf_prep(Dav2dLoopRestorationDSPContext *const c) {
+    ALIGN_STK_64(int8_t, c_dst, 64 * 64,);
+    ALIGN_STK_64(int8_t, a_dst, 64 * 64,);
+    ALIGN_STK_64(pixel, left, 64, [8]);
+    PIXEL_RECT(p, 64, 64);
+    PIXEL_RECT(top, 64, 4);
+    PIXEL_RECT(bottom, 64, 4);
+
+    declare_func(void, int8_t *dst, const pixel *p, ptrdiff_t stride,
+                 const pixel (*left)[8], const pixel *lpf,
+                 const pixel *lpf_bottom, int w, int h, int ref_dst_idx,
+                 int qp_idx, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX);
+
+    if (check_func(c->gdf_prep, "gdf_prep_%dbpc", BITDEPTH)) {
+#if BITDEPTH == 16
+        const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+        const int bitdepth_max = 0xff;
+#endif
+        const int base_w = 1 + (rnd() & 63);
+        const int base_h = 1 + (rnd() & 63);
+
+        init_tmp(p - 6, p_stride, 64 + 12, 64, bitdepth_max);
+        init_tmp(top - 6, top_stride, 64 + 12,  8, bitdepth_max);
+        init_tmp(bottom - 6, bottom_stride, 64 + 12,  8, bitdepth_max);
+        init_tmp(*left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
+
+        for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
+            if (!is_edge_combination_valid(edges))
+                continue;
+
+            const int w = edges & LR_HAVE_RIGHT ? 64 : base_w;
+            const int h = (edges & (LR_HAVE_BOTTOM | LR_HAVE_BOTTOM_INTEGRATED)) ?
+                          64 : base_h;
+            const int ref_dst_idx = rnd() % 6;
+            const int qp_idx = rnd() % 6;
+            memset(a_dst, 0xaa, 64 * 64);
+
+            call_ref(c_dst, p, p_stride, left, top, bottom, w, h,
+                     ref_dst_idx, qp_idx, edges HIGHBD_TAIL_SUFFIX);
+            call_new(a_dst, p, p_stride, left, top, bottom, w, h,
+                     ref_dst_idx, qp_idx, edges HIGHBD_TAIL_SUFFIX);
+            if (checkasm_check(int8_t, c_dst, 64, a_dst, 64, w, h, "dst")) {
+                fprintf(stderr, "size = %dx%d, edges = %06d\n",
+                        w, h, to_binary(edges));
+                break;
+            }
+        }
+
+        bench_new(a_dst, p, p_stride, left, top, bottom,
+                  64, 64, 0, 0, 0xf HIGHBD_TAIL_SUFFIX);
     }
 }
 
@@ -401,6 +454,7 @@ void bitfn(checkasm_check_looprestoration)(void) {
     check_wiener_pretrained(&c);
     report("wiener");
 
+    check_gdf_prep(&c);
     check_gdf_add(&c);
     report("gdf");
 }
