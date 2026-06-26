@@ -2100,11 +2100,14 @@ static int tip_pred(Dav2dTaskContext *const t,
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)];
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (ref.ref[0] * 8 + ref.ref[1])));
+    const int x4e = t->bx >> 6, bx4 = t->bx & 63;
     for (int y = 0; y < h4; y += step, rmv_line += 16 * step >> 1) {
-        const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * t_stride;
+        const ptrdiff_t off_y8 =
+            (((t->by + y) & (f->sb_step - 1)) >> 1) * (t_stride >> 5) + x4e;
+        const struct refmvs_sngl_mv_block *const mvr = &t->rt.rp_proj[off_y8];
         for (int x = 0; x < w4; x += step) {
-            const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
-            mv tmv = t->rt.rp_proj[off_8x8].mv;
+            const ptrdiff_t off_x8 = (bx4 + x) >> 1;
+            mv tmv = mvr->mv[off_x8];
             if (tmv.n == INVALID_MV) tmv.n = 0;
             union mv (*const rmv)[2] = rmv_line[x >> 1], *const cmv = rmv[0];
             int left[2], top[2];

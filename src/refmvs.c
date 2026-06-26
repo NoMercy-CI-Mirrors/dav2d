@@ -98,11 +98,16 @@ static int add_candidate_sngl(DB_ARGS(const refmvs_frame *const rf,
     return 1;
 }
 
+struct refmvs_sngl_mv_cache {
+    mv mv[4];
+    uint8_t ref[4];
+};
+
 static void add_candidate_c2s(DB_ARGS(const refmvs_frame *const rf,
                                       const int by4, const int bx4,
                                       const int y_off, const int x_off,
                                       const char *const tag, const int refidx)
-                              refmvs_sngl_mv_block *const mvstack,
+                              struct refmvs_sngl_mv_cache *const mvstack,
                               int *const cnt, const int max_cnt,
                               const int ref, const mv cand_mv,
                               int *const iter_cntr, const int max_iter)
@@ -111,7 +116,7 @@ static void add_candidate_c2s(DB_ARGS(const refmvs_frame *const rf,
     RDB_ONLY(int did_check = 0);
     if (*iter_cntr < max_iter) {
         for (int m = 0; m < last; m++)
-            if (mvstack[m].mv.n == cand_mv.n && mvstack[m].ref == ref) {
+            if (mvstack->mv[m].n == cand_mv.n && mvstack->ref[m] == ref) {
                 *iter_cntr += m + 1;
                 DEBUG_REFMV_printf("%s[%d:%d]: skipping[%d] y=%d,x=%d,r=%d "
                                    "at offset y=%d,x=%d\n",
@@ -125,8 +130,8 @@ static void add_candidate_c2s(DB_ARGS(const refmvs_frame *const rf,
 
     if (last >= max_cnt) return;
 
-    mvstack[last].mv = cand_mv;
-    mvstack[last].ref = ref;
+    mvstack->mv[last] = cand_mv;
+    mvstack->ref[last] = ref;
     DEBUG_REFMV_printf("%s[%d:%d]: %s[%d] y=%d,x=%d,r=%d at offset y=%d,x=%d\n",
                        tag, refidx, *iter_cntr, did_check ? "adding" : "tailing",
                        *cnt, cand_mv.y, cand_mv.x, ref, y_off, x_off);
@@ -177,7 +182,7 @@ static int add_candidate_comp(DB_ARGS(const refmvs_frame *const rf,
 
 struct refmvs_state {
     refmvs_candidate dr[6], *mv;
-    refmvs_sngl_mv_block sngl[4];
+    struct refmvs_sngl_mv_cache sngl;
     int drvd_cnt, sngl_cnt, *cnt;
     int drvd_iter_cntr, sngl_iter_cntr, iter_cntr;
     ptrdiff_t b8x8;
@@ -224,7 +229,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
             } else if (b->ref.ref[0] == TIP_FRAME &&
                        rf->tip.ref.ref[n] == ref.ref[0])
             {
-                union mv tmv = rt->rp_proj[off_8x8].mv;
+                union mv tmv = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
                 if (tmv.n == INVALID_MV) tmv.n = 0;
                 const mv tipmv = scale_mv(tmv, rf->tip.sf[n]);
                 const mv cand_mv = (mv) {
@@ -264,7 +269,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                 mv a_mv, b_mv;
                 if (b->ref.ref[0] == TIP_FRAME) {
                     a_mv = rt->rp_traj[rf->tip.ref.ref[n]][st->b8x8];
-                    union mv tmv = rt->rp_proj[off_8x8].mv;
+                    union mv tmv = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
                     if (tmv.n == INVALID_MV) tmv.n = 0;
                     const mv tipmv = scale_mv(tmv, rf->tip.sf[n]);
                     b_mv = (mv) {
@@ -293,7 +298,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                 mv cand_mv;
                 int den;
                 if ((unsigned) b->ref.ref[0] == TIP_FRAME) {
-                    union mv tmv = rt->rp_proj[off_8x8].mv;
+                    union mv tmv = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
                     if (tmv.n == INVALID_MV) tmv.n = 0;
                     const mv tipmv = scale_mv(tmv, rf->tip.sf[n]);
                     cand_mv = (mv) {
@@ -317,7 +322,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
     } else if (b->ref.ref[0] == TIP_FRAME &&
                ref.pair == rf->tip.ref.pair)
     {
-        mv tmv = rt->rp_proj[off_8x8].mv;
+        mv tmv = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
         if (tmv.n == INVALID_MV) tmv.n = 0;
         const mv tip0mv = scale_mv(tmv, rf->tip.sf[0]);
         const mv tip1mv = scale_mv(tmv, rf->tip.sf[1]);
@@ -382,12 +387,12 @@ static void add_spatial_candidate(const int y_off, const int x_off,
         const int nc = ref.ref[ns] != b->ref.ref[0];
         int oidx;
         for (oidx = 0; oidx < st->sngl_cnt; oidx++)
-            if (ref.ref[!ns] == st->sngl[oidx].ref)
+            if (ref.ref[!ns] == st->sngl.ref[oidx])
                 break;
         if (oidx < st->sngl_cnt) {
             union mv cand_mv[2];
             cand_mv[ns] = b->mv[nc];
-            cand_mv[!ns] = st->sngl[oidx].mv;
+            cand_mv[!ns] = st->sngl.mv[oidx];
             add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                        y_off, x_off, "mvxp-spc")
                                st->dr, &st->drvd_cnt, 4, weight, 8,
@@ -397,7 +402,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                            gmv[ns] : b->mv[nc];
         add_candidate_c2s(DB_ARGS(rf, st->by4, st->bx4,
                                   y_off, x_off, "sngl-c", ns)
-                          st->sngl, &st->sngl_cnt, 4, b->ref.ref[nc],
+                          &st->sngl, &st->sngl_cnt, 4, b->ref.ref[nc],
                           cand_mv, &st->sngl_iter_cntr, 2);
     }
 }
@@ -452,10 +457,11 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
     if ((unsigned) ref.ref[0] >= TIP_FRAME) return 0;
     union mv mv = rt->rp_traj[ref.ref[0]][off_8x8];
     if (!rf->seq_hdr->mv_traj || mv.n == INVALID_MV) {
-        mv = rt->rp_proj[off_8x8].mv;
+        mv = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
         if (mv.n == INVALID_MV) return 0;
         mv = dav2d_mv_projection(mv, rf->pocdiff[ref.ref[0]],
-                                 rt->rp_proj[off_8x8].ref, -0xffff, 0xffff);
+                                 rt->rp_proj[off_8x8 >> 5].ref[off_8x8 & 31],
+                                 -0xffff, 0xffff);
     }
 
     if (ref.ref[1] == -1) {
@@ -466,10 +472,11 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
     }
     union mv mv2 = rt->rp_traj[ref.ref[1]][off_8x8];
     if (!rf->seq_hdr->mv_traj || mv2.n == INVALID_MV) {
-        mv2 = rt->rp_proj[off_8x8].mv;
+        mv2 = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
         if (mv2.n == INVALID_MV) return 0;
         mv2 = dav2d_mv_projection(mv2, rf->pocdiff[ref.ref[1]],
-                                  rt->rp_proj[off_8x8].ref, -0xffff, 0xffff);
+                                  rt->rp_proj[off_8x8 >> 5].ref[off_8x8 & 31],
+                                  -0xffff, 0xffff);
     }
     const union mv cand_mv[2] = { [0] = mv, [1] = mv2 };
     return add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4, y_off, x_off, "tpl")
@@ -1110,7 +1117,7 @@ void dav2d_refmvs_tile_sbrow_init(refmvs_tile *const rt,
     const ptrdiff_t off2 = sbsz8 * off1;
     const ptrdiff_t off3 = rf->have_frame_threading ? (sby * sbsz8) * rf->rp_stride :
                            (sbsz8 + 2) * off1 + 2 * rf->rp_stride;
-    rt->rp_proj = &rf->rp_proj[off3];
+    rt->rp_proj = &rf->rp_proj[off3 >> 5];
     for (int n = 0; n < 7; n++)
         rt->rp_traj[n] = &rf->rp_traj[n][off2];
     rt->ra = &rf->ra[off1];
@@ -1384,59 +1391,67 @@ static inline mv dequantize_mv(const union qmv mv) {
 }
 
 static void tip_projection(const refmvs_frame *const rf,
-                           refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
+                           refmvs_sngl_mv_block *const rp_proj,
+                           const ptrdiff_t stride,
                            const int col_start8, const int col_end8,
                            const int row_start8, int row_end8,
                            const int mfmv_sbsz8, const int sbsz8,
                            const int tmvp_sample_step)
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
-        const int xend = imin(col_end8, sx + mfmv_sbsz8);
+        const int xend = imin(col_end8 - sx, mfmv_sbsz8);
         for (int y = row_start8; y < row_end8; y += tmvp_sample_step) {
-            const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
-            for (int x = sx; x < xend; x += tmvp_sample_step) {
-                const ptrdiff_t pos = pos_base + x;
-                const union mv mv = rp_proj[pos].mv;
+            const ptrdiff_t pos_base = ((y & (sbsz8 - 1)) * stride + sx) >> 5;
+            refmvs_sngl_mv_block *const rp_proj_ptr = &rp_proj[pos_base];
+            const int bx8 = sx & 31;
+            for (int x = 0; x < xend; x += tmvp_sample_step) {
+                const ptrdiff_t pos = bx8 + x;
+                const union mv mv = rp_proj_ptr->mv[pos];
                 if (mv.n == INVALID_MV) continue;
-                rp_proj[pos].mv = dav2d_mv_projection(mv, rf->tip.delta,
-                                                      rp_proj[pos].ref, -2047, 2047);
-                rp_proj[pos].ref = rf->tip.delta;
+                rp_proj_ptr->mv[pos] =
+                    dav2d_mv_projection(mv, rf->tip.delta,
+                                        rp_proj_ptr->ref[pos],
+                                        -2047, 2047);
+                rp_proj_ptr->ref[pos] = rf->tip.delta;
             }
         }
     }
 }
 
 static void fill_holes(const refmvs_frame *const rf,
-                       refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
+                       refmvs_sngl_mv_block *const rp_proj,
+                       const ptrdiff_t stride,
                        const int col_start8, const int col_end8,
                        const int row_start8, int row_end8,
                        const int mfmv_sbsz8, const int sbsz8,
                        const int tmvp_sample_step)
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
-        const int xend = imin(col_end8, sx + mfmv_sbsz8);
+        const int xend = imin(col_end8 - sx, mfmv_sbsz8);
         for (int y = row_start8; y < row_end8; y += tmvp_sample_step) {
             const int ystart = y & ~(mfmv_sbsz8 - 1);
             const int yend = imin(ystart + mfmv_sbsz8, row_end8);
-            const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
-            for (int x = sx; x < xend; x += tmvp_sample_step) {
-                const ptrdiff_t pos = pos_base + x;
-                const union mv mv = rp_proj[pos].mv;
+            const ptrdiff_t pos_base = ((y & (sbsz8 - 1)) * stride + sx) >> 5;
+            refmvs_sngl_mv_block *const rp_proj_ptr = &rp_proj[pos_base];
+            const int bx8 = sx & 31;
+            for (int x = 0; x < xend; x += tmvp_sample_step) {
+                const ptrdiff_t pos = bx8 + x;
+                const union mv mv = rp_proj_ptr->mv[pos];
                 if (mv.n == INVALID_MV) continue;
-#define copy(off) do { \
-                if (rp_proj[pos + off].mv.n == INVALID_MV) { \
-                    rp_proj[pos + off].mv = mv; \
-                    rp_proj[pos + off].ref = rf->tip.delta; \
+#define copy(dx, dy) do { \
+                if (rp_proj_ptr[dy * stride >> 5].mv[pos + dx].n == INVALID_MV) { \
+                    rp_proj_ptr[dy * stride >> 5].mv[pos + dx] = mv; \
+                    rp_proj_ptr[dy * stride >> 5].ref[pos + dx] = rf->tip.delta; \
                 } \
             } while (0)
-                if (x - tmvp_sample_step >= sx)
-                    copy(-tmvp_sample_step);
+                if (x - tmvp_sample_step >= 0)
+                    copy(-tmvp_sample_step, 0);
                 if (x + tmvp_sample_step < xend)
-                    copy(+tmvp_sample_step);
+                    copy(+tmvp_sample_step, 0);
                 if (y - tmvp_sample_step >= ystart)
-                    copy(-tmvp_sample_step * stride);
+                    copy(0, -tmvp_sample_step);
                 if (y + tmvp_sample_step < yend)
-                    copy(+tmvp_sample_step * stride);
+                    copy(0, +tmvp_sample_step);
 #undef copy
             }
         }
@@ -1444,7 +1459,8 @@ static void fill_holes(const refmvs_frame *const rf,
 }
 
 static void smoothen(const refmvs_frame *const rf,
-                     refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
+                     refmvs_sngl_mv_block *const rp_proj,
+                     const ptrdiff_t stride,
                      const int col_start8, const int col_end8,
                      const int row_start8, int row_end8,
                      const int mfmv_sbsz8, const int sbsz8,
@@ -1455,116 +1471,126 @@ static void smoothen(const refmvs_frame *const rf,
     };
     union mv mv_line[32];
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
-        const int xend = imin(col_end8, sx + mfmv_sbsz8);
+        const int xend = imin(col_end8 - sx, mfmv_sbsz8);
         int first_line = 1, y;
         for (y = row_start8; y < row_end8; y += tmvp_sample_step, first_line = 0) {
             const int ystart = y & ~(mfmv_sbsz8 - 1);
             const int yend = imin(ystart + mfmv_sbsz8, row_end8);
-            const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
-            for (int x = sx; x < xend; x += tmvp_sample_step) {
-                const ptrdiff_t pos = pos_base + x;
+            const ptrdiff_t pos_base = ((y & (sbsz8 - 1)) * stride + sx) >> 5;
+            refmvs_sngl_mv_block *const rp_proj_ptr = &rp_proj[pos_base];
+            const int bx8 = sx & 31;
+            for (int x = 0; x < xend; x += tmvp_sample_step) {
+                const ptrdiff_t pos = bx8 + x;
                 int sum_x = 0, sum_y = 0, sum_n = 0;
-#define add(p) do { \
-                if (rp_proj[p].mv.n != INVALID_MV) { \
-                    sum_x += rp_proj[p].mv.x; \
-                    sum_y += rp_proj[p].mv.y; \
+#define add(dx, dy) do { \
+                if (rp_proj_ptr[dy * stride >> 5].mv[pos + dx].n != INVALID_MV) { \
+                    sum_x += rp_proj_ptr[dy * stride >> 5].mv[pos + dx].x; \
+                    sum_y += rp_proj_ptr[dy * stride >> 5].mv[pos + dx].y; \
                     sum_n++; \
                 } \
             } while (0)
-                add(pos);
-                if (x - tmvp_sample_step >= sx)
-                    add(pos - tmvp_sample_step);
+                add(0, 0);
+                if (x - tmvp_sample_step >= 0)
+                    add(-tmvp_sample_step, 0);
                 if (x + tmvp_sample_step < xend)
-                    add(pos + tmvp_sample_step);
+                    add(+tmvp_sample_step, 0);
                 if (y - tmvp_sample_step >= ystart)
-                    add(pos - tmvp_sample_step * stride);
+                    add(0, -tmvp_sample_step);
                 if (y + tmvp_sample_step < yend)
-                    add(pos + tmvp_sample_step * stride);
+                    add(0, +tmvp_sample_step);
 #undef add
                 if (!first_line) {
-                    rp_proj[pos - tmvp_sample_step * stride].mv = mv_line[x - sx];
-                    rp_proj[pos - tmvp_sample_step * stride].ref = rf->tip.delta;
+                    rp_proj_ptr[-tmvp_sample_step * stride >> 5].mv[pos] = mv_line[x];
+                    rp_proj_ptr[-tmvp_sample_step * stride >> 5].ref[pos] = rf->tip.delta;
                 }
                 if (sum_n) {
-                    mv_line[x - sx].y = (int)((int64_t) sum_y * idiv[sum_n - 1] +
-                                                        0x8000 - (sum_y < 0)) >> 16;
-                    mv_line[x - sx].x = (int)((int64_t) sum_x * idiv[sum_n - 1] +
-                                                        0x8000 - (sum_x < 0)) >> 16;
+                    mv_line[x].y = (int)((int64_t) sum_y * idiv[sum_n - 1] +
+                                                   0x8000 - (sum_y < 0)) >> 16;
+                    mv_line[x].x = (int)((int64_t) sum_x * idiv[sum_n - 1] +
+                                                   0x8000 - (sum_x < 0)) >> 16;
                 } else {
-                    mv_line[x - sx].n = INVALID_MV;
+                    mv_line[x].n = INVALID_MV;
                 }
             }
         }
         if (!first_line) {
-            const ptrdiff_t pos_base = ((y - tmvp_sample_step) & (sbsz8 - 1)) * stride;
-            for (int x = sx; x < xend; x += tmvp_sample_step) {
-                rp_proj[pos_base + x].mv = mv_line[x - sx];
-                rp_proj[pos_base + x].ref = rf->tip.delta;
+            const ptrdiff_t pos_base = ((y - tmvp_sample_step) & (sbsz8 - 1)) * stride + sx;
+            refmvs_sngl_mv_block *const rp_proj_ptr = &rp_proj[pos_base >> 5];
+            const int bx8 = sx & 31;
+            for (int x = 0; x < xend; x += tmvp_sample_step) {
+                const ptrdiff_t pos = bx8 + x;
+                rp_proj_ptr->mv[pos] = mv_line[x];
+                rp_proj_ptr->ref[pos] = rf->tip.delta;
             }
         }
     }
 }
 
-static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t stride,
+static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj,
+                          const ptrdiff_t stride,
                           const int col_start8, const int col_end8,
                           const int row_start8, int row_end8,
                           const int mfmv_sbsz8, const int sbsz8)
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
-        const int xend = imin(col_end8, sx + mfmv_sbsz8);
+        const int xend = imin(col_end8 - sx, mfmv_sbsz8);
         for (int y = row_start8; y < row_end8; y += 2) {
             const int ystart = y & ~(mfmv_sbsz8 - 1);
             const int yend = imin(ystart + mfmv_sbsz8, row_end8);
-            const ptrdiff_t pos_base = (y & (sbsz8 - 1)) * stride;
-            for (int x = sx; x < xend; x += 2) {
-                const ptrdiff_t pos = pos_base + x;
-                const union mv mv = rp_proj[pos].mv;
+            const ptrdiff_t pos_base = ((y & (sbsz8 - 1)) * stride + sx) >> 5;
+            refmvs_sngl_mv_block *const rp_proj_ptr = &rp_proj[pos_base];
+            const int bx8 = sx & 31;
+            for (int x = 0; x < xend; x += 2) {
+                const ptrdiff_t pos = bx8 + x;
+                const union mv mv = rp_proj_ptr->mv[pos];
                 if (mv.n == INVALID_MV) continue;
                 int mvy = mv.y, mvx = mv.x, sum_y = mvy, sum_x = mvx, sum_n = 1;
-                int ref_off = rp_proj[pos].ref;
+                int ref_off = rp_proj_ptr->ref[pos];
 
                 // right
                 const int have_right = x + 2 < xend;
-                if (have_right && rp_proj[pos + 2].mv.n != INVALID_MV) {
-                    const int right_ref_off = rp_proj[pos + 2].ref;
+                if (have_right && rp_proj_ptr->mv[pos + 2].n != INVALID_MV) {
+                    const int right_ref_off = rp_proj_ptr->ref[pos + 2];
                     const union mv right_mv =
-                        dav2d_mv_projection(rp_proj[pos + 2].mv, ref_off,
+                        dav2d_mv_projection(rp_proj_ptr->mv[pos + 2], ref_off,
                                             right_ref_off, -2047, 2047);
                     sum_x += right_mv.x;
                     sum_y += right_mv.y;
-                    rp_proj[pos + 1].mv.y = (sum_y + (sum_y > 0)) >> 1;
-                    rp_proj[pos + 1].mv.x = (sum_x + (sum_x > 0)) >> 1;
-                    rp_proj[pos + 1].ref = ref_off;
+                    rp_proj_ptr->mv[pos + 1].y = (sum_y + (sum_y > 0)) >> 1;
+                    rp_proj_ptr->mv[pos + 1].x = (sum_x + (sum_x > 0)) >> 1;
+                    rp_proj_ptr->ref[pos + 1] = ref_off;
                     sum_n++;
                 } else {
-                    rp_proj[pos + 1] = rp_proj[pos];
+                    rp_proj_ptr->mv[pos + 1] = rp_proj_ptr->mv[pos];
+                    rp_proj_ptr->ref[pos + 1] = rp_proj_ptr->ref[pos];
                 }
 
                 // bottom
                 const int have_bottom = y + 2 < yend;
-                if (have_bottom && rp_proj[pos + 2 * stride].mv.n != INVALID_MV) {
-                    const int bottom_ref_off = rp_proj[pos + 2 * stride].ref;
+                if (have_bottom && rp_proj_ptr[2 * stride >> 5].mv[pos].n != INVALID_MV) {
+                    const int bottom_ref_off = rp_proj_ptr[2 * stride >> 5].ref[pos];
                     const union mv bottom_mv =
-                        dav2d_mv_projection(rp_proj[pos + 2 * stride].mv, ref_off,
+                        dav2d_mv_projection(rp_proj_ptr[2 * stride >> 5].mv[pos], ref_off,
                                             bottom_ref_off, -2047, 2047);
                     sum_x += bottom_mv.x;
                     const int mx = mvx + bottom_mv.x;
                     sum_y += bottom_mv.y;
                     const int my = mvy + bottom_mv.y;
-                    rp_proj[pos + stride].mv.y = (my + (my > 0)) >> 1;
-                    rp_proj[pos + stride].mv.x = (mx + (mx > 0)) >> 1;
-                    rp_proj[pos + stride].ref = ref_off;
+                    rp_proj_ptr[1 * stride >> 5].mv[pos].y = (my + (my > 0)) >> 1;
+                    rp_proj_ptr[1 * stride >> 5].mv[pos].x = (mx + (mx > 0)) >> 1;
+                    rp_proj_ptr[1 * stride >> 5].ref[pos] = ref_off;
                     sum_n++;
                 } else {
-                    rp_proj[pos + stride] = rp_proj[pos];
+                    rp_proj_ptr[1 * stride >> 5].mv[pos] = rp_proj_ptr->mv[pos];
+                    rp_proj_ptr[1 * stride >> 5].ref[pos] = rp_proj_ptr->ref[pos];
                 }
 
                 // bottom/right
                 if (have_right && have_bottom) {
-                    union mv bottom_right_mv = rp_proj[pos + 2 * (1 + stride)].mv;
+                    union mv bottom_right_mv = rp_proj_ptr[2 * stride >> 5].mv[pos + 2];
                     if (bottom_right_mv.n != INVALID_MV) {
                         const int bottom_right_ref_off =
-                            rp_proj[pos + 2 * (1 + stride)].ref;
+                            rp_proj_ptr[2 * stride >> 5].ref[pos + 2];
                         bottom_right_mv = dav2d_mv_projection(bottom_right_mv, ref_off,
                                                               bottom_right_ref_off,
                                                               -2047, 2047);
@@ -1573,25 +1599,26 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
                         sum_n++;
                     }
                 }
+                union mv *const dst_mv = &rp_proj_ptr[1 * stride >> 5].mv[pos + 1];
                 switch (sum_n) {
                 default: dav2d_unreachable();
                 case 1:
-                    rp_proj[pos + 1 + stride].mv = mv;
+                    *dst_mv = mv;
                     break;
                 case 2:
-                    rp_proj[pos + 1 + stride].mv.y = (sum_y + (sum_y > 0)) >> 1;
-                    rp_proj[pos + 1 + stride].mv.x = (sum_x + (sum_x > 0)) >> 1;
+                    dst_mv->y = (sum_y + (sum_y > 0)) >> 1;
+                    dst_mv->x = (sum_x + (sum_x > 0)) >> 1;
                     break;
                 case 3:
-                    rp_proj[pos + 1 + stride].mv.y = (sum_y * 85 + 128 - (sum_y < 0)) >> 8;
-                    rp_proj[pos + 1 + stride].mv.x = (sum_x * 85 + 128 - (sum_x < 0)) >> 8;
+                    dst_mv->y = (sum_y * 85 + 128 - (sum_y < 0)) >> 8;
+                    dst_mv->x = (sum_x * 85 + 128 - (sum_x < 0)) >> 8;
                     break;
                 case 4:
-                    rp_proj[pos + 1 + stride].mv.y = (sum_y + 1 + (sum_y > 0)) >> 2;
-                    rp_proj[pos + 1 + stride].mv.x = (sum_x + 1 + (sum_x > 0)) >> 2;
+                    dst_mv->y = (sum_y + 1 + (sum_y > 0)) >> 2;
+                    dst_mv->x = (sum_x + 1 + (sum_x > 0)) >> 2;
                     break;
                 }
-                rp_proj[pos + 1 + stride].ref = ref_off;
+                rp_proj_ptr[1 * stride >> 5].ref[pos + 1] = ref_off;
             }
         }
     }
@@ -1798,19 +1825,54 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     const ptrdiff_t offset = sbsz8 * stride * tile_row_idx;
     const ptrdiff_t poffset = rf->have_frame_threading ? row_start8 * stride :
                               (int) (sbsz8 + 2) * stride * tile_row_idx + 2 * stride;
-    refmvs_sngl_mv_block *rp_proj = &rf->rp_proj[poffset];
+    refmvs_sngl_mv_block *rp_proj = &rf->rp_proj[poffset >> 5];
     if (!rf->have_frame_threading) {
-        memcpy(&rp_proj[col_start8 - 2 * rf->rp_stride],
-               &rp_proj[col_start8 + (sbsz8 - 2) * rf->rp_stride],
-               (col_end8 - col_start8) * sizeof(*rp_proj));
-        memcpy(&rp_proj[col_start8 - 1 * rf->rp_stride],
-               &rp_proj[col_start8 + (sbsz8 - 1) * rf->rp_stride],
-               (col_end8 - col_start8) * sizeof(*rp_proj));
+        int x = col_start8;
+        if (x & 31) {
+            int w = 32 - (x & 31);
+            w = imin(w, col_end8 - x);
+            const int bx8 = x & 31;
+            memcpy(&rp_proj[(x - 2 * stride) >> 5].mv[bx8],
+                   &rp_proj[(x + (sbsz8 - 2) * stride) >> 5].mv[bx8],
+                   w * sizeof(mv));
+            memcpy(&rp_proj[(x - 2 * stride) >> 5].ref[bx8],
+                   &rp_proj[(x + (sbsz8 - 2) * stride) >> 5].ref[bx8], w);
+            memcpy(&rp_proj[(x - 1 * stride) >> 5].mv[bx8],
+                   &rp_proj[(x + (sbsz8 - 1) * stride) >> 5].mv[bx8],
+                   w * sizeof(mv));
+            memcpy(&rp_proj[(x - 1 * stride) >> 5].ref[bx8],
+                   &rp_proj[(x + (sbsz8 - 1) * stride) >> 5].ref[bx8], w);
+            x += w;
+        }
+        const int w = (col_end8 & ~31) - x;
+        if (w) {
+            memcpy(&rp_proj[(x - 2 * stride) >> 5],
+                   &rp_proj[(x + (sbsz8 - 2) * stride) >> 5],
+                   w * sizeof(*rp_proj) >> 5);
+            memcpy(&rp_proj[(x - 1 * stride) >> 5],
+                   &rp_proj[(x + (sbsz8 - 1) * stride) >> 5],
+                   w * sizeof(*rp_proj) >> 5);
+            x += w;
+        }
+        if (x < col_end8) {
+            assert(!(x & 31));
+            int w = col_end8 - x;
+            memcpy(rp_proj[(x - 2 * stride) >> 5].mv,
+                   rp_proj[(x + (sbsz8 - 2) * stride) >> 5].mv,
+                   w * sizeof(mv));
+            memcpy(rp_proj[(x - 2 * stride) >> 5].ref,
+                   rp_proj[(x + (sbsz8 - 2) * stride) >> 5].ref, w);
+            memcpy(rp_proj[(x - 1 * stride) >> 5].mv,
+                   rp_proj[(x + (sbsz8 - 1) * stride) >> 5].mv,
+                   w * sizeof(mv));
+            memcpy(rp_proj[(x - 1 * stride) >> 5].ref,
+                   rp_proj[(x + (sbsz8 - 1) * stride) >> 5].ref, w);
+        }
     }
     for (int y = row_start8; y < row_end8; y++) {
         for (int x = col_start8; x < col_end8; x++)
-            rp_proj[x].mv.n = INVALID_MV;
-        rp_proj += stride;
+            rp_proj[x >> 5].mv[x & 31].n = INVALID_MV;
+        rp_proj += stride >> 5;
     }
     mv *rp_traj[7];
     refmvs_traj_map *rp_map[3][7];
@@ -1837,7 +1899,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
         }
     }
 
-    rp_proj = &rf->rp_proj[poffset];
+    rp_proj = &rf->rp_proj[poffset >> 5];
     const int shift = rf->mfmv_k_shift, mask = ~(sample_step - 1);
     const int col_start8_shifted = col_start8 >> shift;
     const int col_end8_shifted = (col_end8 - 1) >> shift;
@@ -1880,9 +1942,9 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                     imin(x_sb_align + mfmv_sbsz8 + rf->mfmv_edge, rf->iw8);
                 if (x < x_proj_start || x >= x_proj_end) continue;
                 const ptrdiff_t pos1 = (y1 & (sbsz8 - 1)) * stride + x1;
-                if (rp_proj[pos1].mv.n != INVALID_MV &&
+                if (rp_proj[pos1 >> 5].mv[pos1 & 31].n != INVALID_MV &&
                     (tgt == -1 || ref2idx != tgt ||
-                     rp_proj[pos1].ref == abs(ref2ref)))
+                     rp_proj[pos1 >> 5].ref[pos1 & 31] == abs(ref2ref)))
                 {
                     continue;
                 }
@@ -1920,31 +1982,31 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                     b_mv.y = -b_mv.y;
                     b_mv.x = -b_mv.x;
                 }
-                rp_proj[pos1].mv = b_mv;
-                rp_proj[pos1].ref = abs(ref2ref);
+                rp_proj[pos1 >> 5].mv[pos1 & 31] = b_mv;
+                rp_proj[pos1 >> 5].ref[pos1 & 31] = abs(ref2ref);
             }
         }
     }
 
     if (rf->frm_hdr->tip.frame_mode) {
-        tip_projection(rf, rp_proj, stride,
-                       col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                       rf->frm_hdr->tmvp_sample_step);
+        tip_projection(rf, rp_proj, stride, col_start8, col_end8,
+                       row_start8, row_end8, mfmv_sbsz8, sbsz8,
+                       sample_step);
         if (rf->seq_hdr->tip_hole_fill) {
-            fill_holes(rf, rp_proj, stride,
-                       col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                       rf->frm_hdr->tmvp_sample_step);
-            smoothen(rf, rp_proj, stride,
-                     col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                     rf->frm_hdr->tmvp_sample_step);
+            fill_holes(rf, rp_proj, stride, col_start8, col_end8,
+                       row_start8, row_end8, mfmv_sbsz8, sbsz8,
+                       sample_step);
+            smoothen(rf, rp_proj, stride, col_start8, col_end8,
+                     row_start8, row_end8, mfmv_sbsz8, sbsz8,
+                     sample_step);
         }
     }
     if (sample_step > 1) {
         for (int n = 0; n < rf->frm_hdr->n_ref_frames; n++)
-            fill_gap_traj(rp_traj[n], stride,
-                          col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8);
-        fill_gap_proj(rp_proj, stride,
-                      col_start8, col_end8, row_start8, row_end8, mfmv_sbsz8, sbsz8);
+            fill_gap_traj(rp_traj[n], stride, col_start8, col_end8,
+                          row_start8, row_end8, mfmv_sbsz8, sbsz8);
+        fill_gap_proj(rp_proj, stride, col_start8, col_end8,
+                      row_start8, row_end8, mfmv_sbsz8, sbsz8);
     }
 }
 
@@ -2036,8 +2098,8 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     if (n_blocks * rf->sbsz > rf->n_blocks) {
         const int sbsz8 = rf->sbsz >> 1;
         const size_t rp_proj_sz = have_frame_threading ?
-            sizeof(*rf->rp_proj) * ((rf->ih8 + 31) & ~31) * rp_stride:
-            sizeof(*rf->rp_proj) * (2 + sbsz8) * n_blocks;
+            sizeof(*rf->rp_proj) * ((rf->ih8 + 31) & ~31) * (rp_stride >> 5):
+            sizeof(*rf->rp_proj) * (2 + sbsz8) * (n_blocks >> 5);
         const size_t rp_traj_sz = sizeof(mv) * sbsz8 * n_blocks;
         const size_t rp_map_sz = sizeof(**rf->rp_map) * sbsz8 * n_blocks;
         const size_t r_above_sz = sizeof(*rf->ra) * n_blocks;

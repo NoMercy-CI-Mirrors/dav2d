@@ -50,11 +50,11 @@ PACKED(typedef union refmvs_traj_map {
 }) ALIGN(refmvs_traj_map, 2);
 CHECK_SIZE(refmvs_traj_map, 2);
 
-PACKED(typedef struct refmvs_sngl_mv_block {
-    mv mv;
-    uint8_t ref;
-}) refmvs_sngl_mv_block;
-CHECK_SIZE(refmvs_sngl_mv_block, 9);
+typedef struct refmvs_sngl_mv_block {
+    mv mv[32];
+    uint8_t ref[32];
+} ALIGN(refmvs_sngl_mv_block, 32);
+CHECK_SIZE(refmvs_sngl_mv_block, 32 * 9);
 
 PACKED(typedef struct refmvs_temporal_block {
     union {

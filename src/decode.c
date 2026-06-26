@@ -860,11 +860,14 @@ static void derive_lowest_px(Dav2dTaskContext *const t,
         opfl &= !!f->seq_hdr->opfl_refine && f->frame_hdr->has_bothside_refs;
 
         const ptrdiff_t t_stride = f->rf.rp_stride;
+        const int x4e = t->bx >> 6, bx4 = t->bx & 63;
         for (int y = 0; y < h4; y += step) {
-            const ptrdiff_t off_y8 = (((t->by + y) & (f->sb_step - 1)) >> 1) * t_stride;
+            const ptrdiff_t off_y8 =
+                (((t->by + y) & (f->sb_step - 1)) >> 1) * (t_stride >> 5) + x4e;
+            const union mv *const mvr = t->rt.rp_proj[off_y8].mv;
             for (int x = 0; x < w4; x += step) {
-                const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
-                mv tmv = t->rt.rp_proj[off_8x8].mv;
+                const int off_x8 = (bx4 + x) >> 1;
+                mv tmv = mvr[off_x8];
                 if (tmv.n == INVALID_MV) tmv.n = 0;
                 for (int i = 0; i < 2; i++) {
                     const int64_t tmpy = tmv.y * (int64_t) f->rf.tip.sf[i];
@@ -4520,7 +4523,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
                                          ts->tiling.row_start, ts->tiling.row_end,
                                          t->by >> f->sb_shift, ts->tiling.row);
         } else if (t->task_thread.pass == PASS_RECON) {
-            t->rt.rp_proj = &f->rf.rp_proj[(t->by >> 1) * f->rf.rp_stride];
+            t->rt.rp_proj = &f->rf.rp_proj[(t->by >> 1) * f->rf.rp_stride >> 5];
         }
     }
 
