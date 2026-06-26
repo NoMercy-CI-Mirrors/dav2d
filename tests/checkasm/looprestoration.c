@@ -1,6 +1,6 @@
 /*
- * Copyright © 2018, VideoLAN and dav2d authors
- * Copyright © 2018, Two Orioles, LLC
+ * Copyright © 2018-2026, VideoLAN and dav2d authors
+ * Copyright © 2018-2026, Two Orioles, LLC
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -348,7 +348,50 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c) {
     }
 }
 
-void bitfn(checkasm_check_wiener)(void) {
+static void check_gdf_add(Dav2dLoopRestorationDSPContext *const c) {
+    PIXEL_RECT(c_dst, 64, 64);
+    PIXEL_RECT(a_dst, 64, 64);
+    ALIGN_STK_64(int8_t, err, 64 * 64,);
+    uint16_t ll_mask[16][4];
+
+    declare_func(void, pixel *dst, ptrdiff_t dst_stride,
+                 const int8_t *err, int w, int h, int scale,
+                 const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
+
+    if (check_func(c->gdf_add, "gdf_add_%dbpc", BITDEPTH)) {
+#if BITDEPTH == 16
+        const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+        const int bitdepth_max = 0xff;
+#endif
+        const int w = 1 + (rnd() & 63);
+        const int h = 1 + (rnd() & 63);
+        const int scale = 1 + (rnd() & 3);
+
+        CLEAR_PIXEL_RECT(c_dst);
+        init_tmp(c_dst, c_dst_stride, 64, 64, bitdepth_max);
+        memcpy(a_dst_buf, c_dst_buf, a_dst_stride * a_dst_buf_h);
+
+        for (int i = 0; i < 64 * 64; i++)
+            err[i] = (rnd() & 127) - 64;
+
+        for (int i = 0; i < 16; i++)
+            for (int j = 0; j < 4; j++)
+                ll_mask[i][j] = rnd() & 0xffff;
+
+        call_ref(c_dst, c_dst_stride, err, w, h, scale, ll_mask HIGHBD_TAIL_SUFFIX);
+        call_new(a_dst, a_dst_stride, err, w, h, scale, ll_mask HIGHBD_TAIL_SUFFIX);
+        checkasm_check_pixel_padded_align(c_dst, c_dst_stride, a_dst, a_dst_stride,
+                                          w, h, "dst", 64, 1);
+
+        // benchmark processing of half the blocks (somewhat arbitrarily chosen)
+        memset(ll_mask, 0x55, sizeof(ll_mask));
+        bench_new(alternate(c_dst, a_dst), c_dst_stride, err,
+                  64, 64, scale, ll_mask HIGHBD_TAIL_SUFFIX);
+    }
+}
+
+void bitfn(checkasm_check_looprestoration)(void) {
     Dav2dLoopRestorationDSPContext c;
     bitfn(dav2d_loop_restoration_dsp_init)(&c);
 
@@ -357,4 +400,7 @@ void bitfn(checkasm_check_wiener)(void) {
     check_wiener_multi(&c);
     check_wiener_pretrained(&c);
     report("wiener");
+
+    check_gdf_add(&c);
+    report("gdf");
 }
