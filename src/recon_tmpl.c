@@ -746,7 +746,8 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     const int ph_enabled = !chroma && f->frame_hdr->parity_hiding &&
                            *txtp != IDTX && !lossless && eob > 3;
     int hr_avg = 0, tcq_state = tcq_enabled * INT32_MIN;
-    const uint8_t *const qm_tbl = *txtp < IDTX ? f->qm[tx][plane] : NULL;
+    const uint8_t *const qm_tbl = (*txtp == IDTX || *txtp == WHT_WHT || tx_class == TX_CLASS_H ||
+                                  tx_class == TX_CLASS_V) ? NULL : f->qm[tx][plane];
     int dq_shift = tcq_enabled + 3 + imax(0, t_dim->ctx - 2);
     const uint32_t *const dq_tbl = ts->dq[b->seg_id][plane];
     const int cf_max = ~(~127U << (BITDEPTH == 8 ? 8 : f->cur.p.p.bpc));
@@ -805,7 +806,8 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
         int hr_avg = 0;
         uint16_t (*sign_cdf)[2] = ts->cdf.coef.sign_idtx[sz_ctx];
-        const unsigned dq = dq_tbl[1]; // FIXME qm
+        // FSC blocks are encoded as IDTX, so dequant unconditionally never uses QMs
+        const unsigned dq = dq_tbl[1];
         dq_shift -= tcq_enabled;
         for (int i = bob; i <= sz; i++) {
             rc = scan[i];
@@ -980,7 +982,6 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                             dc_tok, ts->msac.rng); \
             tcq_state = tcq_enabled * INT32_MIN; \
         } \
-        const unsigned ac_dq = dq_tbl[1]; /* FIXME qm */ \
         for (int i = eob; i > 0; i--) { \
             if (tx_class == TX_CLASS_2D) \
                 rc = is_stx ? i : scan[i]; \
@@ -1010,6 +1011,9 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             tcq_state = tcq_next_state(tcq_state, tok); \
             /* residual */ \
             const int max_br = i < hi_to_low_tx ? (chroma ? 5 : 8) : 6; \
+            unsigned ac_dq = dq_tbl[1]; \
+            if (qm_tbl) \
+                ac_dq = (ac_dq * qm_tbl[is_stx ? scan[i]: rc] + 16) >> 5; \
             int ac_val; \
             if (tok >= max_br - tcq_enabled) { \
                 const int hr = decode_hr(&ts->msac, hr_avg); \
@@ -1099,54 +1103,33 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     int dc_dq = dq_tbl[0];
-    dc_sign_level = (dc_sign - 1) & (2 << 6);
-
-    if (qm_tbl) {
-        // FIXME
+    if (qm_tbl)
         dc_dq = (dc_dq * qm_tbl[0] + 16) >> 5;
-
-        if (dc_tok == 15) {
-            dc_tok = 0; //read_golomb(&ts->msac) + 15;
-            DEBUG_CF_printf("%*sPost-dc_residual[%d->%d]: r=%d\n",
-                            depth, "", dc_tok - 15, dc_tok, ts->msac.rng);
-
-            dc_tok &= 0xfffff;
-            dc_dq = (dc_dq * dc_tok) & 0xffffff;
-        } else {
-            dc_dq *= dc_tok;
-            assert(dc_dq <= 0xffffff);
-        }
-        cul_level = dc_tok;
-        dc_dq >>= dq_shift;
-        dc_dq = umin(dc_dq, cf_max + dc_sign);
-        cf[0] = (coef) (dc_sign ? -dc_dq : dc_dq);
+    int dc_val;
+    dc_sign_level = (dc_sign - 1) & (2 << 6);
+    const int max_br = chroma ? 5 : 8;
+    const int tcq = (tcq_state & 2) >> 1;
+    if (!!(ph_state >> 18) && dc_tok > 5) {
+        const int hr = decode_hr(&ts->msac, hr_avg >> 1) << 1;
+        dc_tok += hr;
+        DEBUG_CF_printf("%*sPost-residual_ph[pos=0,%d->%d]: r=%d\n",
+                        depth, "", hr, dc_tok, ts->msac.rng);
+        dc_val = (dc_tok * dc_dq + 4) >> dq_shift;
+    } else if (dc_tok >= max_br - tcq_enabled) {
+        const int hr = decode_hr(&ts->msac, hr_avg);
+        dc_tok += hr << tcq_enabled;
+        DEBUG_CF_printf("%*sPost-residual[pos=0,%d->%d]: r=%d\n",
+                        depth, "", hr, dc_tok, ts->msac.rng);
+        dc_tok &= 0xfffff;
+        dc_val = (dc_tok << tcq_enabled) - tcq;
+        dc_val = (((dc_val * dc_dq) & 0xffffff) + 4) >> dq_shift;
+        dc_val = umin(dc_val, cf_max + dc_sign);
     } else {
-        // non-qmatrix is the common case and allows for additional optimizations
-        const int max_br = chroma ? 5 : 8;
-        int dc_val;
-        int tcq = (tcq_state & 2) >> 1;
-        if (!!(ph_state >> 18) && dc_tok > 5) {
-            const int hr = decode_hr(&ts->msac, hr_avg >> 1) << 1;
-            dc_tok += hr;
-            DEBUG_CF_printf("%*sPost-residual_ph[pos=0,%d->%d]: r=%d\n",
-                            depth, "", hr, dc_tok, ts->msac.rng);
-            dc_val = (dc_tok * dc_dq + 4) >> dq_shift;
-        } else if (dc_tok >= max_br - tcq_enabled) {
-            const int hr = decode_hr(&ts->msac, hr_avg);
-            dc_tok += hr << tcq_enabled;
-            DEBUG_CF_printf("%*sPost-residual[pos=0,%d->%d]: r=%d\n",
-                            depth, "", hr, dc_tok, ts->msac.rng);
-            dc_tok &= 0xfffff;
-            dc_val = (dc_tok << tcq_enabled) - tcq;
-            dc_val = (((dc_val * dc_dq) & 0xffffff) + 4) >> dq_shift;
-            dc_val = umin(dc_val, cf_max + dc_sign);
-        } else {
-            dc_val = (dc_tok << tcq_enabled) - tcq;
-            dc_val = (dc_val * dc_dq + 4) >> dq_shift;
-        }
-        cul_level += dc_tok;
-        cf[0] = dc_sign ? -dc_val : dc_val;
+        dc_val = (dc_tok << tcq_enabled) - tcq;
+        dc_val = (dc_val * dc_dq + 4) >> dq_shift;
     }
+    cul_level += dc_tok;
+    cf[0] = dc_sign ? -dc_val : dc_val;
 
 end:
     // context

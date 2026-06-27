@@ -32,7 +32,7 @@
 
 EXTERN const uint8_t *dav2d_qm_tbl[16][2][N_RECT_TX_SIZES];
 
-void dav2d_init_qm_tables(void);
+void dav2d_init_predefined_qm_tables(void);
 
 int dav2d_dq_lookup(int qidx);
 

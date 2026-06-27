@@ -203,6 +203,7 @@ struct Dav2dContext {
     Dav2dBACPDSPContext bacp_dsp;
 
     Dav2dPicAllocator allocator;
+    uint8_t qm_protected[15];
     int apply_grain;
     int operating_point;
     unsigned operating_point_idc;

@@ -1,4 +1,4 @@
-From e02750be53ff2dfdcec226106ec6514b4df921a3 Mon Sep 17 00:00:00 2001
+From 39fb724ec77e5679422f6bfa6af54281208d7255 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Fri, 23 Jan 2026 09:07:44 -0500
 Subject: [PATCH 2/5] Frame header debugging.
@@ -7,8 +7,9 @@ Subject: [PATCH 2/5] Frame header debugging.
  av2/decoder/decodeframe.c | 212 +++++++++++++++++++++++++++++++++++++-
  av2/decoder/obu_ci.c      |  51 ++++++++-
  av2/decoder/obu_fgm.c     |  44 +++++++-
+ av2/decoder/obu_qm.c      |   7 ++
  avm/debug.h               |   1 +
- 4 files changed, 301 insertions(+), 7 deletions(-)
+ 5 files changed, 308 insertions(+), 7 deletions(-)
 
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
 index 559a95dc74..7d6fc6ab76 100644
@@ -664,6 +665,31 @@ index 309d09dfeb..8ebf851f71 100644
      }
    }
    if (av2_check_trailing_bits(pbi, rb) != 0) {
+diff --git a/av2/decoder/obu_qm.c b/av2/decoder/obu_qm.c
+index 95e788d741..81929d08be 100644
+--- a/av2/decoder/obu_qm.c
++++ b/av2/decoder/obu_qm.c
+@@ -28,6 +28,8 @@
+ #include "av2/common/scan.h"
+ #include "av2/common/quant_common.h"
+ 
++#define DEBUG_QM_HDR 0
++
+ void alloc_qmatrix(struct quantization_matrix_set *qm_set) {
+   int num_planes = 3;
+   const TX_SIZE fund_tsize[3] = { TX_8X8, TX_8X4, TX_4X8 };
+@@ -176,6 +178,11 @@ uint32_t read_qm_obu(AV2Decoder *pbi, int obu_tlayer_id, int obu_mlayer_id,
+     *qm_bit_map_zero_signalled = 1;
+     av2_copy_predefined_qmatrices_to_list(pbi, num_planes);
+     for (int j = 0; j < NUM_CUSTOM_QMS; j++) pbi->qm_protected[j] = 1;
++#if DEBUG_QM_HDR
++    printf("QM: post-init[mask=0x%x,num_planes=%d]: off=%u\n",
++           qm_bit_map, num_planes,
++           rb->bit_offset);
++#endif
+   } else {
+     for (int j = 0; j < NUM_CUSTOM_QMS; j++) {
+       if (qm_bit_map & (1 << j)) {
 diff --git a/avm/debug.h b/avm/debug.h
 index 36030e147d..b605a9125c 100644
 --- a/avm/debug.h
@@ -676,5 +702,5 @@ index 36030e147d..b605a9125c 100644
  
  #endif /* AVM_DEBUG_H */
 -- 
-2.48.1
+2.54.0
 

@@ -2044,6 +2044,33 @@ error:
     return DAV2D_ERR(EINVAL);
 }
 
+static int parse_qm_hdr(Dav2dContext *const c, GetBits *const gb) {
+#define DEBUG_QM_HDR 0
+#if DEBUG_QM_HDR
+    const uint8_t *const init_ptr = gb->ptr;
+#endif
+    const uint16_t mask = dav2d_get_bits(gb, 15);
+    const uint8_t num_planes = dav2d_get_bit(gb) ? 3 : 1;
+
+    (void)num_planes;
+    if (!mask) {
+        for (int idx = 0; idx < 15; idx++)
+            c->qm_protected[idx] = 1;
+#if DEBUG_QM_HDR
+        printf("QM: post-init[mask=0x%x,num_planes=%d]: off=%td\n",
+               mask, num_planes,
+               (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+        return 0;
+    } else {
+        dav2d_log(c, "QM OBUs with user-defined QMs are currently unsupported\n");
+        goto error;
+    }
+
+error:
+    return -1;
+}
+
 static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
 #define DEBUG_FGM_HDR 0
 #if DEBUG_FGM_HDR
@@ -2531,6 +2558,12 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
         c->n_tile_data++;
         break;
     }
+    case DAV2D_OBU_QM: {
+        parse_qm_hdr(c, &gb);
+        if (check_trailing_bits(&gb, c->strict_std_compliance) < 0)
+            goto error;
+        break;
+    }
     case DAV2D_OBU_FGM: {
         parse_fgm_hdr(c, &gb);
         if (check_trailing_bits(&gb, c->strict_std_compliance) < 0)
@@ -2710,6 +2743,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
 #if 0
         c->frame_flags |= PICTURE_FLAG_NEW_TEMPORAL_UNIT;
 #endif
+        memset(c->qm_protected, 0, sizeof(c->qm_protected));
         break;
     case DAV2D_OBU_PADDING:
         // ignore OBUs we don't care about
