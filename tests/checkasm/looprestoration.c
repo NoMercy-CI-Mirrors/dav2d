@@ -437,8 +437,7 @@ static void check_gdf_add(Dav2dLoopRestorationDSPContext *const c) {
         checkasm_check_pixel_padded_align(c_dst, c_dst_stride, a_dst, a_dst_stride,
                                           w, h, "dst", 64, 8);
 
-        // benchmark processing of half the blocks (somewhat arbitrarily chosen)
-        memset(ll_mask, 0x55, sizeof(ll_mask));
+        memset(ll_mask, 0, sizeof(ll_mask));
         bench_new(alternate(c_dst, a_dst), c_dst_stride, err,
                   ll_mask, 64, 64, scale HIGHBD_TAIL_SUFFIX);
     }
