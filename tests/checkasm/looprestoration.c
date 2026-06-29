@@ -366,8 +366,8 @@ static void check_gdf_prep(Dav2dLoopRestorationDSPContext *const c) {
 #else
         const int bitdepth_max = 0xff;
 #endif
-        const int base_w = 1 + (rnd() & 63);
-        const int base_h = 1 + (rnd() & 63);
+        const int base_w = (1 + (rnd() & 7)) * 8;
+        const int base_h = (1 + (rnd() & 7)) * 8;
 
         init_tmp(p - 6, p_stride, 64 + 12, 64, bitdepth_max);
         init_tmp(top - 6, top_stride, 64 + 12,  8, bitdepth_max);
@@ -417,8 +417,8 @@ static void check_gdf_add(Dav2dLoopRestorationDSPContext *const c) {
 #else
         const int bitdepth_max = 0xff;
 #endif
-        const int w = 1 + (rnd() & 63);
-        const int h = 1 + (rnd() & 63);
+        const int w = (1 + (rnd() & 7)) * 8;
+        const int h = (1 + (rnd() & 7)) * 8;
         const int scale = 1 + (rnd() & 3);
 
         CLEAR_PIXEL_RECT(c_dst);
@@ -435,7 +435,7 @@ static void check_gdf_add(Dav2dLoopRestorationDSPContext *const c) {
         call_ref(c_dst, c_dst_stride, err, w, h, scale, ll_mask HIGHBD_TAIL_SUFFIX);
         call_new(a_dst, a_dst_stride, err, w, h, scale, ll_mask HIGHBD_TAIL_SUFFIX);
         checkasm_check_pixel_padded_align(c_dst, c_dst_stride, a_dst, a_dst_stride,
-                                          w, h, "dst", 64, 1);
+                                          w, h, "dst", 64, 8);
 
         // benchmark processing of half the blocks (somewhat arbitrarily chosen)
         memset(ll_mask, 0x55, sizeof(ll_mask));

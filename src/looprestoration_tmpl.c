@@ -696,8 +696,8 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
                        const int ref_dst_idx, const int qp_idx,
                        enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 {
-    assert(w > 0 && w <= 64);
-    assert(h > 0 && h <= 64);
+    assert(w > 0 && w <= 64 && !(w & 7));
+    assert(h > 0 && h <= 64 && !(h & 7));
     assert(ref_dst_idx >= 0 && ref_dst_idx < 6);
     assert(qp_idx >= 0 && qp_idx < 6);
     const int bitdepth = bitdepth_from_max(bitdepth_max);
@@ -833,8 +833,8 @@ static void gdf_add_c(pixel *p_line, const ptrdiff_t stride,
                       const int w, const int h, const int scale,
                       const uint16_t (*const ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
-    assert(w > 0 && w <= 64);
-    assert(h > 0 && h <= 64);
+    assert(w > 0 && w <= 64 && !(w & 7));
+    assert(h > 0 && h <= 64 && !(h & 7));
     assert(scale > 0 && scale <= 4);
     const int shift = 12 - bitdepth_from_max(bitdepth_max);
     const int rnd = 1 << shift >> 1;
