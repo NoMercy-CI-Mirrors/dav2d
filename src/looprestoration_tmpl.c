@@ -829,9 +829,8 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
 }
 
 static void gdf_add_c(pixel *p_line, const ptrdiff_t stride,
-                      const int8_t *err_line,
-                      const int w, const int h, const int scale,
-                      const uint16_t (*const ll_mask)[4] HIGHBD_DECL_SUFFIX)
+                      const int8_t *err_line, const uint16_t (*const ll_mask)[4],
+                      const int w, const int h, const int scale HIGHBD_DECL_SUFFIX)
 {
     assert(w > 0 && w <= 64 && !(w & 7));
     assert(h > 0 && h <= 64 && !(h & 7));

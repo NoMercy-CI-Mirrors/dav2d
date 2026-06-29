@@ -196,8 +196,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                               edges, ll_mask HIGHBD_CALL_SUFFIX);
         }
         if (gdf) {
-            dsp->lr.gdf_add(p, stride, gdf_err, w, stripe_h, gdf_scale,
-                            ll_mask HIGHBD_CALL_SUFFIX);
+            dsp->lr.gdf_add(p, stride, gdf_err, ll_mask, w, stripe_h,
+                            gdf_scale HIGHBD_CALL_SUFFIX);
         }
         // this loop runs twice at the bottom of a frame, if e.g. the sequence
         // height is 128px, the first slice is 56px, followed by a 72px slice

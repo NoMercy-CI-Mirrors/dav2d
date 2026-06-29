@@ -407,9 +407,9 @@ static void check_gdf_add(Dav2dLoopRestorationDSPContext *const c) {
     ALIGN_STK_64(int8_t, err, 64 * 64,);
     uint16_t ll_mask[16][4];
 
-    declare_func(void, pixel *dst, ptrdiff_t dst_stride,
-                 const int8_t *err, int w, int h, int scale,
-                 const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
+    declare_func(void, pixel *p, ptrdiff_t p_stride,
+                 const int8_t *err, const uint16_t (*ll_mask)[4],
+                 int w, int h, int scale HIGHBD_DECL_SUFFIX);
 
     if (check_func(c->gdf_add, "gdf_add_%dbpc", BITDEPTH)) {
 #if BITDEPTH == 16
@@ -432,15 +432,15 @@ static void check_gdf_add(Dav2dLoopRestorationDSPContext *const c) {
             for (int j = 0; j < 4; j++)
                 ll_mask[i][j] = rnd() & 0xffff;
 
-        call_ref(c_dst, c_dst_stride, err, w, h, scale, ll_mask HIGHBD_TAIL_SUFFIX);
-        call_new(a_dst, a_dst_stride, err, w, h, scale, ll_mask HIGHBD_TAIL_SUFFIX);
+        call_ref(c_dst, c_dst_stride, err, ll_mask, w, h, scale HIGHBD_TAIL_SUFFIX);
+        call_new(a_dst, a_dst_stride, err, ll_mask, w, h, scale HIGHBD_TAIL_SUFFIX);
         checkasm_check_pixel_padded_align(c_dst, c_dst_stride, a_dst, a_dst_stride,
                                           w, h, "dst", 64, 8);
 
         // benchmark processing of half the blocks (somewhat arbitrarily chosen)
         memset(ll_mask, 0x55, sizeof(ll_mask));
         bench_new(alternate(c_dst, a_dst), c_dst_stride, err,
-                  64, 64, scale, ll_mask HIGHBD_TAIL_SUFFIX);
+                  ll_mask, 64, 64, scale HIGHBD_TAIL_SUFFIX);
     }
 }
 
