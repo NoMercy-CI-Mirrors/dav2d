@@ -3426,3 +3426,64 @@ function emu_edge_16bpc_neon, export=1
 3:
         ret
 endfunc
+
+// void morph_neon(pixel *dst, const ptrdiff_t dst_stride,
+//                 const int alpha, const int beta,
+//                 const int w, const int h HIGHBD_DECL_SUFFIX)
+function morph_16bpc_neon, export=1
+        dup             v2.8h,  w2                      // alpha
+        dup             v3.4s,  w3                      // beta
+        dup             v31.8h, w6                      // bitdepth_max
+        cmp             w4,  #4
+        b.eq            L(morph_4xh)
+
+1:      // w >= 8
+        mov             w7,  w4                         // width
+        mov             x8,  x0                         // dst
+        add             x9,  x0,  x1
+2:
+        ldr             q0,  [x8]
+        ldr             q1,  [x9]
+        mov             v4.16b, v3.16b
+        mov             v5.16b, v3.16b
+        mov             v6.16b, v3.16b
+        mov             v7.16b, v3.16b
+        smlal           v4.4s,  v0.4h,  v2.4h           // alpha * dst[x] + beta
+        smlal2          v5.4s,  v0.8h,  v2.8h
+        smlal           v6.4s,  v1.4h,  v2.4h
+        smlal2          v7.4s,  v1.8h,  v2.8h
+        sub             w7,  w7,  #8                    // width -= 8
+        sqshrun         v4.4h,  v4.4s,  #8              // narrow and >> 8
+        sqshrun2        v4.8h,  v5.4s,  #8
+        sqshrun         v6.4h,  v6.4s,  #8
+        sqshrun2        v6.8h,  v7.4s,  #8
+        umin            v4.8h,  v4.8h,  v31.8h          // clip at bitdepth_max
+        umin            v6.8h,  v6.8h,  v31.8h
+        str             q4,  [x8], #16
+        str             q6,  [x9], #16
+        cbnz            w7,  2b
+
+        sub             w5,  w5,  #2                    // height -= 2
+        add             x0,  x0,  x1, lsl #1            // dst += 2*dst_stride
+        cbnz            w5,  1b
+        ret
+
+L(morph_4xh):
+        add             x9,  x0,  x1
+        ldr             d0,  [x0]
+        ldr             d1,  [x9]
+        mov             v4.16b, v3.16b
+        mov             v5.16b, v3.16b
+        smlal           v4.4s,  v0.4h,  v2.4h           // alpha * dst[x] + beta
+        smlal           v5.4s,  v1.4h,  v2.4h
+        sub             w5,  w5,  #2                    // height -= 2
+        sqshrun         v4.4h,  v4.4s,  #8              // narrow and >> 8
+        sqshrun         v5.4h,  v5.4s,  #8
+        umin            v4.4h,  v4.4h,  v31.4h          // clip at bitdepth_max
+        umin            v5.4h,  v5.4h,  v31.4h
+        str             d4,  [x0]
+        str             d5,  [x9]
+        add             x0,  x0,  x1, lsl #1            // dst += 2*dst_stride
+        cbnz            w5,  L(morph_4xh)
+        ret
+endfunc
