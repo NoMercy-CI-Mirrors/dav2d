@@ -179,6 +179,7 @@ if is_asm_enabled
                 'x86/cfl_avx2.asm',
                 'x86/itx_avx2.asm',
                 'x86/deblock_avx2.asm',
+                'x86/looprestoration_avx2.asm',
                 'x86/mc_avx2.asm',
                 'x86/stx_avx2.asm',
                 'x86/filmgrain_sse.asm',
