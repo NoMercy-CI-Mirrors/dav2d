@@ -994,8 +994,8 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
 
     int alpha[2];
     if (implicit) {
-        assert(i == n_top + n_left);
-        for (int i = 0; i < n_top + n_left; i++) {
+        assert(i == n_left + n_top);
+        for (int i = 0; i < n_left + n_top; i++) {
             sum_x    += edge[0][i];
             sum_y[0] += edge[1][i];
             sum_y[1] += edge[2][i];

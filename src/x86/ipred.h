@@ -32,18 +32,30 @@
     decl_##type##_fn(BF(dav2d_##name, ssse3)); \
     decl_##type##_fn(BF(dav2d_##name, avx2)); \
     decl_##type##_fn(BF(dav2d_##name, avx512icl))
+
+#define decl_cfl_fns(type, layout) \
+    decl_fn(type, cfl_explicit_##layout); \
+    decl_fn(type, cfl_implicit_##layout)
+
 #define init_fn(type0, type1, name, suffix) \
     c->type0[type1] = BF(dav2d_##name, suffix)
 
 #define init_angular_ipred_fn(type, name, suffix) \
     init_fn(intra_pred, type, name, suffix)
+
 #define init_cfl_pred_fn(type, type_name, layout, suffix) \
     c->cfl_pred[CFL_##type][DAV2D_PIXEL_LAYOUT_I##layout - 1] = \
         BF(dav2d_cfl_##type_name##_##layout, suffix)
+
 #define init_cfl_explicit_fn(layout, suffix) \
     init_cfl_pred_fn(EXPLICIT, explicit, layout, suffix)
+
 #define init_cfl_implicit_fn(layout, suffix) \
     init_cfl_pred_fn(IMPLICIT, implicit, layout, suffix)
+
+#define init_cfl_fns(layout, suffix) \
+    init_cfl_explicit_fn(layout, suffix); \
+    init_cfl_implicit_fn(layout, suffix)
 
 decl_fn(angular_ipred, ipred_dc);
 decl_fn(angular_ipred, ipred_dc_128);
@@ -60,7 +72,7 @@ decl_fn(angular_ipred, ipred_z2);
 decl_fn(angular_ipred, ipred_z3);
 decl_fn(angular_ipred, ipred_dip);
 
-decl_fn(cfl_pred, cfl_explicit_420);
+decl_cfl_fns(cfl_pred, 420);
 
 decl_fn(pal_pred, pal_pred);
 
@@ -119,7 +131,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
 #endif
 
 #if BITDEPTH == 8
-    init_cfl_explicit_fn(420, avx2);
+    init_cfl_fns(420, avx2);
 #endif
 
     c->pal_pred = BF(dav2d_pal_pred, avx2);

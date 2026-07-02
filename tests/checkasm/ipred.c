@@ -179,7 +179,7 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
             const ptrdiff_t strides[2] = { c_y_stride, c_u_stride >> ss_hor };
             for (int w = 4; w <= 64; w <<= 1)
                 for (int padding = 0; padding <= 1; padding++)
-                    for (int rng0 = 1; rng0 >= 0; rng0--)
+                    for (int rng0 = 1; rng0 >= 0 + (type == CFL_IMPLICIT); rng0--)
                         for (int flt_type = CFL_FLT_TYPE_UNIFORM;
                              flt_type <= CFL_FLT_TYPE_GAUSS; flt_type++)
                         {
@@ -232,9 +232,16 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                     pixel *const c_ptrs[6] = { c_ytop, c_utop, c_vtop, c_y, c_u, c_v };
                                     pixel *const a_ptrs[6] = { a_ytop, a_utop, a_vtop, a_y, a_u, a_v };
 
-                                    INIT_PIXEL_RECT(c_y_buf);
-                                    INIT_PIXEL_RECT(c_u_buf);
-                                    INIT_PIXEL_RECT(c_v_buf);
+                                    if (type == CFL_EXPLICIT) {
+                                        INIT_PIXEL_RECT(c_y_buf);
+                                        INIT_PIXEL_RECT(c_u_buf);
+                                        INIT_PIXEL_RECT(c_v_buf);
+                                    } else {
+                                        RAND_PIXEL_RECT(c_y_buf);
+                                        RAND_PIXEL_RECT(c_u_buf);
+                                        RAND_PIXEL_RECT(c_v_buf);
+                                    }
+                                    // TODO zero edges for implicit u_or_v so that one alpha is 0
                                     memcpy(a_y_buf, c_y_buf, c_y_buf_h * c_y_stride);
                                     memcpy(a_u_buf, c_u_buf, c_u_buf_h * c_u_stride);
                                     memcpy(a_v_buf, c_v_buf, c_v_buf_h * c_v_stride);

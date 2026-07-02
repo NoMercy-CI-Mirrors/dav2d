@@ -64,8 +64,10 @@ decl_check_bitfns(void checkasm_check_stx);
     #define CLEAR_PIXEL_RECT         CLEAR_BUF_RECT
 #if BITDEPTH == 8
     #define INIT_PIXEL_RECT(buf) checkasm_init_mask8(buf, sizeof(buf), bitdepth_max)
+    #define RAND_PIXEL_RECT(buf) checkasm_randomize_mask8(buf, sizeof(buf), bitdepth_max)
 #else
     #define INIT_PIXEL_RECT(buf) checkasm_init_mask16(buf, sizeof(buf) >> 1, bitdepth_max)
+    #define RAND_PIXEL_RECT(buf) checkasm_randomize_mask16(buf, sizeof(buf) >> 1, bitdepth_max)
 #endif
 
     #define checkasm_check_pixel_padded       checkasm_check_rect_padded
