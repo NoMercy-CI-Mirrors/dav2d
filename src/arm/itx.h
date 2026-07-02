@@ -85,6 +85,10 @@ decl_residual_add_idtx_fn(32);
 void BF(dav2d_inv_txfm_add_wht_wht_4x4,
         neon)(pixel *dst, ptrdiff_t dst_stride, coef *coeff,
               enum TxfmType txtp HIGHBD_DECL_SUFFIX);
+void BF(dav2d_itx_dc_only, neon)(pixel *dst, ptrdiff_t stride, coef *coeff,
+                                 uint64_t shift0, uint64_t shift1, uint64_t w,
+                                 uint64_t h, uint64_t is_rect2
+                                 HIGHBD_DECL_SUFFIX);
 
 static const itx_1d_fn_col itx_1d_x4_fns_col[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
     [TX_4X4] = {
@@ -142,28 +146,6 @@ static const itx_1d_fn_row itx_1d_x4_fns_row[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
     },
 };
 
-static NOINLINE void itx_dc_only(pixel *dst, const ptrdiff_t stride,
-                                 coef *const coeff, const int shift0,
-                                 const int shift1, const int w, const int h,
-                                 const int is_rect2 HIGHBD_DECL_SUFFIX)
-{
-    const int shift = shift0 + shift1 - 12;
-    const int rnd = (1 << (shift - 1)) + shift0 - 6;
-    int dc = coeff[0];
-    coeff[0] = 0;
-
-    if (is_rect2) {
-        dc = (dc * 181 + 128) >> 8;
-    }
-    dc = (dc + rnd) >> shift;
-
-    for (int y = 0; y < h; y++, dst += PXSTRIDE(stride)) {
-        for (int x = 0; x < w; x++) {
-            dst[x] = iclip_pixel(dst[x] + dc);
-        }
-    }
-}
-
 static ALWAYS_INLINE int itx_first_pass_howmany(const int tx_class,
                                                 const int sh, const int lw,
                                                 const int eob, const int tx)
@@ -198,8 +180,8 @@ static void BF(dav2d_inv_txfm_add_##w##x##h, neon)(pixel *dst, \
 { \
     assert(eob >= 0 && eob < 32 * 32); \
     if (eob == 0 && txtp == DCT_DCT) { \
-        itx_dc_only(dst, stride, coeff, shift0, shift1, w, h, rect2 \
-                    HIGHBD_TAIL_SUFFIX); \
+        BF(dav2d_itx_dc_only, neon)(dst, stride, coeff, shift0, shift1, \
+                                    w, h, rect2 HIGHBD_TAIL_SUFFIX); \
         return; \
     } \
     const enum TxfmType base_txtp = txtp & 0xff; \
@@ -254,8 +236,8 @@ static void BF(dav2d_inv_txfm_add_4x4, neon)(pixel *dst,
     assert(first_1d_fn && second_1d_fn);
     assert(eob >= 0 && eob < 32 * 32);
     if (eob == 0 && txtp == DCT_DCT) {
-        itx_dc_only(dst, dst_stride, coeff, 7, 10, 4, 4, 0
-                    HIGHBD_TAIL_SUFFIX);
+        BF(dav2d_itx_dc_only, neon)(dst, dst_stride, coeff, 7, 10, 4, 4, 0
+                                    HIGHBD_TAIL_SUFFIX);
         return;
     }
 

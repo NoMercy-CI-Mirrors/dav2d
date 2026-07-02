@@ -1207,6 +1207,170 @@ L(wht4_s16_store):
         ret
 endfunc
 
+// x0: dst, x1: dst_stride, x2: coeff, x3: shift0, x4: shift1, x5: w,
+// x6: h, x7: is_rect2
+function itx_dc_only_8bpc_neon, export=1
+        add             w8,  w3,  w4
+        ldrsh           w10, [x2]      // dc = coeff[0]
+        sub             w8,  w8,  #12  // shift = shift0 + shift1 - 12
+        mov             w9,  #1
+        strh            wzr, [x2]
+        sub             w11, w8,  #1
+        lsl             w9,  w9,  w11
+        add             w9,  w9,  w3
+        sub             w9,  w9,  #6  // rnd = (1 << (shift - 1)) + shift0 - 6
+        cbz             w7,  1f       // If !is_rect2 skip to 1f.
+
+        mov             w11, #181
+        mov             w12, #128
+        madd            w10, w10, w11, w12
+        asr             w10, w10, #8  // dc = (dc * 181 + 128) >> 8
+1:
+        add             w10, w10, w9
+        asr             w10, w10, w8  // dc = (dc + rnd) >> shift
+
+        // Use fallback if dc does not fit in 8 bits.
+        sxtb            w11, w10
+        cmp             w10, w11
+        b.ne            L(itx_dc_only_fallback)
+
+        dup             v31.16b, w10
+        cmp             w5,  #8
+        b.eq            L(itx_dc_only_fast_w8)
+        b.lt            L(itx_dc_only_fast_w4)
+
+// If dc fits in 8 bits then can use USQADD to add and clip in a single
+// instruction.
+L(itx_dc_only_fast_w16_y):
+        mov             x9,  x0
+        add             x11, x0,  x1
+        add             x12, x0,  x1,  lsl #1
+        add             x13, x11, x1,  lsl #1
+        mov             x14, #0
+        mov             w10, w5
+L(itx_dc_only_fast_w16_x):
+        ldr             q0,  [x9,  x14]
+        ldr             q1,  [x11, x14]
+        ldr             q2,  [x12, x14]
+        ldr             q3,  [x13, x14]
+        subs            w10, w10, #16
+        usqadd          v0.16b,  v31.16b
+        usqadd          v1.16b,  v31.16b
+        usqadd          v2.16b,  v31.16b
+        usqadd          v3.16b,  v31.16b
+        str             q0,  [x9,  x14]
+        str             q1,  [x11, x14]
+        str             q2,  [x12, x14]
+        str             q3,  [x13, x14]
+        add             x14, x14, #16
+        b.ne            L(itx_dc_only_fast_w16_x)
+
+        add             x0,  x0,  x1,  lsl #2
+        subs            w6,  w6,  #4
+        b.ne            L(itx_dc_only_fast_w16_y)
+        ret
+
+L(itx_dc_only_fast_w8):
+        load_4_strided  d0,  d1,  d2,  d3,  x0,  x9,  x1
+        subs            w6,  w6,  #4
+        usqadd          v0.8b,   v31.8b
+        usqadd          v1.8b,   v31.8b
+        usqadd          v2.8b,   v31.8b
+        usqadd          v3.8b,   v31.8b
+        store_4_strided d0,  d1,  d2,  d3,  x0,  x0,  x1,  1
+        b.ne            L(itx_dc_only_fast_w8)
+        ret
+
+L(itx_dc_only_fast_w4):
+        load_4_strided  s0,  s1,  s2,  s3,  x0,  x9,  x1
+        subs            w6,  w6,  #4
+        usqadd          v0.8b,   v31.8b
+        usqadd          v1.8b,   v31.8b
+        usqadd          v2.8b,   v31.8b
+        usqadd          v3.8b,   v31.8b
+        store_4_strided s0,  s1,  s2,  s3,  x0,  x0,  x1,  1
+        b.ne            L(itx_dc_only_fast_w4)
+        ret
+
+// If dc does not fit in 8 bits then need separate addition and clipping steps.
+L(itx_dc_only_fallback):
+        dup             v31.8h,  w10
+        cmp             w5,  #8
+        b.eq            L(itx_dc_only_w8)
+        b.lt            L(itx_dc_only_w4)
+
+L(itx_dc_only_w16_y):
+        mov             x9,  x0
+        add             x11, x0,  x1
+        add             x12, x0,  x1,  lsl #1
+        add             x13, x11, x1,  lsl #1
+        mov             x14, #0
+        mov             w10, w5
+L(itx_dc_only_w16_x):
+        ldr             q0,  [x9,  x14]
+        ldr             q1,  [x11, x14]
+        ldr             q2,  [x12, x14]
+        ldr             q3,  [x13, x14]
+        subs            w10, w10, #16
+        uaddw           v4.8h,   v31.8h,  v0.8b
+        uaddw           v5.8h,   v31.8h,  v1.8b
+        uaddw           v6.8h,   v31.8h,  v2.8b
+        uaddw           v7.8h,   v31.8h,  v3.8b
+        uaddw2          v16.8h,  v31.8h,  v0.16b
+        uaddw2          v17.8h,  v31.8h,  v1.16b
+        uaddw2          v18.8h,  v31.8h,  v2.16b
+        uaddw2          v19.8h,  v31.8h,  v3.16b
+        sqxtun          v4.8b,   v4.8h
+        sqxtun          v5.8b,   v5.8h
+        sqxtun          v6.8b,   v6.8h
+        sqxtun          v7.8b,   v7.8h
+        sqxtun2         v4.16b,  v16.8h
+        sqxtun2         v5.16b,  v17.8h
+        sqxtun2         v6.16b,  v18.8h
+        sqxtun2         v7.16b,  v19.8h
+        str             q4,  [x9,  x14]
+        str             q5,  [x11, x14]
+        str             q6,  [x12, x14]
+        str             q7,  [x13, x14]
+        add             x14, x14, #16
+        b.ne            L(itx_dc_only_w16_x)
+
+        add             x0,  x0,  x1,  lsl #2
+        subs            w6,  w6,  #4
+        b.ne            L(itx_dc_only_w16_y)
+        ret
+
+L(itx_dc_only_w8):
+        load_4_strided  d0,  d1,  d2,  d3,  x0,  x9,  x1
+        subs            w6,  w6,  #4
+        uaddw           v4.8h,   v31.8h,  v0.8b
+        uaddw           v5.8h,   v31.8h,  v1.8b
+        uaddw           v6.8h,   v31.8h,  v2.8b
+        uaddw           v7.8h,   v31.8h,  v3.8b
+        sqxtun          v4.8b,   v4.8h
+        sqxtun          v5.8b,   v5.8h
+        sqxtun          v6.8b,   v6.8h
+        sqxtun          v7.8b,   v7.8h
+        store_4_strided d4,  d5,  d6,  d7,  x0,  x0,  x1,  1
+        b.ne            L(itx_dc_only_w8)
+        ret
+
+L(itx_dc_only_w4):
+        load_4_strided  s0,  s1,  s2,  s3,  x0,  x9,  x1
+        subs            w6,  w6,  #4
+        uaddw           v4.8h,   v31.8h,  v0.8b
+        uaddw           v5.8h,   v31.8h,  v1.8b
+        uaddw           v6.8h,   v31.8h,  v2.8b
+        uaddw           v7.8h,   v31.8h,  v3.8b
+        sqxtun          v4.8b,   v4.8h
+        sqxtun          v5.8b,   v5.8h
+        sqxtun          v6.8b,   v6.8h
+        sqxtun          v7.8b,   v7.8h
+        store_4_strided s4,  s5,  s6,  s7,  x0,  x0,  x1,  1
+        b.ne            L(itx_dc_only_w4)
+        ret
+endfunc
+
 const dct4_coeffs_s16, align=4
         .short           64,   83,   64,   35
         .short           64,   35,  -64,  -83
