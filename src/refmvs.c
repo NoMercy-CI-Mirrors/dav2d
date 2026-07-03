@@ -1390,12 +1390,12 @@ static inline mv dequantize_mv(const union qmv mv) {
     };
 }
 
-static void tip_projection(refmvs_sngl_mv_block *const rp_proj,
-                           const ptrdiff_t stride,
-                           const int col_start8, const int col_end8,
-                           const int row_start8, int row_end8,
-                           const int mfmv_sbsz8, const int sbsz8,
-                           const int tmvp_sample_step, const int tip_delta)
+static void tip_projection_c(refmvs_sngl_mv_block *const rp_proj,
+                             const ptrdiff_t stride,
+                             const int col_start8, const int col_end8,
+                             const int row_start8, int row_end8,
+                             const int mfmv_sbsz8, const int sbsz8,
+                             const int tmvp_sample_step, const int tip_delta)
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
         const int xend = imin(col_end8 - sx, mfmv_sbsz8);
@@ -1417,12 +1417,12 @@ static void tip_projection(refmvs_sngl_mv_block *const rp_proj,
     }
 }
 
-static void fill_holes(refmvs_sngl_mv_block *const rp_proj,
-                       const ptrdiff_t stride,
-                       const int col_start8, const int col_end8,
-                       const int row_start8, int row_end8,
-                       const int mfmv_sbsz8, const int sbsz8,
-                       const int tmvp_sample_step, const int tip_delta)
+static void tip_fill_holes_c(refmvs_sngl_mv_block *const rp_proj,
+                             const ptrdiff_t stride,
+                             const int col_start8, const int col_end8,
+                             const int row_start8, int row_end8,
+                             const int mfmv_sbsz8, const int sbsz8,
+                             const int tmvp_sample_step, const int tip_delta)
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
         const int xend = imin(col_end8 - sx, mfmv_sbsz8);
@@ -1456,12 +1456,12 @@ static void fill_holes(refmvs_sngl_mv_block *const rp_proj,
     }
 }
 
-static void smoothen(refmvs_sngl_mv_block *const rp_proj,
-                     const ptrdiff_t stride,
-                     const int col_start8, const int col_end8,
-                     const int row_start8, int row_end8,
-                     const int mfmv_sbsz8, const int sbsz8,
-                     const int tmvp_sample_step, const int tip_delta)
+static void tip_smoothen_c(refmvs_sngl_mv_block *const rp_proj,
+                           const ptrdiff_t stride,
+                           const int col_start8, const int col_end8,
+                           const int row_start8, int row_end8,
+                           const int mfmv_sbsz8, const int sbsz8,
+                           const int tmvp_sample_step, const int tip_delta)
 {
     static const unsigned idiv[] = {
         65536, 32768, 21845, 16384, 13107
@@ -1523,11 +1523,11 @@ static void smoothen(refmvs_sngl_mv_block *const rp_proj,
     }
 }
 
-static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj,
-                          const ptrdiff_t stride,
-                          const int col_start8, const int col_end8,
-                          const int row_start8, int row_end8,
-                          const int mfmv_sbsz8, const int sbsz8)
+static void fill_gap_proj_c(refmvs_sngl_mv_block *const rp_proj,
+                            const ptrdiff_t stride,
+                            const int col_start8, const int col_end8,
+                            const int row_start8, const int row_end8,
+                            const int mfmv_sbsz8, const int sbsz8)
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
         const int xend = imin(col_end8 - sx, mfmv_sbsz8);
@@ -1621,10 +1621,10 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj,
     }
 }
 
-static void fill_gap_traj(union mv *const rp_traj, const ptrdiff_t stride,
-                          const int col_start8, const int col_end8,
-                          const int row_start8, int row_end8,
-                          const int mfmv_sbsz8, const int sbsz8)
+static void fill_gap_traj_c(union mv *const rp_traj, const ptrdiff_t stride,
+                            const int col_start8, const int col_end8,
+                            const int row_start8, int row_end8,
+                            const int mfmv_sbsz8, const int sbsz8)
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
         const int xend = imin(col_end8, sx + mfmv_sbsz8);
@@ -1801,8 +1801,111 @@ static void check_traj_intersect(const refmvs_frame *const rf,
     }
 }
 
-// FIXME split this up in smaller DSP'able functions
-void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
+static void load_tmvs_refs_c(const refmvs_frame *const rf,
+                             refmvs_sngl_mv_block *const rp_proj,
+                             const ptrdiff_t stride, mv *rp_traj[7],
+                             refmvs_traj_map *rp_map[3][7],
+                             const int col_start8, const int col_end8,
+                             const int row_start8, int row_end8,
+                             const int sbsz8, const int sample_step)
+{
+    const int mfmv_edge = rf->mfmv_edge;
+    const int mfmv_sbsz8 = rf->mfmv_sbsz8;
+    const int col_start8i = imax(col_start8 - mfmv_edge, 0);
+    const int col_end8i = imin(col_end8 + mfmv_edge, rf->iw8);
+    const int shift = rf->mfmv_k_shift, mask = ~(sample_step - 1);
+    const int col_start8_shifted = col_start8 >> shift;
+    const int col_end8_shifted = (col_end8 - 1) >> shift;
+
+    for (int n = 0; n < rf->n_mfmvs; n++) {
+        const int ref2cur = rf->mfmv_ref2cur[n];
+        if (ref2cur == INVALID_REF2CUR) continue;
+
+        const int ref = rf->mfmv[n].ref;
+        const int tgt = rf->mfmv[n].tgt;
+        const int ref_sign = rf->mfmv[n].dir;
+        const refmvs_temporal_block *r = &rf->rp_ref[ref][row_start8 * stride];
+
+        for (int y = row_start8; y < row_end8; y += sample_step) {
+            for (int x = col_start8i; x < col_end8i; x += sample_step) {
+                const ptrdiff_t pos = (y & (sbsz8 - 1)) * stride + x;
+                const refmvs_temporal_block *rb = &r[pos];
+                const int b_ref = rb->ref.ref[ref_sign];
+                if (b_ref == -1) continue;
+                const int ref2idx = rf->mfmv_ref2idx[n][b_ref];
+                mv b_mv = dequantize_mv(rb->mv.mv[ref_sign]);
+                if (b_mv.n == INVALID_MV) continue;
+                if (rf->seq_hdr->mv_traj && ref2idx != -1)
+                    check_traj_intersect(rf, rp_traj, rp_map,
+                                         ref, ref2idx, y, x, b_mv,
+                                         col_start8_shifted, col_end8_shifted);
+                int ref2ref = rf->mfmv_ref2ref[n][b_ref];
+                if (!ref2ref || (ref2ref < 0) != ref_sign) continue;
+                const mv mv1 = scale_mv(b_mv, -rf->mfmv_ref2sf[n][b_ref][0]);
+                int y1 = y - apply_sign(abs(mv1.y) >> 6, mv1.y);
+                if (y1 < 0 || y1 >= rf->ih8) continue;
+                y1 &= mask;
+                int x1 = x - apply_sign(abs(mv1.x) >> 6, mv1.x);
+                if (x1 < col_start8 || x1 >= col_end8) continue;
+                x1 &= mask;
+                const int y_proj_start = y1 & ~(mfmv_sbsz8 - 1);
+                const int y_proj_end = imin(y_proj_start + mfmv_sbsz8, row_end8);
+                if (y < y_proj_start || y >= y_proj_end) continue;
+                const int x_sb_align = x1 & ~(mfmv_sbsz8 - 1);
+                const int x_proj_start = imax(x_sb_align - mfmv_edge, 0);
+                const int x_proj_end =
+                    imin(x_sb_align + mfmv_sbsz8 + rf->mfmv_edge, rf->iw8);
+                if (x < x_proj_start || x >= x_proj_end) continue;
+                const ptrdiff_t pos1 = (y1 & (sbsz8 - 1)) * stride + x1;
+                if (rp_proj[pos1 >> 5].mv[pos1 & 31].n != INVALID_MV &&
+                    (tgt == -1 || ref2idx != tgt ||
+                     rp_proj[pos1 >> 5].ref[pos1 & 31] == abs(ref2ref)))
+                {
+                    continue;
+                }
+                if (rf->seq_hdr->mv_traj) {
+                    const int k1 = (x1 >> shift) - (x >> shift);
+                    assert(k1 >= -1 && k1 <= +1);
+                    rp_traj[ref][pos1].y = iclip(mv1.y, -2047, 2047);
+                    rp_traj[ref][pos1].x = iclip(mv1.x, -2047, 2047);
+                    rp_map[k1 + 1][ref][pos].y = y1 - y;
+                    rp_map[k1 + 1][ref][pos].x = x1 - x;
+                    assert((x >> shift) + k1 >= col_start8_shifted &&
+                           (x >> shift) + k1 <= col_end8_shifted);
+                    do /* so we can "break" out of it, saves indentation */ {
+                        if (ref2idx < 0) break;
+                        const mv mv2 =
+                            scale_mv(b_mv, rf->mfmv_ref2sf[n][b_ref][1]);
+                        rp_traj[ref2idx][pos1].y = iclip(mv2.y, -2047, 2047);
+                        rp_traj[ref2idx][pos1].x = iclip(mv2.x, -2047, 2047);
+                        int y2 = y + apply_sign(abs(b_mv.y) >> 6, b_mv.y);
+                        if (y2 < y_proj_start || y2 >= y_proj_end) break;
+                        y2 &= mask;
+                        int x2 = x + apply_sign(abs(b_mv.x) >> 6, b_mv.x);
+                        if (x2 < x_proj_start || x2 >= x_proj_end) break;
+                        x2 &= mask;
+                        const ptrdiff_t pos2 = (y2 & (sbsz8 - 1)) * stride + x2;
+                        const int k2 = (x1 >> shift) - (x2 >> shift);
+                        assert(k2 >= -1 && k2 <= +1);
+                        rp_map[k2 + 1][ref2idx][pos2].y = y1 - y2;
+                        rp_map[k2 + 1][ref2idx][pos2].x = x1 - x2;
+                        assert((x2 >> shift) + k2 >= col_start8_shifted &&
+                               (x2 >> shift) + k2 <= col_end8_shifted);
+                    } while (0);
+                }
+                if (ref2ref < 0) {
+                    b_mv.y = -b_mv.y;
+                    b_mv.x = -b_mv.x;
+                }
+                rp_proj[pos1 >> 5].mv[pos1 & 31] = b_mv;
+                rp_proj[pos1 >> 5].ref[pos1 & 31] = abs(ref2ref);
+            }
+        }
+    }
+}
+
+void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
+                            const refmvs_frame *const rf, int tile_row_idx,
                             const int col_start8, const int col_end8,
                             const int row_start8, int row_end8)
 {
@@ -1810,12 +1913,9 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     assert(row_start8 >= 0);
     const unsigned sbsz8 = rf->sbsz >> 1;
     const int mfmv_sbsz8 = rf->mfmv_sbsz8;
-    const int mfmv_edge = rf->mfmv_edge;
     assert((unsigned) (row_end8 - row_start8) <= sbsz8);
     assert(!(row_start8 & (sbsz8 - 1)));
     row_end8 = imin(row_end8, rf->ih8);
-    const int col_start8i = imax(col_start8 - mfmv_edge, 0);
-    const int col_end8i = imin(col_end8 + mfmv_edge, rf->iw8);
 
     const int sample_step = rf->frm_hdr->tmvp_sample_step;
     const ptrdiff_t stride = rf->rp_stride;
@@ -1897,121 +1997,36 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     }
 
     rp_proj = &rf->rp_proj[poffset >> 5];
-    const int shift = rf->mfmv_k_shift, mask = ~(sample_step - 1);
-    const int col_start8_shifted = col_start8 >> shift;
-    const int col_end8_shifted = (col_end8 - 1) >> shift;
-    for (int n = 0; n < rf->n_mfmvs; n++) {
-        const int ref2cur = rf->mfmv_ref2cur[n];
-        if (ref2cur == INVALID_REF2CUR) continue;
-
-        const int ref = rf->mfmv[n].ref;
-        const int tgt = rf->mfmv[n].tgt;
-        const int ref_sign = rf->mfmv[n].dir;
-        const refmvs_temporal_block *r = &rf->rp_ref[ref][row_start8 * stride];
-        for (int y = row_start8; y < row_end8; y += sample_step) {
-            for (int x = col_start8i; x < col_end8i; x += sample_step) {
-                const ptrdiff_t pos = (y & (sbsz8 - 1)) * stride + x;
-                const refmvs_temporal_block *rb = &r[pos];
-                const int b_ref = rb->ref.ref[ref_sign];
-                if (b_ref == -1) continue;
-                const int ref2idx = rf->mfmv_ref2idx[n][b_ref];
-                mv b_mv = dequantize_mv(rb->mv.mv[ref_sign]);
-                if (b_mv.n == INVALID_MV) continue;
-                if (rf->seq_hdr->mv_traj && ref2idx != -1)
-                    check_traj_intersect(rf, rp_traj, rp_map,
-                                         ref, ref2idx, y, x, b_mv,
-                                         col_start8_shifted, col_end8_shifted);
-                int ref2ref = rf->mfmv_ref2ref[n][b_ref];
-                if (!ref2ref || (ref2ref < 0) != ref_sign) continue;
-                const mv mv1 = scale_mv(b_mv, -rf->mfmv_ref2sf[n][b_ref][0]);
-                int y1 = y - apply_sign(abs(mv1.y) >> 6, mv1.y);
-                if (y1 < 0 || y1 >= rf->ih8) continue;
-                y1 &= mask;
-                int x1 = x - apply_sign(abs(mv1.x) >> 6, mv1.x);
-                if (x1 < col_start8 || x1 >= col_end8) continue;
-                x1 &= mask;
-                const int y_proj_start = y1 & ~(mfmv_sbsz8 - 1);
-                const int y_proj_end = imin(y_proj_start + mfmv_sbsz8, row_end8);
-                if (y < y_proj_start || y >= y_proj_end) continue;
-                const int x_sb_align = x1 & ~(mfmv_sbsz8 - 1);
-                const int x_proj_start = imax(x_sb_align - mfmv_edge, 0);
-                const int x_proj_end =
-                    imin(x_sb_align + mfmv_sbsz8 + rf->mfmv_edge, rf->iw8);
-                if (x < x_proj_start || x >= x_proj_end) continue;
-                const ptrdiff_t pos1 = (y1 & (sbsz8 - 1)) * stride + x1;
-                if (rp_proj[pos1 >> 5].mv[pos1 & 31].n != INVALID_MV &&
-                    (tgt == -1 || ref2idx != tgt ||
-                     rp_proj[pos1 >> 5].ref[pos1 & 31] == abs(ref2ref)))
-                {
-                    continue;
-                }
-                if (rf->seq_hdr->mv_traj) {
-                    const int k1 = (x1 >> shift) - (x >> shift);
-                    assert(k1 >= -1 && k1 <= +1);
-                    rp_traj[ref][pos1].y = iclip(mv1.y, -2047, 2047);
-                    rp_traj[ref][pos1].x = iclip(mv1.x, -2047, 2047);
-                    rp_map[k1 + 1][ref][pos].y = y1 - y;
-                    rp_map[k1 + 1][ref][pos].x = x1 - x;
-                    assert((x >> shift) + k1 >= col_start8_shifted &&
-                           (x >> shift) + k1 <= col_end8_shifted);
-                    do /* so we can "break" out of it, saves indentation */ {
-                        if (ref2idx < 0) break;
-                        const mv mv2 =
-                            scale_mv(b_mv, rf->mfmv_ref2sf[n][b_ref][1]);
-                        rp_traj[ref2idx][pos1].y = iclip(mv2.y, -2047, 2047);
-                        rp_traj[ref2idx][pos1].x = iclip(mv2.x, -2047, 2047);
-                        int y2 = y + apply_sign(abs(b_mv.y) >> 6, b_mv.y);
-                        if (y2 < y_proj_start || y2 >= y_proj_end) break;
-                        y2 &= mask;
-                        int x2 = x + apply_sign(abs(b_mv.x) >> 6, b_mv.x);
-                        if (x2 < x_proj_start || x2 >= x_proj_end) break;
-                        x2 &= mask;
-                        const ptrdiff_t pos2 = (y2 & (sbsz8 - 1)) * stride + x2;
-                        const int k2 = (x1 >> shift) - (x2 >> shift);
-                        assert(k2 >= -1 && k2 <= +1);
-                        rp_map[k2 + 1][ref2idx][pos2].y = y1 - y2;
-                        rp_map[k2 + 1][ref2idx][pos2].x = x1 - x2;
-                        assert((x2 >> shift) + k2 >= col_start8_shifted &&
-                               (x2 >> shift) + k2 <= col_end8_shifted);
-                    } while (0);
-                }
-                if (ref2ref < 0) {
-                    b_mv.y = -b_mv.y;
-                    b_mv.x = -b_mv.x;
-                }
-                rp_proj[pos1 >> 5].mv[pos1 & 31] = b_mv;
-                rp_proj[pos1 >> 5].ref[pos1 & 31] = abs(ref2ref);
-            }
-        }
-    }
+    dsp->load_tmvs_refs(rf, rp_proj, stride, rp_traj, rp_map,
+                        col_start8, col_end8, row_start8, row_end8,
+                        sbsz8, sample_step);
 
     if (rf->frm_hdr->tip.frame_mode) {
         const int tip_delta = rf->tip.delta;
-        tip_projection(rp_proj, stride, col_start8, col_end8,
-                       row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                       sample_step, tip_delta);
+        dsp->tip_projection(rp_proj, stride, col_start8, col_end8,
+                            row_start8, row_end8, mfmv_sbsz8, sbsz8,
+                            sample_step, tip_delta);
         if (rf->seq_hdr->tip_hole_fill) {
-            fill_holes(rp_proj, stride, col_start8, col_end8,
-                       row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                       sample_step, tip_delta);
-            smoothen(rp_proj, stride, col_start8, col_end8,
-                     row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                     sample_step, tip_delta);
+            dsp->tip_fill_holes(rp_proj, stride, col_start8, col_end8,
+                                row_start8, row_end8, mfmv_sbsz8, sbsz8,
+                                sample_step, tip_delta);
+            dsp->tip_smoothen(rp_proj, stride, col_start8, col_end8,
+                              row_start8, row_end8, mfmv_sbsz8, sbsz8,
+                              sample_step, tip_delta);
         }
     }
     if (sample_step > 1) {
         for (int n = 0; n < rf->frm_hdr->n_ref_frames; n++)
-            fill_gap_traj(rp_traj[n], stride, col_start8, col_end8,
-                          row_start8, row_end8, mfmv_sbsz8, sbsz8);
-        fill_gap_proj(rp_proj, stride, col_start8, col_end8,
-                      row_start8, row_end8, mfmv_sbsz8, sbsz8);
+            dsp->fill_gap_traj(rp_traj[n], stride, col_start8, col_end8,
+                               row_start8, row_end8, mfmv_sbsz8, sbsz8);
+        dsp->fill_gap_proj(rp_proj, stride, col_start8, col_end8,
+                           row_start8, row_end8, mfmv_sbsz8, sbsz8);
     }
 }
 
 // cache the current tile/sbrow (or frame/sbrow)'s projectable motion vectors
 // into buffers for use in future frame's temporal MV prediction
-void dav2d_refmvs_save_tmvs(const Dav2dRefmvsDSPContext *const dsp,
-                            refmvs_tile *const rt,
+void dav2d_refmvs_save_tmvs(refmvs_tile *const rt,
                             const int col_start8, int col_end8,
                             const int row_start8, int row_end8)
 {
@@ -2592,6 +2607,13 @@ COLD void dav2d_refmvs_dsp_init(Dav2dRefmvsDSPContext *const c) {
     c->splat_warpmv = splat_warpmv_c;
     c->splat_comp_warpmv = splat_comp_warpmv_c;
     c->splat_comp_wedgemv = splat_comp_wedgemv_c;
+
+    c->load_tmvs_refs = load_tmvs_refs_c;
+    c->tip_projection = tip_projection_c;
+    c->tip_fill_holes = tip_fill_holes_c;
+    c->tip_smoothen = tip_smoothen_c;
+    c->fill_gap_proj = fill_gap_proj_c;
+    c->fill_gap_traj = fill_gap_traj_c;
 
 #if HAVE_ASM && ARCH_X86
     refmvs_dsp_init_x86(c);

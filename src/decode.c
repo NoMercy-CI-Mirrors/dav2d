@@ -4539,7 +4539,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     if (t->task_thread.pass & PASS_MVRES &&
         f->c->n_tc > 1 && f->frame_hdr->use_ref_frame_mvs)
     {
-        dav2d_refmvs_load_tmvs(&f->rf, ts->tiling.row,
+        dav2d_refmvs_load_tmvs(&f->c->refmvs_dsp, &f->rf, ts->tiling.row,
                                ts->tiling.col_start >> 1, ts->tiling.col_end >> 1,
                                t->by >> 1, (t->by + sb_step) >> 1);
     }
@@ -4573,8 +4573,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             if (t->task_thread.pass & PASS_MVRES &&
                 (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
             {
-                dav2d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
-                                       t->bx >> 1, (t->bx + sb_step) >> 1,
+                dav2d_refmvs_save_tmvs(&t->rt, t->bx >> 1, (t->bx + sb_step) >> 1,
                                        t->by >> 1, (t->by + sb_step) >> 1);
             }
         }
@@ -4683,8 +4682,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
         if (t->task_thread.pass & PASS_MVRES &&
             (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
         {
-            dav2d_refmvs_save_tmvs(&f->c->refmvs_dsp, &t->rt,
-                                   t->bx >> 1, (t->bx + sb_step) >> 1,
+            dav2d_refmvs_save_tmvs(&t->rt, t->bx >> 1, (t->bx + sb_step) >> 1,
                                    t->by >> 1, (t->by + sb_step) >> 1);
         }
     }
@@ -5188,7 +5186,7 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
             t->by = sby << (4 + f->frame_hdr->sb128);
             const int by_end = (t->by + f->sb_step) >> 1;
             if (f->frame_hdr->use_ref_frame_mvs) {
-                dav2d_refmvs_load_tmvs(&f->rf, tile_row,
+                dav2d_refmvs_load_tmvs(&f->c->refmvs_dsp, &f->rf, tile_row,
                                        0, f->bw >> 1, t->by >> 1, by_end);
             }
             for (int tile_col = 0; tile_col < f->frame_hdr->tiling.t.cols; tile_col++) {

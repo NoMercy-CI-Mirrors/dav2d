@@ -180,6 +180,31 @@ void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             const uint8_t *wedge, intptr_t w_mask)
 typedef decl_splat_comp_wedgemv_fn(*splat_comp_wedgemv_fn);
 
+#define decl_load_tmvs_refs_fn(name) \
+void (name)(const refmvs_frame *rf, \
+            refmvs_sngl_mv_block *rp_proj, \
+            const ptrdiff_t stride, mv *rp_traj[7], \
+            refmvs_traj_map *rp_map[3][7], int col_start8, int col_end8, \
+            int row_start8, int row_end8, int sbsz8, int sample_step)
+typedef decl_load_tmvs_refs_fn(*load_tmvs_refs_fn);
+
+#define decl_tip_fn(name) \
+void (name)(refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride, \
+            int col_start8, int col_end8, int row_start8, int row_end8, \
+            int mfmv_sbsz8, int sbsz8, int tmvp_sample_step, int tip_delta)
+typedef decl_tip_fn(*tip_fn);
+
+#define decl_fill_gap_proj_fn(name) \
+void (name)(refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride, \
+            int col_start8, int col_end8, int row_start8, int row_end8, \
+            int mfmv_sbsz8, int sbsz8)
+typedef decl_fill_gap_proj_fn(*fill_gap_proj_fn);
+
+#define decl_fill_gap_traj_fn(name) \
+void (name)(union mv *rp_traj, ptrdiff_t stride, int col_start8, int col_end8, \
+            int row_start8, int row_end8, int mfmv_sbsz8, int sbsz8)
+typedef decl_fill_gap_traj_fn(*fill_gap_traj_fn);
+
 typedef struct Dav2dRefmvsDSPContext {
     // for each of these functions, t_dst can be NULL to only write the
     // spatial portions. For s_dst, only the bottom line and right-most 3
@@ -188,6 +213,12 @@ typedef struct Dav2dRefmvsDSPContext {
     splat_warpmv_fn splat_warpmv;
     splat_comp_warpmv_fn splat_comp_warpmv;
     splat_comp_wedgemv_fn splat_comp_wedgemv;
+
+    // tip motion field & mv projection
+    load_tmvs_refs_fn load_tmvs_refs;
+    tip_fn tip_projection, tip_fill_holes, tip_smoothen;
+    fill_gap_proj_fn fill_gap_proj;
+    fill_gap_traj_fn fill_gap_traj;
 } Dav2dRefmvsDSPContext;
 
 // call once per frame
@@ -203,13 +234,13 @@ int dav2d_refmvs_init_frame(refmvs_frame *rf,
 
 // cache the current superblock's bottom spatial values into into a "top"
 // buffer to act as "top" across superblock boundaries for the next sbrow
-void dav2d_refmvs_save_tmvs(const Dav2dRefmvsDSPContext *dsp,
-                            refmvs_tile *rt,
+void dav2d_refmvs_save_tmvs(refmvs_tile *rt,
                             int col_start8, int col_end8,
                             int row_start8, int row_end8);
 
 // load temporal MVs for current tile or frame's superblock-row
-void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
+void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
+                            const refmvs_frame *const rf, int tile_row_idx,
                             const int col_start8, const int col_end8,
                             const int row_start8, int row_end8);
 
