@@ -71,9 +71,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
     // The first stripe of the frame is shorter by 8 luma pixel rows.
     int stripe_h = imin((64 - 8 * !!first_sby_in_tile_row) >> ss_ver, row_h - y);
 
-    int ref_dst_idx = f->lf.gdf_ref_dst_idx;
-    int qp_idx = f->frame_hdr->gdf.qp_idx;
-    int gdf_scale = f->frame_hdr->gdf.scale;
+    const int gdf_scale = f->frame_hdr->gdf.scale;
     wienerfilter_fn wiener_fn = NULL;
     WienerParams wiener_params;
     uint16_t noskip_mask[64 + 2];
@@ -161,8 +159,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
                   f->lf.mask[sb256_idx].gdf[(((y + inc) >> 4) & 12) + sb64x_idx];
 
         if (gdf) {
-            dsp->lr.gdf_prep(gdf_err, p, stride, left, top ? top : lpf, lpfb, w,
-                             stripe_h, ref_dst_idx, qp_idx, edges HIGHBD_CALL_SUFFIX);
+            dsp->lr.gdf_prep(gdf_err, p, stride, left, top ? top : lpf, lpfb,
+                             f->lf.gdf_params, w, stripe_h, edges HIGHBD_CALL_SUFFIX);
         }
         const int y4 = ((y << ss_ver) & 255) >> 2;
         const uint16_t (*ll_mask)[4];

@@ -32,7 +32,9 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+#include "common/attributes.h"
 #include "common/bitdepth.h"
+#include "common/intops.h"
 
 // Some of the luma wiener filters select different filters based pixel data
 // and the pixels within skipped/unskipped blocks. This process can be sped up
@@ -52,6 +54,35 @@ typedef struct WienerQValApproxData {
     // of time. Additionally, it only ever uses 2 values and only decreases.
     int8_t idx0_changeover;
 } WienerQValApproxData;
+
+#define GDF_PARAMS(...) struct {   \
+    uint16_t scale;                \
+    int16_t bias[3];               \
+    uint16_t gradient_alpha[4];    \
+    int16_t gradient_weight[4];    \
+    uint16_t alpha[18][4];         \
+    int16_t weight[3][18][4];      \
+    int8_t error_lut[__VA_ARGS__]; \
+}
+
+PACKED(typedef GDF_PARAMS()) ALIGN(Dav2dGdfParams, 8);
+CHECK_SIZE(Dav2dGdfParams, 600);
+
+PACKED(typedef union {
+    ALIGN(Dav2dGdfParams p, 8);
+    GDF_PARAMS(4096);
+}) ALIGN(Dav2dGdfIntraParams, 8);
+CHECK_SIZE(Dav2dGdfIntraParams, 4696);
+
+PACKED(typedef union {
+    ALIGN(Dav2dGdfParams p, 8);
+    GDF_PARAMS(1000);
+}) ALIGN(Dav2dGdfInterParams, 8);
+CHECK_SIZE(Dav2dGdfInterParams, 1600);
+#undef GDF_PARAMS
+
+EXTERN const Dav2dGdfIntraParams dav2d_gdf_intra_params[6];
+EXTERN const Dav2dGdfInterParams dav2d_gdf_inter_params[5][6];
 
 static inline void
 setup_wiener_qval_approx_data(WienerQValApproxData *const data,
@@ -181,8 +212,8 @@ typedef decl_wiener_filter_uv_fn(*wienerfilter_uv_fn);
 #define decl_gdf_prep_fn(name) \
 void (name)(int8_t *dst, const pixel *p, ptrdiff_t stride, \
             const_left_pixel_row left, const pixel *top, \
-            const pixel *bottom, int w, int h, int ref_dst_idx, \
-            int qp_idx, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+            const pixel *bottom, const Dav2dGdfParams *params, \
+            int w, int h, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_gdf_prep_fn(*gdf_prep_fn);
 
 #define decl_gdf_add_fn(name) \

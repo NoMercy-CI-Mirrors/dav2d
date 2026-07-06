@@ -354,11 +354,12 @@ static void check_gdf_prep(Dav2dLoopRestorationDSPContext *const c) {
     PIXEL_RECT(p, 64, 64);
     PIXEL_RECT(top, 64, 4);
     PIXEL_RECT(bottom, 64, 4);
+    const Dav2dGdfParams *params;
 
     declare_func(void, int8_t *dst, const pixel *p, ptrdiff_t stride,
                  const pixel (*left)[8], const pixel *lpf,
-                 const pixel *lpf_bottom, int w, int h, int ref_dst_idx,
-                 int qp_idx, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX);
+                 const pixel *lpf_bottom, const Dav2dGdfParams *params,
+                 int w, int h, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX);
 
     if (check_func(c->gdf_prep, "gdf_prep_%dbpc", BITDEPTH)) {
 #if BITDEPTH == 16
@@ -383,12 +384,15 @@ static void check_gdf_prep(Dav2dLoopRestorationDSPContext *const c) {
                           64 : base_h;
             const int ref_dst_idx = rnd() % 6;
             const int qp_idx = rnd() % 6;
+            params = ref_dst_idx ? &dav2d_gdf_inter_params[ref_dst_idx - 1][qp_idx].p
+                                 : &dav2d_gdf_intra_params[qp_idx].p;
+
             memset(a_dst, 0xaa, 64 * 64);
 
-            call_ref(c_dst, p, p_stride, left, top, bottom, w, h,
-                     ref_dst_idx, qp_idx, edges HIGHBD_TAIL_SUFFIX);
-            call_new(a_dst, p, p_stride, left, top, bottom, w, h,
-                     ref_dst_idx, qp_idx, edges HIGHBD_TAIL_SUFFIX);
+            call_ref(c_dst, p, p_stride, left, top, bottom,
+                     params, w, h, edges HIGHBD_TAIL_SUFFIX);
+            call_new(a_dst, p, p_stride, left, top, bottom,
+                     params, w, h, edges HIGHBD_TAIL_SUFFIX);
             if (checkasm_check(int8_t, c_dst, 64, a_dst, 64, w, h, "dst")) {
                 fprintf(stderr, "size = %dx%d, edges = %06d\n",
                         w, h, to_binary(edges));
@@ -397,7 +401,7 @@ static void check_gdf_prep(Dav2dLoopRestorationDSPContext *const c) {
         }
 
         bench_new(a_dst, p, p_stride, left, top, bottom,
-                  64, 64, 0, 0, 0xf HIGHBD_TAIL_SUFFIX);
+                  params, 64, 64, 0xf HIGHBD_TAIL_SUFFIX);
     }
 }
 

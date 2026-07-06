@@ -4891,15 +4891,17 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         ((f->frame_hdr->restoration.p[2].type != DAV2D_RESTORATION_NONE) << 2);
 
     if (f->frame_hdr->gdf.enabled) {
-        int ref_dst_idx = 0;
+        const int qp_idx = f->frame_hdr->gdf.qp_idx;
         if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
             int max_dist = 0;
             for (int i = 0; i < imin(f->frame_hdr->n_ref_frames, 2); i++)
                 max_dist = imax(max_dist, f->absrefdist[i]);
-            const uint8_t ref_dst_idx_tbl[12] = { 5, 1, 2, 3, 3, 3, 4, 4, 4, 4, 4, 5 };
-            ref_dst_idx = ref_dst_idx_tbl[imin(max_dist, 11)];
+            static const uint8_t ref_dst_idx_tbl[12] = { 4, 0, 1, 2, 2, 2, 3, 3, 3, 3, 3, 4 };
+            const int ref_dst_idx = ref_dst_idx_tbl[imin(max_dist, 11)];
+            f->lf.gdf_params = &dav2d_gdf_inter_params[ref_dst_idx][qp_idx].p;
+        } else {
+            f->lf.gdf_params = &dav2d_gdf_intra_params[qp_idx].p;
         }
-        f->lf.gdf_ref_dst_idx = ref_dst_idx;
     }
 
     size_t prefilter_data_size_y, prefilter_data_size_uv;

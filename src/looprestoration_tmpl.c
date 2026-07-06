@@ -33,10 +33,8 @@
 
 #include "common/attributes.h"
 #include "common/bitdepth.h"
-#include "common/intops.h"
 
 #include "src/looprestoration.h"
-#include "src/gdf_tables.h"
 
 // 64 + 6 + 6
 #define REST_UNIT_STRIDE (76)
@@ -695,18 +693,19 @@ static void compute_gradient_row(uint16_t (*dst)[4], const pixel **src,
 }
 
 static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
-                       const pixel (*left)[8], const pixel *lpf,
-                       const pixel *lpf_bottom, const int w, const int h,
-                       const int ref_dst_idx, const int qp_idx,
+                       const pixel (*const left)[8], const pixel *const lpf,
+                       const pixel *const lpf_bottom,
+                       const Dav2dGdfParams *const params,
+                       const int w, const int h,
                        enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 {
     assert(w > 0 && w <= 64 && !(w & 7));
     assert(h > 0 && h <= 64 && !(h & 7));
-    assert(ref_dst_idx >= 0 && ref_dst_idx < 6);
-    assert(qp_idx >= 0 && qp_idx < 6);
     const int bitdepth = bitdepth_from_max(bitdepth_max);
     const int down_shift = bitdepth == 12 ? 2 : 0;
     const int up_shift = bitdepth == 8 ? 2 : 0;
+    const int scale = params->scale;
+    assert(scale == 5 || scale == 8);
 
     uint16_t grad[2][32][4];
     pixel row_buffers[13][REST_UNIT_STRIDE];
@@ -744,20 +743,7 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
         ptrs[bak_idx] = bak_rows[bak_idx];
     }
 
-    const int8_t *error_lut;
-    int scale;
     compute_gradient_row(grad[1], &ptrs[6], w, down_shift);
-
-    if (ref_dst_idx == 0) {
-        error_lut = dav2d_gdf_intra_error[qp_idx];
-        scale = 8;
-    } else {
-        error_lut = dav2d_gdf_inter_error[ref_dst_idx - 1][qp_idx];
-        scale = 5;
-    }
-
-    const int shared_val0 = dav2d_gdf_bias[ref_dst_idx][qp_idx][0];
-    const int shared_val1 = dav2d_gdf_bias[ref_dst_idx][qp_idx][1];
 
     for (int y = 0; y < h; y++) {
         if (y + 6 < h) {
@@ -780,12 +766,12 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
             compute_gradient_row(grad[(y & 2) >> 1], &ptrs[8], w, down_shift);
             for (int x = 0; x < (w >> 1); x++) {
                 uint16_t grad_sums[4];
-                shared_vals[x] = dav2d_gdf_bias[ref_dst_idx][qp_idx][2];
+                shared_vals[x] = params->bias[2];
                 for (int d = 0; d < 4; d++) {
                     grad_sums[d] = grad[0][x][d] + grad[1][x][d];
-                    const int alpha = dav2d_gdf_gradient_alpha[ref_dst_idx][qp_idx][d];
+                    const int alpha = params->gradient_alpha[d];
                     const int v = imin(grad_sums[d] >> (4 - up_shift), alpha);
-                    shared_vals[x] += v * dav2d_gdf_gradient_weight[ref_dst_idx][qp_idx][d];
+                    shared_vals[x] += v * params->gradient_weight[d];
                 }
                 cls_row[x] = (grad_sums[0] <= grad_sums[1]) | ((grad_sums[2] <= grad_sums[3]) << 1);
             }
@@ -797,10 +783,10 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
 
             for (int x2 = 0; x2 < 2; x2++) {
                 int x = x1 + x2;
-                int idx_vals[3] = { shared_val0, shared_val1, shared_val2 };
+                int idx_vals[3] = { params->bias[0], params->bias[1], shared_val2 };
                 int m = ptrs[6][x] >> down_shift;
                 for (int k = 0; k < 18; k++) {
-                    const int alpha = dav2d_gdf_alpha[ref_dst_idx][qp_idx][k][cls];
+                    const int alpha = params->alpha[k][cls];
                     const int dy = gdf_coords[k][0];
                     const int dx = gdf_coords[k][1];
                     const int a = ptrs[6 - dy][x - dx] >> down_shift;
@@ -809,7 +795,7 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
                     const int below = iclip((b - m) * (1 << up_shift), -alpha, alpha);
                     const int v = iclip(above + below, -512, 511);
                     for (int idx = 0; idx < 3; idx++)
-                        idx_vals[idx] += v * dav2d_gdf_weight[ref_dst_idx][qp_idx][idx][k][cls];
+                        idx_vals[idx] += v * params->weight[idx][k][cls];
                 }
 
                 int full_idx = 0;
@@ -819,7 +805,7 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
                     int sub_idx = iclip(v, -scale, scale - 1) + scale;
                     full_idx = full_idx * scale * 2 + sub_idx;
                 }
-                dst[x] = error_lut[full_idx];
+                dst[x] = params->error_lut[full_idx];
             }
         }
 
