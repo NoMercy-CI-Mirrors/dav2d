@@ -31,10 +31,11 @@
 #include "src/filmgrain.h"
 #include "asm-offsets.h"
 
-CHECK_OFFSET(Dav2dFilmGrainData, seed, FGD_SEED);
 CHECK_OFFSET(Dav2dFilmGrainData, ar_coeff_lag, FGD_AR_COEFF_LAG);
-CHECK_OFFSET(Dav2dFilmGrainData, ar_coeffs_y, FGD_AR_COEFFS_Y);
-CHECK_OFFSET(Dav2dFilmGrainData, ar_coeffs_uv, FGD_AR_COEFFS_UV);
+CHECK_OFFSET(Dav2dFilmGrainData, ar_coeffs, FGD_AR_COEFFS_Y);
+// This check doesn't work with the struct based fallback CHECK_OFFSET,
+// and doesn't work with MSVC with either version of the macro.
+// CHECK_OFFSET(Dav2dFilmGrainData, ar_coeffs[1], FGD_AR_COEFFS_UV);
 CHECK_OFFSET(Dav2dFilmGrainData, ar_coeff_shift, FGD_AR_COEFF_SHIFT);
 CHECK_OFFSET(Dav2dFilmGrainData, grain_scale_shift, FGD_GRAIN_SCALE_SHIFT);
 
