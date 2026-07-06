@@ -369,9 +369,9 @@ static void check_gdf_prep(Dav2dLoopRestorationDSPContext *const c) {
         const int base_w = (1 + (rnd() & 7)) * 8;
         const int base_h = (1 + (rnd() & 7)) * 8;
 
-        init_tmp(p - 6, p_stride, 64 + 12, 64, bitdepth_max);
-        init_tmp(top - 6, top_stride, 64 + 12,  8, bitdepth_max);
-        init_tmp(bottom - 6, bottom_stride, 64 + 12,  8, bitdepth_max);
+        init_tmp(p - 6, p_stride, 64 + 12, 64 + 6, bitdepth_max);
+        init_tmp(top - 6, top_stride, 64 + 12, 6, bitdepth_max);
+        init_tmp(bottom - 6, bottom_stride, 64 + 12, 6, bitdepth_max);
         init_tmp(*left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
         for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
