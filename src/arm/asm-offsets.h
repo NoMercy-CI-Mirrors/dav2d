@@ -42,17 +42,4 @@
 #define FGD_UV_OFFSET                    204
 #define FGD_CLIP_TO_RESTRICTED_RANGE     216
 
-#if ARCH_AARCH64
-#define RMVSF_IW8                        16
-#define RMVSF_IH8                        20
-#define RMVSF_MFMV_REF                   53
-#define RMVSF_MFMV_REF2CUR               56
-#define RMVSF_MFMV_REF2REF               59
-#define RMVSF_N_MFMVS                    80
-#define RMVSF_RP_REF                     96
-#define RMVSF_RP_PROJ                    104
-#define RMVSF_RP_STRIDE                  112
-#define RMVSF_N_TILE_THREADS             128
-#endif
-
 #endif /* ARM_ASM_OFFSETS_H */
