@@ -42,8 +42,6 @@
 #define REST_UNIT_STRIDE (76)
 // 64 / 4
 #define CLASS_BUF_SIZE (16)
-// 64 / 2 + 1
-#define GRADIENT_BUF_STRIDE (33)
 
 //         C
 //   E     A     F
@@ -670,6 +668,8 @@ static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
 static void compute_gradient_row(uint16_t (*dst)[4], const pixel **src,
                                  const int w, const int shift)
 {
+    uint16_t tmp[33][4];
+
     for (int x1 = 0; x1 < w + 2; x1 += 2) {
         const int8_t offs[4][2] = { { 1, 0 }, { 0, 1 }, { 1, 1 }, { -1, 1 } };
         for (int d = 0; d < 4; d++) {
@@ -685,9 +685,13 @@ static void compute_gradient_row(uint16_t (*dst)[4], const pixel **src,
                     grad += abs(b * 2 - a - c);
                 }
             }
-            dst[x1 >> 1][d] = grad;
+            tmp[x1 >> 1][d] = grad;
         }
     }
+
+    for (int x = 0; x < (w >> 1); x++)
+        for (int d = 0; d < 4; d++)
+            dst[x][d] = tmp[x][d] + tmp[x + 1][d];
 }
 
 static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
@@ -704,8 +708,10 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
     const int down_shift = bitdepth == 12 ? 2 : 0;
     const int up_shift = bitdepth == 8 ? 2 : 0;
 
-    uint16_t grad[2][GRADIENT_BUF_STRIDE][4];
+    uint16_t grad[2][32][4];
     pixel row_buffers[13][REST_UNIT_STRIDE];
+    int32_t shared_vals[32];
+    uint8_t cls_row[32];
     pixel *bak_rows[13];
     const pixel *ptrs[13];
 
@@ -740,8 +746,7 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
 
     const int8_t *error_lut;
     int scale;
-    compute_gradient_row(grad[0], &ptrs[6], w, down_shift);
-    int grad_bit = 1;
+    compute_gradient_row(grad[1], &ptrs[6], w, down_shift);
 
     if (ref_dst_idx == 0) {
         error_lut = dav2d_gdf_intra_error[qp_idx];
@@ -750,6 +755,9 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
         error_lut = dav2d_gdf_inter_error[ref_dst_idx - 1][qp_idx];
         scale = 5;
     }
+
+    const int shared_val0 = dav2d_gdf_bias[ref_dst_idx][qp_idx][0];
+    const int shared_val1 = dav2d_gdf_bias[ref_dst_idx][qp_idx][1];
 
     for (int y = 0; y < h; y++) {
         if (y + 6 < h) {
@@ -768,36 +776,29 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
         }
         if (++bak_idx == 13) bak_idx = 0;
         if ((y & 1) == 0) {
-            compute_gradient_row(grad[grad_bit], &ptrs[8], w, down_shift);
-            grad_bit ^= 1;
+            // Compute gradients over a 4x4 region
+            compute_gradient_row(grad[(y & 2) >> 1], &ptrs[8], w, down_shift);
+            for (int x = 0; x < (w >> 1); x++) {
+                uint16_t grad_sums[4];
+                shared_vals[x] = dav2d_gdf_bias[ref_dst_idx][qp_idx][2];
+                for (int d = 0; d < 4; d++) {
+                    grad_sums[d] = grad[0][x][d] + grad[1][x][d];
+                    const int alpha = dav2d_gdf_gradient_alpha[ref_dst_idx][qp_idx][d];
+                    const int v = imin(grad_sums[d] >> (4 - up_shift), alpha);
+                    shared_vals[x] += v * dav2d_gdf_gradient_weight[ref_dst_idx][qp_idx][d];
+                }
+                cls_row[x] = (grad_sums[0] <= grad_sums[1]) | ((grad_sums[2] <= grad_sums[3]) << 1);
+            }
         }
 
         for (int x1 = 0; x1 < w; x1 += 2) {
-            // TODO: Don't recompute the same grad_sum/shared_vals on odd rows.
-            int grad_sums[4] = { 0, 0, 0, 0 };
-            int shared_vals[3];
-            for (int d = 0; d < 4; d++) {
-                int hx = x1 >> 1;
-                // Compute gradients over a 4x4 region
-                grad_sums[d] = grad[0][hx][d] + grad[0][hx + 1][d] +
-                               grad[1][hx][d] + grad[1][hx + 1][d];
-            }
-            int cls = (grad_sums[0] <= grad_sums[1]) | ((grad_sums[2] <= grad_sums[3]) << 1);
-
-            for (int idx = 0; idx < 3; idx++)
-                shared_vals[idx] = dav2d_gdf_bias[ref_dst_idx][qp_idx][idx];
-            for (int d = 0; d < 4; d++) {
-                const int alpha = dav2d_gdf_gradient_alpha[ref_dst_idx][qp_idx][d];
-                const int v = imin(grad_sums[d] >> (4 - up_shift), alpha);
-                shared_vals[2] += v * dav2d_gdf_gradient_weight[ref_dst_idx][qp_idx][d];
-            }
+            const int shared_val2 = shared_vals[x1 >> 1];
+            const int cls = cls_row[x1 >> 1];
 
             for (int x2 = 0; x2 < 2; x2++) {
                 int x = x1 + x2;
-                int idx_vals[3];
+                int idx_vals[3] = { shared_val0, shared_val1, shared_val2 };
                 int m = ptrs[6][x] >> down_shift;
-                for (int idx = 0; idx < 3; idx++)
-                    idx_vals[idx] = shared_vals[idx];
                 for (int k = 0; k < 18; k++) {
                     const int alpha = dav2d_gdf_alpha[ref_dst_idx][qp_idx][k][cls];
                     const int dy = gdf_coords[k][0];
