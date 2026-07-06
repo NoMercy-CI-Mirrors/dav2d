@@ -29,7 +29,6 @@
 
 #include "config.h"
 
-#define FGD_SEED                         0
 #define FGD_AR_COEFF_LAG                 104
 #define FGD_AR_COEFFS_Y                  108
 #define FGD_AR_COEFFS_UV                 136

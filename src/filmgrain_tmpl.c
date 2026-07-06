@@ -429,7 +429,7 @@ fguv_ss_fn(444, 0, 0);
 
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
-//#include "src/arm/filmgrain.h"
+#include "src/arm/filmgrain.h"
 #elif ARCH_X86
 #include "src/x86/filmgrain.h"
 #endif
@@ -448,7 +448,7 @@ COLD void bitfn(dav2d_film_grain_dsp_init)(Dav2dFilmGrainDSPContext *const c) {
 
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
-    //film_grain_dsp_init_arm(c);
+    film_grain_dsp_init_arm(c);
 #elif ARCH_X86
     film_grain_dsp_init_x86(c);
 #endif

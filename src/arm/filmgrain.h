@@ -45,21 +45,13 @@ CHECK_OFFSET(Dav2dFilmGrainData, uv_luma_mult, FGD_UV_LUMA_MULT);
 CHECK_OFFSET(Dav2dFilmGrainData, uv_offset, FGD_UV_OFFSET);
 CHECK_OFFSET(Dav2dFilmGrainData, clip_to_restricted_range, FGD_CLIP_TO_RESTRICTED_RANGE);
 
-void BF(dav2d_generate_grain_y, neon)(entry buf[][GRAIN_WIDTH],
-                                      const Dav2dFilmGrainData *const data
-                                      HIGHBD_DECL_SUFFIX);
+decl_generate_grain_y_fn(BF(dav2d_generate_grain_y, neon));
 
-#define GEN_GRAIN_UV(suff) \
-void BF(dav2d_generate_grain_uv_ ## suff, neon)(entry buf[][GRAIN_WIDTH], \
-                                                const entry buf_y[][GRAIN_WIDTH], \
-                                                const Dav2dFilmGrainData *const data, \
-                                                const intptr_t uv \
-                                                HIGHBD_DECL_SUFFIX)
+decl_generate_grain_uv_fn(BF(dav2d_generate_grain_uv_420, neon));
+decl_generate_grain_uv_fn(BF(dav2d_generate_grain_uv_422, neon));
+decl_generate_grain_uv_fn(BF(dav2d_generate_grain_uv_444, neon));
 
-GEN_GRAIN_UV(420);
-GEN_GRAIN_UV(422);
-GEN_GRAIN_UV(444);
-
+#if 0
 // Use ptrdiff_t instead of int for the last few parameters, to get the
 // same layout of parameters on the stack across platforms.
 void BF(dav2d_fgy_32x32, neon)(pixel *const dst,
@@ -187,6 +179,7 @@ fguv_32x32xn_##nm##_neon(pixel *const dst_row, const pixel *const src_row, \
 FGUV(420, 1, 1);
 FGUV(422, 1, 0);
 FGUV(444, 0, 0);
+#endif
 
 static ALWAYS_INLINE void film_grain_dsp_init_arm(Dav2dFilmGrainDSPContext *const c) {
     const unsigned flags = dav2d_get_cpu_flags();
@@ -197,9 +190,10 @@ static ALWAYS_INLINE void film_grain_dsp_init_arm(Dav2dFilmGrainDSPContext *cons
     c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I420 - 1] = BF(dav2d_generate_grain_uv_420, neon);
     c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I422 - 1] = BF(dav2d_generate_grain_uv_422, neon);
     c->generate_grain_uv[DAV2D_PIXEL_LAYOUT_I444 - 1] = BF(dav2d_generate_grain_uv_444, neon);
-
+#if 0
     c->fgy_32x32xn = fgy_32x32xn_neon;
     c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I420 - 1] = fguv_32x32xn_420_neon;
     c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I422 - 1] = fguv_32x32xn_422_neon;
     c->fguv_32x32xn[DAV2D_PIXEL_LAYOUT_I444 - 1] = fguv_32x32xn_444_neon;
+#endif
 }

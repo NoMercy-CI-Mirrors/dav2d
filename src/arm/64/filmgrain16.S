@@ -725,14 +725,14 @@ function generate_grain_\type\()_16bpc_neon, export=1
         mov             w14, #28
         add             x19, x1,  #3*GRAIN_WIDTH*2
         mov             x1,  x2
+        mov             w2,  w4
         mul             w13, w13, w14
-        clz             w15, w4
+        clz             w15, w5
 .else
-        clz             w15, w2
+        clz             w15, w3
 .endif
         movrel          x3,  X(gaussian_sequence)
         sub             w15, w15, #24 // -bitdepth_min_8
-        ldr             w2,  [x1, #FGD_SEED]
         ldr             w9,  [x1, #FGD_GRAIN_SCALE_SHIFT]
 .ifc \type, y
         add             x4,  x1,  #FGD_AR_COEFFS_Y
@@ -983,12 +983,12 @@ function generate_grain_\type\()_16bpc_neon, export=1
         mov             w14, #28
         add             x19, x1,  #(3*GRAIN_WIDTH-3)*2
         mov             x1,  x2
+        mov             w2,  w4
         mul             w13, w13, w14
-        clz             w15, w4
+        clz             w15, w5
 
         movrel          x3,  X(gaussian_sequence)
         sub             w15, w15, #24 // -bitdepth_min_8
-        ldr             w2,  [x1, #FGD_SEED]
         ldr             w9,  [x1, #FGD_GRAIN_SCALE_SHIFT]
         add             x4,  x1,  #FGD_AR_COEFFS_UV
         add             w9,  w9,  w15 // grain_scale_shift - bitdepth_min_8

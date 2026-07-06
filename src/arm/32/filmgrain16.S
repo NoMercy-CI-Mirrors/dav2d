@@ -759,19 +759,19 @@ function generate_grain_\type\()_16bpc_neon, export=1
         push            {r4-r11,lr}
 
 .ifc \type, uv_444
-        ldr             r4,  [sp, #36]
+        ldrd            r4,  r5,  [sp, #36]
         mov             r12, r3
         mov             lr,  #28
         add             r11, r1,  #3*GRAIN_WIDTH*2
         mov             r1,  r2
+        mov             r2,  r4
         mul             r12, r12, lr
-        clz             lr,  r4
+        clz             lr,  r5
 .else
-        clz             lr,  r2
+        clz             lr,  r3
 .endif
         movrel          r3,  X(gaussian_sequence)
         sub             lr,  lr,  #24 // -bitdepth_min_8
-        ldr             r2,  [r1, #FGD_SEED]
         ldr             r9,  [r1, #FGD_GRAIN_SCALE_SHIFT]
 .ifc \type, y
         add             r4,  r1,  #FGD_AR_COEFFS_Y
@@ -1020,18 +1020,18 @@ gen_grain_82 uv_444
 function generate_grain_\type\()_16bpc_neon, export=1
         push            {r4-r11,lr}
 
-        ldr             r4,  [sp, #36]
+        ldrd            r4,  r5,  [sp, #36]
         mov             r12, r3
         movw            r11, #(3*GRAIN_WIDTH-3)*2
         mov             lr,  #28
         add             r11, r1,  r11
         mov             r1,  r2
+        mov             r2,  r4
         mul             r12, r12, lr
-        clz             lr,  r4
+        clz             lr,  r5
 
         movrel          r3,  X(gaussian_sequence)
         sub             lr,  lr,  #24 // -bitdepth_min_8
-        ldr             r2,  [r1, #FGD_SEED]
         ldr             r9,  [r1, #FGD_GRAIN_SCALE_SHIFT]
         add             r4,  r1,  #FGD_AR_COEFFS_UV
         add             r9,  r9,  lr // grain_scale_shift - bitdepth_min_8

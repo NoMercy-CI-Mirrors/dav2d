@@ -972,10 +972,10 @@ function generate_grain_\type\()_8bpc_neon, export=1
         mov             lr,  #28
         add             r11, r1,  #3*GRAIN_WIDTH
         mov             r1,  r2
+        ldr             r2,  [sp, #36]
         mul             r12, r12, lr
 .endif
         movrel          r3,  X(gaussian_sequence)
-        ldr             r2,  [r1, #FGD_SEED]
         ldr             r9,  [r1, #FGD_GRAIN_SCALE_SHIFT]
 .ifc \type, y
         add             r4,  r1,  #FGD_AR_COEFFS_Y
@@ -1188,10 +1188,10 @@ function generate_grain_\type\()_8bpc_neon, export=1
         mov             lr,  #28
         add             r11, r1,  #3*GRAIN_WIDTH-3
         mov             r1,  r2
+        ldr             r2,  [sp, #36]
         mul             r12, r12, lr
 
         movrel          r3,  X(gaussian_sequence)
-        ldr             r2,  [r1, #FGD_SEED]
         ldr             r9,  [r1, #FGD_GRAIN_SCALE_SHIFT]
         add             r4,  r1,  #FGD_AR_COEFFS_UV
         adr             r5,  L(gen_grain_\type\()_tbl)
