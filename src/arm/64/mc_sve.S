@@ -33,7 +33,7 @@ ENABLE_SVE2
 
 // LUT to combine reordering the elements after the SMLALB/T instruction,
 // shifting a 32-bit value by 8 and narrowing it to 16 bits.
-const narrow_shift_tbl
+const narrow_shift_tbl, align=4
         .byte 1, 2, 17, 18, 5, 6, 21, 22, 9, 10, 25, 26, 13, 14, 29, 30
 endconst
 
@@ -45,9 +45,8 @@ function morph_8bpc_sve2, export=1
         dup             v18.4s, w3
         cmp             w4,  #8
         b.lt            L(morph_4xh)
-        movrel          x9,  narrow_shift_tbl
+        ldrel           q20, x9,  narrow_shift_tbl
         ptrue           p0.h, vl8
-        ldr             q20, [x9]
         b.eq            L(morph_8xh)
 
 1:      // w >= 16

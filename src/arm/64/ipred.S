@@ -1052,9 +1052,8 @@ L(ipred_dc_left_w32):
         ret
 L(ipred_dc_left_w32_ibp):
         AARCH64_VALID_JUMP_TARGET
-        movrel          x3,  ibp_weights2x, 8       // w_x[8] = 2 * ibp_weights
+        ldrel           d5,  x3,  ibp_weights2x, 8  // w_x[8] = 2 * ibp_weights
         movi            v6.8h,   #128
-        ldr             d5,  [x3]
         sub             x2,  x2,  #4
         mov             x5,  #-4
         umlal           v6.8h,   v0.8b,   v5.8b     // dc * w_x[8] + 128 (rounding)
@@ -1113,9 +1112,8 @@ L(ipred_dc_left_w64):
         ret
 L(ipred_dc_left_w64_ibp):
         AARCH64_VALID_JUMP_TARGET
-        movrel          x3,  ibp_weights2x, 16      // w_x[16] = 2 * ibp_weights
+        ldrel           q5,  x3,  ibp_weights2x, 16     // w_x[16] = 2 * ibp_weights
         sub             x2,  x2,  #2
-        ldr             q5,  [x3]
         mov             x5,  #-2
         movi            v6.8h,   #128
         movi            v7.8h,   #128

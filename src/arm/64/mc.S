@@ -3439,7 +3439,7 @@ function sad8x8_8bpc_neon, export=1
 endfunc
 
 // LUT to combine shifting a 32-bit value by 8 and narrowing it to 16 bits.
-const narrow_shift_tbl
+const narrow_shift_tbl, align=4
         .byte 1, 2, 5, 6, 9, 10, 13, 14, 17, 18, 21, 22, 25, 26, 29, 30
 endconst
 
@@ -3451,8 +3451,7 @@ function morph_8bpc_neon, export=1
         dup             v0.8h,  w2                        // alpha
         cmp             w4,  #8
         b.lt            L(morph_4xh)
-        movrel          x8, narrow_shift_tbl
-        ldr             q17, [x8]
+        ldrel           q17, x8,  narrow_shift_tbl
         b.eq            L(morph_8xh)
 
 1:      // w >= 16
