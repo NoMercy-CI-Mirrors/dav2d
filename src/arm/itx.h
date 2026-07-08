@@ -273,6 +273,15 @@ ITX_WRAP(64, 16, 4, 2,     6,    13,    0, 32, 16, RTX_64X16)
 ITX_WRAP(64, 32, 4, 3,     6,    12,    1, 32, 32, RTX_64X32)
 ITX_WRAP(64, 64, 4, 4,     6,    13,    0, 32, 32, TX_64X64)
 
+#undef ITX_WRAP
+#undef decl_residual_add_idtx_fn
+#undef decl_itx_1d_pair
+#undef decl_residual_add_fn
+#undef decl_itx_1d_col_fn
+#undef decl_itx_1d_row_fn
+
+#endif
+
 decl_cctx_fn(BF(dav2d_cctx, neon));
 
 static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c)
@@ -281,6 +290,7 @@ static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c)
 
     if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
+#if BITDEPTH == 8
     assign_itx_fn( ,  4,  4, neon);
     assign_itx_fn(R,  4,  8, neon);
     assign_itx_fn(R,  4, 16, neon);
@@ -306,22 +316,7 @@ static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c)
     assign_itx_fn(R, 64, 16, neon);
     assign_itx_fn(R, 64, 32, neon);
     assign_itx_fn( , 64, 64, neon);
+#endif
 
     c->cctx = BF(dav2d_cctx, neon);
 }
-
-#undef ITX_WRAP
-#undef decl_residual_add_idtx_fn
-#undef decl_itx_1d_pair
-#undef decl_residual_add_fn
-#undef decl_itx_1d_col_fn
-#undef decl_itx_1d_row_fn
-
-#else
-
-static ALWAYS_INLINE void itx_dsp_init_arm(Dav2dInvTxfmDSPContext *const c)
-{
-    (void) c;
-}
-
-#endif

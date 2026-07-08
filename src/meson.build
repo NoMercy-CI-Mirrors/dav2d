@@ -118,6 +118,7 @@ if is_asm_enabled
                     'arm/64/cdef16.S',
                     'arm/64/filmgrain16.S',
                     'arm/64/ipred16.S',
+                    'arm/64/itx16.S',
                     'arm/64/looprestoration16.S',
                     'arm/64/mc16.S',
                     'arm/64/mc16_sve.S',
