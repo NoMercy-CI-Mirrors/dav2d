@@ -1923,7 +1923,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (delta_q == 7) {
                 const int n_bits = 1 + dav2d_msac_decode_bools_bypass(&ts->msac, 3);
                 delta_q = dav2d_msac_decode_bools_bypass(&ts->msac, n_bits) +
-                          1 + (1 << n_bits);
+                          5 + (1 << n_bits);
             }
             if (delta_q) {
                 if (dav2d_msac_decode_bool_bypass(&ts->msac)) delta_q = -delta_q;
