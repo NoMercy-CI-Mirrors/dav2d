@@ -48,7 +48,7 @@ typedef struct DemuxerPriv {
 static const uint8_t probe_data[] = {
     'D', 'K', 'I', 'F',
     0, 0, 0x20, 0,
-    'A', 'V', '0', '1',
+    'A', 'V', '0', '2',
 };
 
 static int ivf_probe(const uint8_t *const data) {
