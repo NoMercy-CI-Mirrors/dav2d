@@ -3945,7 +3945,7 @@ index 78b9c4358d..0ff486ee03 100644
 +  MB_MODE_INFO *const mbmi = xd->mi[0];
 +  const int mi_row = xd->mi_row, mi_col = xd->mi_col;
 +
-+  if (DEBUG_BLOCK_INFO) {
++  if (BLOCK_TO_DEBUG) {
 +    if (mbmi->use_intrabc[xd->tree_type == CHROMA_PART]) {
 +      int_mv ref_mvs[INTRA_FRAME + 1][MAX_MV_REF_CANDIDATES];
 +      av2_find_mv_refs(1, cm, xd, mbmi, INTRA_FRAME, dcb->ref_mv_count,
