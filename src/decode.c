@@ -304,7 +304,7 @@ static void derive_warpmv(const Dav2dTaskContext *const t,
             t->bx + bw4 + !is_not_sb_boundary < t->ts->tiling.col_end &&
             (!(t->by & (f->sb_step - 1)) || // top sb boundary
              ((t->bx + bw4) & (f->sb_step - 1) && // right sb boundary
-              ra[(t->bx + bw4) & 127].mv[0].y != INVALID_MV));
+              ra[(t->bx + bw4) & 127].mv[0].n != INVALID_MV));
     }
 
     if (np < 8 && have_left) {
@@ -576,7 +576,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     refmvs_temporal_block t_src;
     t_src.ref.ref[0] = t_src.ref.ref[1] = s_src.ref.ref[0] = b->ref.ref[0];
     s_src.ref.ref[1] = -1;
-    s_src.mv[1].y = INVALID_MV;
+    s_src.mv[1].n = INVALID_MV;
     s_src.bs = bs;
     s_src.by4 = t->by;
     s_src.bx4 = t->bx;
@@ -588,7 +588,7 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
         const int32_t *mat;
         if (b->motion_mode > MM_INTERINTRA) {
             s_src.lmv[0] = b->mv[0];
-            s_src.lmv[1].y = INVALID_MV;
+            s_src.lmv[1].n = INVALID_MV;
             s_src.mf = 2;
             mat = t->warpmv[0].matrix;
             memcpy(s_src.m, mat, sizeof(int32_t) * 6);
@@ -620,7 +620,7 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
     refmvs_block s_src = (refmvs_block) {
         .ref.pair = -1,
         .mv[0] = b->mv[0],
-        .mv[1].y = INVALID_MV,
+        .mv[1].n = INVALID_MV,
         .bs = bs,
         .by4 = t->by,
         .bx4 = t->bx,
@@ -721,8 +721,8 @@ static inline void splat_intraref(const Dav2dContext *const c,
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block s_src = (refmvs_block) {
         .ref.pair = -1,
-        .mv[0].y = INVALID_MV,
-        .mv[1].y = INVALID_MV,
+        .mv[0].n = INVALID_MV,
+        .mv[1].n = INVALID_MV,
         .bs = bs,
         .by4 = t->by,
         .bx4 = t->bx,
@@ -865,7 +865,7 @@ static void derive_lowest_px(Dav2dTaskContext *const t,
             for (int x = 0; x < w4; x += step) {
                 const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
                 mv tmv = t->rt.rp_proj[off_8x8].mv;
-                if (tmv.y == INVALID_MV) tmv.n = 0;
+                if (tmv.n == INVALID_MV) tmv.n = 0;
                 for (int i = 0; i < 2; i++) {
                     const int64_t tmpy = tmv.y * (int64_t) f->rf.tip.sf[i];
                     const int tipmvy = iclip((int)((tmpy + 0x2000 - (tmpy < 0)) >> 14),

@@ -194,7 +194,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                   const union refpair ref, const mv gmv[2])
 {
     if (*st->cnt >= 6) return;
-    if (b->mv[0].y == INVALID_MV) return; // intra block, no intrabc
+    if (b->mv[0].n == INVALID_MV) return; // intra block, no intrabc
 
     const refmvs_frame *const rf = rt->rf;
     if (b->ref.ref[0] == TIP_FRAME) {
@@ -215,7 +215,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
         const int num = 1 + (ref.ref[0] >= 0);
         for (int n = 0; n < num; n++) {
             if (b->ref.ref[n] == ref.ref[0]) {
-                const mv cand_mv = ((b->mf & 1) && gmv[0].y != INVALID_MV) ?
+                const mv cand_mv = ((b->mf & 1) && gmv[0].n != INVALID_MV) ?
                                    gmv[0] : b->mv[n];
                 add_candidate_sngl(DB_ARGS(rf, st->by4, st->bx4,
                                            y_off, x_off, "spc", n)
@@ -225,7 +225,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                        rf->tip.ref.ref[n] == ref.ref[0])
             {
                 union mv tmv = rt->rp_proj[off_8x8].mv;
-                if (tmv.y == INVALID_MV) tmv.n = 0;
+                if (tmv.n == INVALID_MV) tmv.n = 0;
                 const mv tipmv = scale_mv(tmv, rf->tip.sf[n]);
                 const mv cand_mv = (mv) {
                     .y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff),
@@ -256,16 +256,16 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                        (unsigned) ref.ref[0] < TIP_FRAME &&
                        (b->ref.ref[0] == TIP_FRAME ||
                         (unsigned) b->ref.ref[n] < TIP_FRAME) &&
-                       rt->rp_traj[ref.ref[0]][st->b8x8].y != INVALID_MV &&
+                       rt->rp_traj[ref.ref[0]][st->b8x8].n != INVALID_MV &&
                        rt->rp_traj[b->ref.ref[0] == TIP_FRAME ?
                                    rf->tip.ref.ref[n] :
-                                   b->ref.ref[n]][st->b8x8].y != INVALID_MV)
+                                   b->ref.ref[n]][st->b8x8].n != INVALID_MV)
             {
                 mv a_mv, b_mv;
                 if (b->ref.ref[0] == TIP_FRAME) {
                     a_mv = rt->rp_traj[rf->tip.ref.ref[n]][st->b8x8];
                     union mv tmv = rt->rp_proj[off_8x8].mv;
-                    if (tmv.y == INVALID_MV) tmv.n = 0;
+                    if (tmv.n == INVALID_MV) tmv.n = 0;
                     const mv tipmv = scale_mv(tmv, rf->tip.sf[n]);
                     b_mv = (mv) {
                         .y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff),
@@ -294,7 +294,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                 int den;
                 if ((unsigned) b->ref.ref[0] == TIP_FRAME) {
                     union mv tmv = rt->rp_proj[off_8x8].mv;
-                    if (tmv.y == INVALID_MV) tmv.n = 0;
+                    if (tmv.n == INVALID_MV) tmv.n = 0;
                     const mv tipmv = scale_mv(tmv, rf->tip.sf[n]);
                     cand_mv = (mv) {
                         .y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff),
@@ -318,7 +318,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                ref.pair == rf->tip.ref.pair)
     {
         mv tmv = rt->rp_proj[off_8x8].mv;
-        if (tmv.y == INVALID_MV) tmv.n = 0;
+        if (tmv.n == INVALID_MV) tmv.n = 0;
         const mv tip0mv = scale_mv(tmv, rf->tip.sf[0]);
         const mv tip1mv = scale_mv(tmv, rf->tip.sf[1]);
         const union mv cand_mv[2] = {
@@ -336,8 +336,8 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                            &st->iter_cntr, 16);
     } else if (b->ref.pair == ref.pair) {
         const union mv cand_mv[2] = {
-            [0] = ((b->mf & 1) && gmv[0].y != INVALID_MV) ? gmv[0] : b->mv[0],
-            [1] = ((b->mf & 1) && gmv[1].y != INVALID_MV) ? gmv[1] : b->mv[1],
+            [0] = ((b->mf & 1) && gmv[0].n != INVALID_MV) ? gmv[0] : b->mv[0],
+            [1] = ((b->mf & 1) && gmv[1].n != INVALID_MV) ? gmv[1] : b->mv[1],
         };
         add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                    y_off, x_off, "spc")
@@ -346,14 +346,14 @@ static void add_spatial_candidate(const int y_off, const int x_off,
     } else {
         if (rf->seq_hdr->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
             b->ref.ref[0] != TIP_FRAME && ref.ref[0] != ref.ref[1] &&
-            rt->rp_traj[ref.ref[0]][st->b8x8].y != INVALID_MV &&
-            rt->rp_traj[ref.ref[1]][st->b8x8].y != INVALID_MV)
+            rt->rp_traj[ref.ref[0]][st->b8x8].n != INVALID_MV &&
+            rt->rp_traj[ref.ref[1]][st->b8x8].n != INVALID_MV)
         {
             const mv b1_mv = rt->rp_traj[ref.ref[0]][st->b8x8];
             const mv b2_mv = rt->rp_traj[ref.ref[1]][st->b8x8];
             for (int n = 0; n < 2 && b->ref.ref[n] >= 0; n++) {
                 const mv a_mv = rt->rp_traj[b->ref.ref[n]][st->b8x8];
-                if (a_mv.y == INVALID_MV) continue;
+                if (a_mv.n == INVALID_MV) continue;
                 const union mv cand_mv[2] = {
                     [0] = {
                         .y = iclip(b->mv[n].y + b1_mv.y - a_mv.y,
@@ -393,7 +393,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                st->dr, &st->drvd_cnt, 4, weight, 8,
                                cand_mv, &st->drvd_iter_cntr, 2);
         }
-        const mv cand_mv = ((b->mf & 1) && gmv[nc].y != INVALID_MV) ?
+        const mv cand_mv = ((b->mf & 1) && gmv[nc].n != INVALID_MV) ?
                            gmv[ns] : b->mv[nc];
         add_candidate_c2s(DB_ARGS(rf, st->by4, st->bx4,
                                   y_off, x_off, "sngl-c", ns)
@@ -451,9 +451,9 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
 
     if ((unsigned) ref.ref[0] >= TIP_FRAME) return 0;
     union mv mv = rt->rp_traj[ref.ref[0]][off_8x8];
-    if (!rf->seq_hdr->mv_traj || mv.y == INVALID_MV) {
+    if (!rf->seq_hdr->mv_traj || mv.n == INVALID_MV) {
         mv = rt->rp_proj[off_8x8].mv;
-        if (mv.y == INVALID_MV) return 0;
+        if (mv.n == INVALID_MV) return 0;
         mv = dav2d_mv_projection(mv, rf->pocdiff[ref.ref[0]],
                                  rt->rp_proj[off_8x8].ref, -0xffff, 0xffff);
     }
@@ -465,9 +465,9 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
                                   &st->iter_cntr, 16);
     }
     union mv mv2 = rt->rp_traj[ref.ref[1]][off_8x8];
-    if (!rf->seq_hdr->mv_traj || mv2.y == INVALID_MV) {
+    if (!rf->seq_hdr->mv_traj || mv2.n == INVALID_MV) {
         mv2 = rt->rp_proj[off_8x8].mv;
-        if (mv2.y == INVALID_MV) return 0;
+        if (mv2.n == INVALID_MV) return 0;
         mv2 = dav2d_mv_projection(mv2, rf->pocdiff[ref.ref[1]],
                                   rt->rp_proj[off_8x8].ref, -0xffff, 0xffff);
     }
@@ -651,7 +651,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
             if (bw4 == w4) rmt = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 + bw4 - 1) & 127)];
             if ((bx4 + bw4) & (rf->sbsz - 1) && bx4 + bw4 < rt->tile_col.end && bw4 <= 16) {
                 tr = &rt->r[((by4 - 1) & 63) * 128 + ((bx4 + bw4) & 127)];
-                if (tr->mv[0].y == INVALID_MV) tr = NULL; // not yet coded
+                if (tr->mv[0].n == INVALID_MV) tr = NULL; // not yet coded
             }
         }
     }
@@ -1331,7 +1331,7 @@ void dav2d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
     // FIXME should (eventually) be able to re-use is_coded
     for (int y = by & 63; y < (by & 63) + rt->rf->sbsz; y++) {
         for (int x = bx & 127; x < (bx & 127) + rt->rf->sbsz; x++) {
-            rt->r[y * 128 + x].mv[0].y = INVALID_MV;
+            rt->r[y * 128 + x].mv[0].n = INVALID_MV;
             rt->r[y * 128 + x].ref.pair = -1;
         }
     }
@@ -1355,7 +1355,7 @@ void dav2d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
     for (int x = bx, sz4, hits = 0; x < end_x4; x += sz4) {
         const refmvs_block *const r = &rt->ra[x >> 1];
         sz4 = dav2d_block_dimensions[r->bs][0];
-        if (r->mv[0].y == INVALID_MV) continue;
+        if (r->mv[0].n == INVALID_MV) continue;
         if (rf->seq_hdr->refmv_bank) {
             union refpair ref = r->ref;
             refmvs_bank_add(rt, DB_ONLY(by, x) ref,
@@ -1376,7 +1376,7 @@ static inline int dequantize_mv_comp(const int v) {
 }
 
 static inline mv dequantize_mv(const union qmv mv) {
-    if (mv.n == INVALID_TRAJ) return (union mv) { .y = INVALID_MV };
+    if (mv.n == INVALID_TRAJ) return (union mv) { .n = INVALID_MV };
     return (union mv) {
         .y = dequantize_mv_comp(mv.y),
         .x = dequantize_mv_comp(mv.x),
@@ -1397,7 +1397,7 @@ static void tip_projection(const refmvs_frame *const rf,
             for (int x = sx; x < xend; x += tmvp_sample_step) {
                 const ptrdiff_t pos = pos_base + x;
                 const union mv mv = rp_proj[pos].mv;
-                if (mv.y == INVALID_MV) continue;
+                if (mv.n == INVALID_MV) continue;
                 rp_proj[pos].mv = dav2d_mv_projection(mv, rf->tip.delta,
                                                       rp_proj[pos].ref, -2047, 2047);
                 rp_proj[pos].ref = rf->tip.delta;
@@ -1422,9 +1422,9 @@ static void fill_holes(const refmvs_frame *const rf,
             for (int x = sx; x < xend; x += tmvp_sample_step) {
                 const ptrdiff_t pos = pos_base + x;
                 const union mv mv = rp_proj[pos].mv;
-                if (mv.y == INVALID_MV) continue;
+                if (mv.n == INVALID_MV) continue;
 #define copy(off) do { \
-                if (rp_proj[pos + off].mv.y == INVALID_MV) { \
+                if (rp_proj[pos + off].mv.n == INVALID_MV) { \
                     rp_proj[pos + off].mv = mv; \
                     rp_proj[pos + off].ref = rf->tip.delta; \
                 } \
@@ -1465,7 +1465,7 @@ static void smoothen(const refmvs_frame *const rf,
                 const ptrdiff_t pos = pos_base + x;
                 int sum_x = 0, sum_y = 0, sum_n = 0;
 #define add(p) do { \
-                if (rp_proj[p].mv.y != INVALID_MV) { \
+                if (rp_proj[p].mv.n != INVALID_MV) { \
                     sum_x += rp_proj[p].mv.x; \
                     sum_y += rp_proj[p].mv.y; \
                     sum_n++; \
@@ -1491,7 +1491,7 @@ static void smoothen(const refmvs_frame *const rf,
                     mv_line[x - sx].x = (int)((int64_t) sum_x * idiv[sum_n - 1] +
                                                         0x8000 - (sum_x < 0)) >> 16;
                 } else {
-                    mv_line[x - sx].y = INVALID_MV;
+                    mv_line[x - sx].n = INVALID_MV;
                 }
             }
         }
@@ -1519,13 +1519,13 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
             for (int x = sx; x < xend; x += 2) {
                 const ptrdiff_t pos = pos_base + x;
                 const union mv mv = rp_proj[pos].mv;
-                if (mv.y == INVALID_MV) continue;
+                if (mv.n == INVALID_MV) continue;
                 int mvy = mv.y, mvx = mv.x, sum_y = mvy, sum_x = mvx, sum_n = 1;
                 int ref_off = rp_proj[pos].ref;
 
                 // right
                 const int have_right = x + 2 < xend;
-                if (have_right && rp_proj[pos + 2].mv.y != INVALID_MV) {
+                if (have_right && rp_proj[pos + 2].mv.n != INVALID_MV) {
                     const int right_ref_off = rp_proj[pos + 2].ref;
                     const union mv right_mv =
                         dav2d_mv_projection(rp_proj[pos + 2].mv, ref_off,
@@ -1542,7 +1542,7 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
 
                 // bottom
                 const int have_bottom = y + 2 < yend;
-                if (have_bottom && rp_proj[pos + 2 * stride].mv.y != INVALID_MV) {
+                if (have_bottom && rp_proj[pos + 2 * stride].mv.n != INVALID_MV) {
                     const int bottom_ref_off = rp_proj[pos + 2 * stride].ref;
                     const union mv bottom_mv =
                         dav2d_mv_projection(rp_proj[pos + 2 * stride].mv, ref_off,
@@ -1562,7 +1562,7 @@ static void fill_gap_proj(refmvs_sngl_mv_block *const rp_proj, const ptrdiff_t s
                 // bottom/right
                 if (have_right && have_bottom) {
                     union mv bottom_right_mv = rp_proj[pos + 2 * (1 + stride)].mv;
-                    if (bottom_right_mv.y != INVALID_MV) {
+                    if (bottom_right_mv.n != INVALID_MV) {
                         const int bottom_right_ref_off =
                             rp_proj[pos + 2 * (1 + stride)].ref;
                         bottom_right_mv = dav2d_mv_projection(bottom_right_mv, ref_off,
@@ -1611,12 +1611,12 @@ static void fill_gap_traj(union mv *const rp_traj, const ptrdiff_t stride,
             for (int x = sx; x < xend; x += 2) {
                 const ptrdiff_t pos = pos_base + x;
                 const union mv mv = rp_traj[pos];
-                if (mv.y == INVALID_MV) continue;
+                if (mv.n == INVALID_MV) continue;
                 int mvy = mv.y, mvx = mv.x, sum_y = mvy, sum_x = mvx, sum_n = 1;
 
                 // bottom
                 const int have_bottom = y + 2 < yend;
-                if (have_bottom && rp_traj[pos + 2 * stride].y != INVALID_MV) {
+                if (have_bottom && rp_traj[pos + 2 * stride].n != INVALID_MV) {
                     const union mv bottom_mv = rp_traj[pos + 2 * stride];
                     sum_x += bottom_mv.x;
                     sum_y += bottom_mv.y;
@@ -1629,7 +1629,7 @@ static void fill_gap_traj(union mv *const rp_traj, const ptrdiff_t stride,
 
                 // right
                 const int have_right = x + 2 < xend;
-                if (have_right && rp_traj[pos + 2].y != INVALID_MV) {
+                if (have_right && rp_traj[pos + 2].n != INVALID_MV) {
                     const union mv right_mv = rp_traj[pos + 2];
                     sum_x += right_mv.x;
                     const int mx = mvx + right_mv.x;
@@ -1645,7 +1645,7 @@ static void fill_gap_traj(union mv *const rp_traj, const ptrdiff_t stride,
                 // bottom/right
                 if (have_right && have_bottom) {
                     const union mv bottom_right_mv = rp_traj[pos + 2 * (1 + stride)];
-                    if (bottom_right_mv.y != INVALID_MV) {
+                    if (bottom_right_mv.n != INVALID_MV) {
                         sum_x += bottom_right_mv.x;
                         sum_y += bottom_right_mv.y;
                         sum_n++;
@@ -1710,7 +1710,7 @@ static void check_traj_intersect(const refmvs_frame *const rf,
         if (y < y_proj_start || y >= y_proj_end) continue;
         const ptrdiff_t pos1 = (y1 & (sbsz8 - 1)) * stride + x1;
         mv *const mv_dst = &rp_traj[ref2][pos1];
-        if (mv_dst->y != INVALID_MV) continue;
+        if (mv_dst->n != INVALID_MV) continue;
         const mv *const mv_src = &rp_traj[ref1][pos1];
         const int py = mv_dst->y = iclip(mv_src->y + mv_in.y, -2047, 2047);
         const int px = mv_dst->x = iclip(mv_src->x + mv_in.x, -2047, 2047);
@@ -1758,7 +1758,7 @@ static void check_traj_intersect(const refmvs_frame *const rf,
         }
         const ptrdiff_t pos2 = (y2 & (sbsz8 - 1)) * stride + x2;
         mv *const mv_dst = &rp_traj[ref1][pos2];
-        if (mv_dst->y != INVALID_MV) continue;
+        if (mv_dst->n != INVALID_MV) continue;
         const mv *const mv_src = &rp_traj[ref2][pos2];
         const int py = mv_dst->y = iclip(mv_src->y - mv_in.y, -0xffff, 0xffff);
         const int px = mv_dst->x = iclip(mv_src->x - mv_in.x, -0xffff, 0xffff);
@@ -1809,7 +1809,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     }
     for (int y = row_start8; y < row_end8; y++) {
         for (int x = col_start8; x < col_end8; x++)
-            rp_proj[x].mv.y = INVALID_MV;
+            rp_proj[x].mv.n = INVALID_MV;
         rp_proj += stride;
     }
     mv *rp_traj[7];
@@ -1820,7 +1820,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
             mv *tj = rp_traj[n] = &rf->rp_traj[n][offset];
             for (int y = row_start8; y < row_end8; y++) {
                 for (int x = col_start8; x < col_end8; x++)
-                    tj[x].y = INVALID_MV;
+                    tj[x].n = INVALID_MV;
                 tj += stride;
             }
             for (int k = -1; k <= +1; k++) {
@@ -1857,7 +1857,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                 if (b_ref == -1) continue;
                 const int ref2idx = rf->mfmv_ref2idx[n][b_ref];
                 mv b_mv = dequantize_mv(rb->mv.mv[ref_sign]);
-                if (b_mv.y == INVALID_MV) continue;
+                if (b_mv.n == INVALID_MV) continue;
                 if (rf->seq_hdr->mv_traj && ref2idx != -1)
                     check_traj_intersect(rf, rp_traj, rp_map,
                                          ref, ref2idx, y, x, b_mv,
@@ -1880,7 +1880,7 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
                     imin(x_sb_align + mfmv_sbsz8 + rf->mfmv_edge, rf->iw8);
                 if (x < x_proj_start || x >= x_proj_end) continue;
                 const ptrdiff_t pos1 = (y1 & (sbsz8 - 1)) * stride + x1;
-                if (rp_proj[pos1].mv.y != INVALID_MV &&
+                if (rp_proj[pos1].mv.n != INVALID_MV &&
                     (tgt == -1 || ref2idx != tgt ||
                      rp_proj[pos1].ref == abs(ref2ref)))
                 {

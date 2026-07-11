@@ -276,7 +276,7 @@ typedef union mv {
     uint64_t n;
 } mv;
 CHECK_SIZE(mv, 8);
-#define INVALID_MV 0x200000 // applied to mv.y
+#define INVALID_MV 0x200000 // applied to mv.n
 #define COPY2MV(dst, src) memcpy(dst, src, 2 * sizeof(union mv))
 #define CMP2MV(src1, src2) memcmp(src1, src2, 2 * sizeof(union mv))
 #define ZERO2MV(dst) memset(dst, 0, 2 * sizeof(union mv))

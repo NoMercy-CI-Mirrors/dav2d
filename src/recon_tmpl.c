@@ -2105,7 +2105,7 @@ static int tip_pred(Dav2dTaskContext *const t,
         for (int x = 0; x < w4; x += step) {
             const ptrdiff_t off_8x8 = off_y8 + ((t->bx + x) >> 1);
             mv tmv = t->rt.rp_proj[off_8x8].mv;
-            if (tmv.y == INVALID_MV) tmv.n = 0;
+            if (tmv.n == INVALID_MV) tmv.n = 0;
             union mv (*const rmv)[2] = rmv_line[x >> 1], *const cmv = rmv[0];
             int left[2], top[2];
             for (int i = 0; i <= is_bidir; i++) {
