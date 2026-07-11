@@ -88,25 +88,6 @@ static const int8_t pc_wiener_config[12][2] = {
     {  2,  1 }, {  2, -1 }, {  1,  2 }, {  1, -2 }, {  3,  0 }, {  0,  3 },
 };
 
-//             0
-//             1
-//             2
-//             3
-//           4 5 6
-//         7 8 9 A B
-// C D E F G H   H G F E D C
-//         B A 9 8 7
-//           6 5 4
-//             3
-//             2
-//             1
-//             0
-static const int8_t gdf_coords[18][2] = {
-    { 6,  0 }, { 5,  0 }, { 4,  0 }, { 3,  0 }, { 2,  1 }, { 2,  0 },
-    { 2, -1 }, { 1,  2 }, { 1,  1 }, { 1,  0 }, { 1, -1 }, { 1, -2 },
-    { 0,  6 }, { 0,  5 }, { 0,  4 }, { 0,  3 }, { 0,  2 }, { 0,  1 }
-};
-
 static const uint16_t pc_wiener_normalizer[3] = { 3739, 3273, 3074 };
 
 static void backup_row(pixel *dst, const pixel *src, const pixel *left, const int w,
@@ -692,6 +673,15 @@ static void compute_gradient_row(uint16_t (*dst)[4], const pixel **src,
             dst[x][d] = tmp[x][d] + tmp[x + 1][d];
 }
 
+static inline int gdf_sum(int a, int b, const int alpha, const int m,
+                          const int down_shift, const int up_shift)
+{
+    a = iclip(((a >> down_shift) - m) * (1 << up_shift), -alpha, alpha);
+    b = iclip(((b >> down_shift) - m) * (1 << up_shift), -alpha, alpha);
+    return iclip(a + b, -512, 511);
+}
+#define GDF_SUM(a, b, alpha) gdf_sum(a, b, alpha, m, down_shift, up_shift)
+
 static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
                        const pixel (*const left)[8], const pixel *const lpf,
                        const pixel *const lpf_bottom,
@@ -709,8 +699,8 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
 
     uint16_t grad[2][32][4];
     pixel row_buffers[13][REST_UNIT_STRIDE];
-    int32_t shared_vals[32];
-    uint8_t cls_row[32];
+    int32_t bias[32];
+    uint8_t cls[32];
     pixel *bak_rows[13];
     const pixel *ptrs[13];
 
@@ -766,43 +756,73 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
             compute_gradient_row(grad[(y & 2) >> 1], &ptrs[8], w, down_shift);
             for (int x = 0; x < (w >> 1); x++) {
                 uint16_t grad_sums[4];
-                shared_vals[x] = params->bias[2];
+                bias[x] = params->bias[2];
                 for (int d = 0; d < 4; d++) {
                     grad_sums[d] = grad[0][x][d] + grad[1][x][d];
                     const int alpha = params->gradient_alpha[d];
                     const int v = imin(grad_sums[d] >> (4 - up_shift), alpha);
-                    shared_vals[x] += v * params->gradient_weight[d];
+                    bias[x] += v * params->gradient_weight[d];
                 }
-                cls_row[x] = (grad_sums[0] <= grad_sums[1]) | ((grad_sums[2] <= grad_sums[3]) << 1);
+                cls[x] = (grad_sums[0] <= grad_sums[1]) | ((grad_sums[2] <= grad_sums[3]) << 1);
             }
         }
 
-        for (int x1 = 0; x1 < w; x1 += 2) {
-            const int shared_val2 = shared_vals[x1 >> 1];
-            const int cls = cls_row[x1 >> 1];
+        for (int x1 = 0; x1 < (w >> 1); x1++) {
+            const int bias2 = bias[x1];
+            const int cls1 = cls[x1] & 1;
+            const int cls2 = cls[x1] >> 1;
 
             for (int x2 = 0; x2 < 2; x2++) {
-                int x = x1 + x2;
-                int idx_vals[3] = { params->bias[0], params->bias[1], shared_val2 };
-                int m = ptrs[6][x] >> down_shift;
-                for (int k = 0; k < 18; k++) {
-                    const int alpha = params->alpha[k][cls];
-                    const int dy = gdf_coords[k][0];
-                    const int dx = gdf_coords[k][1];
-                    const int a = ptrs[6 - dy][x - dx] >> down_shift;
-                    const int b = ptrs[6 + dy][x + dx] >> down_shift;
-                    const int above = iclip((a - m) * (1 << up_shift), -alpha, alpha);
-                    const int below = iclip((b - m) * (1 << up_shift), -alpha, alpha);
-                    const int v = iclip(above + below, -512, 511);
+                int idx_vals[3] = { params->bias[0], params->bias[1], bias2 };
+                const int x = x1 * 2 + x2;
+                const int m = ptrs[6][x] >> down_shift;
+
+                // { 1, 0 }, { 0, 1 }, { 2, 0 }, { 0, 2 }, { 3, 0 }, { 0, 3 }
+                for (int k = 0; k < 3; k++) {
+                    const int sum_v = GDF_SUM(ptrs[5 - k][x], ptrs[7 + k][x],
+                                              params->alpha[k][cls1 ^ 0]);
+                    const int sum_h = GDF_SUM(ptrs[6][x - k - 1],  ptrs[6][x + k + 1],
+                                              params->alpha[k][cls1 ^ 1]);
                     for (int idx = 0; idx < 3; idx++)
-                        idx_vals[idx] += v * params->weight[idx][k][cls];
+                        idx_vals[idx] += sum_v * params->weight1[idx][k][cls1 ^ 0] +
+                                         sum_h * params->weight1[idx][k][cls1 ^ 1];
+                }
+
+                // { 4, 0 }, { 0, 4 }, { 5, 0 }, { 0, 5 }, { 6, 0 }, { 0, 6 }
+                for (int k = 0; k < 3; k++) {
+                    const int sum_v = GDF_SUM(ptrs[2 - k][x], ptrs[10 + k][x],
+                                              params->alpha[3 + k][cls1 ^ 0]);
+                    const int sum_h = GDF_SUM(ptrs[6][x - k - 4],  ptrs[6][x + k + 4],
+                                              params->alpha[3 + k][cls1 ^ 1]);
+                    idx_vals[0] += (cls1 ? sum_h : sum_v) * params->weight2[0][k];
+                    idx_vals[1] += (cls1 ? sum_v : sum_h) * params->weight2[1][k];
+                }
+
+                // { 1, 1 }, { 1, -1 }
+                for (int k = 0; k < 2; k++) {
+                    const int dx = k ? -1 : 1;
+                    const int sum = GDF_SUM(ptrs[5][x - dx], ptrs[7][x + dx],
+                                            params->alpha[6][cls2 ^ k]);
+                    idx_vals[0] += sum * params->weight3[0][cls2 ^ k];
+                    idx_vals[1] += sum * params->weight3[1][cls2 ^ k];
+                }
+
+                // { 1, 2 }, { 1, -2 }, { 2, 1 }, { 2, -1 }
+                for (int k = 0; k < 2; k++) {
+                    const int dx = k ? -1 : 1;
+                    const int sum_v = GDF_SUM(ptrs[4][x - dx * 1], ptrs[8][x + dx * 1],
+                                              params->alpha[7 + cls1][cls2 ^ k]);
+                    const int sum_h = GDF_SUM(ptrs[5][x - dx * 2], ptrs[7][x + dx * 2],
+                                              params->alpha[8 - cls1][cls2 ^ k]);
+                    idx_vals[0] += (cls1 ? sum_h : sum_v) * params->weight4[0][cls2 ^ k];
+                    idx_vals[1] += (cls1 ? sum_v : sum_h) * params->weight4[1][cls2 ^ k];
                 }
 
                 int full_idx = 0;
                 for (int idx = 0; idx < 3; idx++) {
                     int v = idx_vals[idx] * scale;
                     v = apply_sign((abs(v) + (1 << 14)) >> 15, v);
-                    int sub_idx = iclip(v, -scale, scale - 1) + scale;
+                    const int sub_idx = iclip(v, -scale, scale - 1) + scale;
                     full_idx = full_idx * scale * 2 + sub_idx;
                 }
                 dst[x] = params->error_lut[full_idx];
