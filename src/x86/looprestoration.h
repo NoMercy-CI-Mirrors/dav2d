@@ -35,6 +35,35 @@ decl_gdf_add_fn(BF(dav2d_gdf_add, avx2));
 
 decl_wiener_filter_fns(avx2);
 
+#if BITDEPTH == 8
+// Placeholder implementation for single wiener filter
+union ZeroData {
+    uint8_t class_lut[1024];
+    WienerQValApproxData qval_approx;
+};
+static void BF(wiener_single, avx2)(pixel *p, const ptrdiff_t stride,
+                                    const pixel (*left)[8],
+                                    const pixel *lpf, const pixel *lpf_bottom,
+                                    const WienerParams *in_params,
+                                    const uint16_t (*ll_mask)[4],
+                                    const int w, const int h,
+                                    const enum LrEdgeFlags edges
+                                    HIGHBD_DECL_SUFFIX)
+{
+    const union ZeroData zero = { 0 };
+    uint16_t noskip_mask[16];
+    WienerParams params;
+    ALIGN_STK_64(int8_t, filters, 16, [16]);
+    memcpy(filters[0], in_params->single.filter, sizeof(filters[0]));
+    params.multi.noskip_mask = noskip_mask;
+    params.multi.qval_approx = &zero.qval_approx;
+    params.multi.filters.user = filters;
+    params.multi.class_lut = zero.class_lut;
+    BF(dav2d_wiener_multi, avx2)(p, stride, left, lpf, lpf_bottom, &params,
+                                 ll_mask, w, h, edges HIGHBD_TAIL_SUFFIX);
+}
+#endif
+
 static ALWAYS_INLINE void loop_restoration_dsp_init_x86(Dav2dLoopRestorationDSPContext *const c) {
     const unsigned flags = dav2d_get_cpu_flags();
 
@@ -43,6 +72,7 @@ static ALWAYS_INLINE void loop_restoration_dsp_init_x86(Dav2dLoopRestorationDSPC
 #if BITDEPTH == 8
     c->gdf_add = BF(dav2d_gdf_add, avx2);
     c->ns_wiener_multi = BF(dav2d_wiener_multi, avx2);
+    c->ns_wiener_single = BF(wiener_single, avx2);
 #endif
 
 }
