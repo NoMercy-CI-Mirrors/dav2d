@@ -195,9 +195,10 @@ typedef union WienerParams {
 #define decl_wiener_filter_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, \
             const_left_pixel_row left, \
-            const pixel *top, const pixel *bottom, int w, int h, \
-            const WienerParams *params, enum LrEdgeFlags edges, \
-            const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
+            const pixel *top, const pixel *bottom, \
+            const WienerParams *params, const uint16_t (*ll_mask)[4], \
+            int w, int h, enum LrEdgeFlags edges \
+            HIGHBD_DECL_SUFFIX)
 typedef decl_wiener_filter_fn(*wienerfilter_fn);
 
 #define decl_wiener_filter_uv_fn(name) \

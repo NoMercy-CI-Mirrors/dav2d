@@ -107,9 +107,11 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride,
                  const pixel (*const left)[8],
-                 const pixel *top, const pixel *bottom, int w, int h,
-                 const WienerParams *params, enum LrEdgeFlags edges,
-                 const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
+                 const pixel *top, const pixel *bottom,
+                 const WienerParams *params,
+                 const uint16_t (*ll_mask)[4],
+                 int w, int h, enum LrEdgeFlags edges
+                 HIGHBD_DECL_SUFFIX);
 
     if (check_func(c->ns_wiener_single, "wiener_single_%dbpc", BITDEPTH)) {
         const int base_w = 8 * (1 + (rnd() & 7));
@@ -142,10 +144,10 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
 
             assert(c_dst_stride == top_stride);
             assert(c_dst_stride == bottom_stride);
-            call_ref(c_dst, c_dst_stride, left, top, bottom,
-                     w, h, &params, edges, ll_mask HIGHBD_TAIL_SUFFIX);
-            call_new(a_dst, a_dst_stride, left, top, bottom,
-                     w, h, &params, edges, ll_mask HIGHBD_TAIL_SUFFIX);
+            call_ref(c_dst, c_dst_stride, left, top, bottom, &params, ll_mask,
+                     w, h, edges HIGHBD_TAIL_SUFFIX);
+            call_new(a_dst, a_dst_stride, left, top, bottom, &params, ll_mask,
+                     w, h, edges HIGHBD_TAIL_SUFFIX);
             if (checkasm_check_pixel_padded_align(c_dst, c_dst_stride,
                                                   a_dst, a_dst_stride,
                                                   w, h, "dst", 64, 1))
@@ -157,10 +159,10 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
         }
 
         // lossless speeds up the reference code
-        for (int i = 0; i < 64; i++)
-            ll_mask[i][0] = 0;
-        bench_new(alternate(c_dst, a_dst), a_dst_stride, left, top, bottom,
-                  64, 64, &params, 0xf, ll_mask HIGHBD_TAIL_SUFFIX);
+        memset(ll_mask, 0, sizeof(ll_mask));
+        bench_new(alternate(c_dst, a_dst), a_dst_stride, left,
+                  top, bottom, &params, ll_mask, 64, 64, 0xf
+                  HIGHBD_TAIL_SUFFIX);
     }
 }
 
@@ -172,7 +174,7 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
     uint16_t ll_mask[64][4];
     uint16_t noskip_mask[64];
     pixel left[64][8];
-    int8_t filters[16][16];
+    ALIGN_STK_64(int8_t, filters, 16, [16]);
     WienerParams params;
     WienerQValApproxData qval_approx;
     params.multi.filters.user = filters;
@@ -181,9 +183,11 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride,
                  const pixel (*const left)[8],
-                 const pixel *top, const pixel *bottom, int w, int h,
-                 const WienerParams *params, enum LrEdgeFlags edges,
-                 const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
+                 const pixel *top, const pixel *bottom,
+                 const WienerParams *params,
+                 const uint16_t (*ll_mask)[4],
+                 int w, int h, enum LrEdgeFlags edges
+                 HIGHBD_DECL_SUFFIX);
 
     if (check_func(c->ns_wiener_multi, "wiener_multi_user_%dbpc", BITDEPTH)) {
         const int base_w = 8 * (1 + (rnd() & 7));
@@ -238,10 +242,10 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
 
             assert(c_dst_stride == top_stride);
             assert(c_dst_stride == bottom_stride);
-            call_ref(c_dst, c_dst_stride, left, top, bottom,
-                     w, h, &params, edges, ll_mask HIGHBD_TAIL_SUFFIX);
-            call_new(a_dst, a_dst_stride, left, top, bottom,
-                     w, h, &params, edges, ll_mask HIGHBD_TAIL_SUFFIX);
+            call_ref(c_dst, c_dst_stride, left, top, bottom, &params, ll_mask,
+                     w, h, edges HIGHBD_TAIL_SUFFIX);
+            call_new(a_dst, a_dst_stride, left, top, bottom, &params, ll_mask,
+                     w, h, edges HIGHBD_TAIL_SUFFIX);
             if (checkasm_check_pixel_padded_align(c_dst, c_dst_stride,
                                                   a_dst, a_dst_stride,
                                                   w, h, "dst", 64, 1))
@@ -250,14 +254,11 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
                         w, h, to_binary(edges));
                 break;
             }
-            if (edges == 0xf) {
-                for (int i = 0; i < 64; i++)
-                    ll_mask[i][0] = 0;
-                bench_new(alternate(c_dst, a_dst), a_dst_stride, left,
-                          top, bottom, 64, 64, &params, 0xf, ll_mask
-                          HIGHBD_TAIL_SUFFIX);
-            }
         }
+        memset(ll_mask, 0, sizeof(ll_mask));
+        bench_new(alternate(c_dst, a_dst), a_dst_stride, left,
+                  top, bottom, &params, ll_mask, 64, 64, 0xf
+                  HIGHBD_TAIL_SUFFIX);
     }
 }
 
@@ -276,9 +277,11 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c) {
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride,
                  const pixel (*const left)[8],
-                 const pixel *top, const pixel *bottom, int w, int h,
-                 const WienerParams *params, enum LrEdgeFlags edges,
-                 const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
+                 const pixel *top, const pixel *bottom,
+                 const WienerParams *params,
+                 const uint16_t (*ll_mask)[4],
+                 int w, int h, enum LrEdgeFlags edges
+                 HIGHBD_DECL_SUFFIX);
 
     if (check_func(c->pc_wiener, "wiener_multi_pretrained_%dbpc", BITDEPTH)) {
         const int base_w = 8 * (1 + (rnd() & 7));
@@ -324,10 +327,10 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c) {
 
             assert(c_dst_stride == top_stride);
             assert(c_dst_stride == bottom_stride);
-            call_ref(c_dst, c_dst_stride, left, top, bottom,
-                     w, h, &params, edges, ll_mask HIGHBD_TAIL_SUFFIX);
-            call_new(a_dst, a_dst_stride, left, top, bottom,
-                     w, h, &params, edges, ll_mask HIGHBD_TAIL_SUFFIX);
+            call_ref(c_dst, c_dst_stride, left, top, bottom, &params, ll_mask,
+                     w, h, edges HIGHBD_TAIL_SUFFIX);
+            call_new(a_dst, a_dst_stride, left, top, bottom, &params, ll_mask,
+                     w, h, edges HIGHBD_TAIL_SUFFIX);
             if (checkasm_check_pixel_padded_align(c_dst, c_dst_stride,
                                                   a_dst, a_dst_stride,
                                                   w, h, "dst", 64, 1))
@@ -336,13 +339,10 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c) {
                         w, h, to_binary(edges));
                 break;
             }
-            if (edges == 0xf) {
-                for (int i = 0; i < 64; i++)
-                    ll_mask[i][0] = 0;
-                bench_new(alternate(c_dst, a_dst), a_dst_stride, left,
-                          top, bottom, 64, 64, &params, 0xf, ll_mask
-                          HIGHBD_TAIL_SUFFIX);
-            }
+            memset(ll_mask, 0, sizeof(ll_mask));
+            bench_new(alternate(c_dst, a_dst), a_dst_stride, left,
+                      top, bottom, &params, ll_mask, 64, 64, 0xf
+                      HIGHBD_TAIL_SUFFIX);
         }
     }
 }

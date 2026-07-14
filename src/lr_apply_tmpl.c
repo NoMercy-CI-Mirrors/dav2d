@@ -181,8 +181,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *p,
         }
         if (wiener_fn) {
             wiener_fn(p, stride, left, top ? top + 2 * PXSTRIDE(stride) : lpf,
-                      lpfb, w, stripe_h, &wiener_params,
-                      edges, ll_mask HIGHBD_CALL_SUFFIX);
+                      lpfb, &wiener_params, ll_mask, w, stripe_h,
+                      edges HIGHBD_CALL_SUFFIX);
             if (multi_wiener)
                 wiener_params.multi.noskip_mask += stripe_h >> 2;
         } else if (uv_filter) {

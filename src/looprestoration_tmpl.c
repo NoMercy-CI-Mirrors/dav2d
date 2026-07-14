@@ -211,9 +211,11 @@ static void backup_row_luma(pixel *dst, const pixel *src, const ptrdiff_t src_st
 static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
                                  const pixel (*left)[8],
                                  const pixel *lpf, const pixel *lpf_bottom,
-                                 const int w, int h, const WienerParams *params,
-                                 const enum LrEdgeFlags edges,
-                                 const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
+                                 const WienerParams *params,
+                                 const uint16_t (*ll_mask)[4],
+                                 const int w, int h,
+                                 const enum LrEdgeFlags edges
+                                 HIGHBD_DECL_SUFFIX)
 {
     const int8_t *filter = params->single.filter;
     pixel row_buffers[9][REST_UNIT_STRIDE];
@@ -696,9 +698,11 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
 static void ns_wiener_multi_c(pixel *p, const ptrdiff_t stride,
                               const pixel (*left)[8],
                               const pixel *lpf, const pixel *lpf_bottom,
-                              const int w, int h, const WienerParams *params,
-                              const enum LrEdgeFlags edges,
-                              const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
+                              const WienerParams *params,
+                              const uint16_t (*ll_mask)[4],
+                              const int w, const int h,
+                              const enum LrEdgeFlags edges
+                              HIGHBD_DECL_SUFFIX)
 {
     wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
                  params->multi.filters.user, NULL,
@@ -710,9 +714,11 @@ static void ns_wiener_multi_c(pixel *p, const ptrdiff_t stride,
 static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
                         const pixel (*left)[8],
                         const pixel *lpf, const pixel *lpf_bottom,
-                        const int w, int h, const WienerParams *params,
-                        const enum LrEdgeFlags edges,
-                        const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
+                        const WienerParams *params,
+                        const uint16_t (*ll_mask)[4],
+                        const int w, const int h,
+                        const enum LrEdgeFlags edges
+                        HIGHBD_DECL_SUFFIX)
 {
     wiener_multi(p, stride, left, lpf, lpf_bottom, w, h,
                  NULL, params->multi.filters.pretrained,
