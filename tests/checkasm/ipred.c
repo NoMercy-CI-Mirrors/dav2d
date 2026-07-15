@@ -158,25 +158,49 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
 }
 
 static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
-    PIXEL_RECT(c_y, 128, 129);
-    PIXEL_RECT(c_u, 128, 129);
-    PIXEL_RECT(c_v, 128, 129);
-    PIXEL_RECT(a_y, 128, 129);
-    PIXEL_RECT(a_u, 128, 129);
-    PIXEL_RECT(a_v, 128, 129);
-    ALIGN_STK_64(pixel, c_top_sb, 3 * 128,);
-    ALIGN_STK_64(pixel, a_top_sb, 3 * 128,);
-    pixel *const c_y0 = c_y, *const c_u0 = c_u, *const c_v0 = c_v;
-    pixel *const a_y0 = a_y, *const a_u0 = a_u, *const a_v0 = a_v;
+    PIXEL_RECT(y, 128, 128);
+    PIXEL_RECT(c_u, 128, 128);
+    PIXEL_RECT(c_v, 128, 128);
+    PIXEL_RECT(a_u, 128, 128);
+    PIXEL_RECT(a_v, 128, 128);
+    ALIGN_STK_64(pixel, top_sb, 3 * 128,);
+    pixel *const c_u0 = c_u, *const c_v0 = c_v, *const y0 = y;
+    pixel *const a_u0 = a_u, *const a_v0 = a_v;
+    const int itse = rnd() & CFL_IS_TOP_SB_EDGE;
+#if BITDEPTH == 16
+    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+    const int bitdepth_max = 0xff;
+#endif
 
     declare_func(void, pixel *const *ptrs, const ptrdiff_t *stride,
                  int wpad, int hpad, int w, int h, int flags HIGHBD_DECL_SUFFIX);
 
     for (enum CflType type = CFL_EXPLICIT; type <= CFL_IMPLICIT; type++) {
+        if (type == CFL_EXPLICIT) {
+            INIT_PIXEL_RECT(y_buf);
+            if (itse)
+                INIT_PIXEL_RECT(top_sb);
+        } else {
+            // pathological test pixel values generate 0 alphas, but we still
+            // need to test for overflow during luma regression
+            if (!(rnd() & 3)) {
+                for (unsigned i = 0; i < ARRAY_SIZE(y_buf); i++)
+                    y_buf[i] = bitdepth_max;
+                if (itse)
+                    for (unsigned i = 0; i < ARRAY_SIZE(top_sb); i++)
+                        top_sb[i] = bitdepth_max;
+            } else {
+                RAND_PIXEL_RECT(y_buf);
+                if (itse)
+                    RAND_PIXEL_RECT(top_sb);
+            }
+        }
+
         for (int layout = 1; layout <= DAV2D_PIXEL_LAYOUT_I444; layout++) {
             const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
             const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
-            const ptrdiff_t strides[2] = { c_y_stride, c_u_stride >> ss_hor };
+            const ptrdiff_t strides[2] = { y_stride, c_u_stride >> ss_hor };
             for (int w = 4; w <= 64; w <<= 1)
                 for (int padding = 0; padding <= 1; padding++)
                     for (int rng0 = 1; rng0 >= 0 + (type == CFL_IMPLICIT); rng0--)
@@ -191,20 +215,14 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                             {
                                 const int h0 = padding && w < 16 ? 16 : 4;
                                 for (int h = h0; h <= 64; h <<= 1) {
-#if BITDEPTH == 16
-                                    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
-#else
-                                    const int bitdepth_max = 0xff;
-#endif
                                     int wpad = 0, hpad = 0;
                                     if (padding) {
                                         wpad = imax(w > 8, rnd() & imax(w / 8 - 1, 0));
                                         hpad = imax(h > 8, rnd() & imax(h / 8 - 1, 0));
                                     }
 
-                                    int flags = flt_type |
-                                        (rnd() & (CFL_HAS_TOP | CFL_HAS_LEFT |
-                                                  CFL_IS_TOP_SB_EDGE));
+                                    int flags = flt_type | itse |
+                                        (rnd() & (CFL_HAS_TOP | CFL_HAS_LEFT));
                                     if (type == CFL_EXPLICIT) {
                                         int alpha_u = 1 - (rnd() & 2); // sign
                                         int alpha_v = 1 - (rnd() & 2);
@@ -216,74 +234,44 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                     }
 
                                     const int unaligned_offset = imax(w / 4, 4);
-                                    c_y = c_y0 + (unaligned_offset << ss_hor);
-                                    a_y = a_y0 + (unaligned_offset << ss_hor);
+                                    y = y0 + (unaligned_offset << ss_hor);
                                     c_u = c_u0 + unaligned_offset;
                                     a_u = a_u0 + unaligned_offset;
                                     c_v = c_v0 + unaligned_offset;
                                     a_v = a_v0 + unaligned_offset;
-                                    const int itse = flags & CFL_IS_TOP_SB_EDGE;
-                                    pixel *c_ytop = itse ? c_top_sb : c_y - (1 + ss_ver) * strides[0];
-                                    pixel *c_utop = itse ? c_top_sb + 128 : c_u - strides[1];
-                                    pixel *c_vtop = itse ? c_top_sb + 256 : c_v - strides[1];
-                                    pixel *a_ytop = itse ? a_top_sb : a_y - (1 + ss_ver) * strides[0];
-                                    pixel *a_utop = itse ? a_top_sb + 128 : a_u - strides[1];
-                                    pixel *a_vtop = itse ? a_top_sb + 256 : a_v - strides[1];
-                                    pixel *const c_ptrs[6] = { c_ytop, c_utop, c_vtop, c_y, c_u, c_v };
-                                    pixel *const a_ptrs[6] = { a_ytop, a_utop, a_vtop, a_y, a_u, a_v };
+                                    pixel *ytop = itse ? top_sb : y - (1 + ss_ver) * strides[0];
+                                    pixel *utop = itse ? top_sb + 128 : c_u - strides[1];
+                                    pixel *vtop = itse ? top_sb + 256 : c_v - strides[1];
+                                    pixel *const c_ptrs[6] = { ytop, utop, vtop, y, c_u, c_v };
+                                    pixel *const a_ptrs[6] = { ytop, utop, vtop, y, a_u, a_v };
 
-                                    int implicit_test_overflow = 0;
                                     if (type == CFL_EXPLICIT) {
-                                        INIT_PIXEL_RECT(c_y_buf);
                                         INIT_PIXEL_RECT(c_u_buf);
                                         INIT_PIXEL_RECT(c_v_buf);
                                     } else {
-                                        implicit_test_overflow = !(rnd() & 3);
-                                        if (implicit_test_overflow) {
-                                            for (unsigned i = 0; i < ARRAY_SIZE(c_y_buf); i++)
-                                                c_y_buf[i] = bitdepth_max;
-                                        } else {
-                                            RAND_PIXEL_RECT(c_y_buf);
-                                        }
                                         RAND_PIXEL_RECT(c_u_buf);
                                         RAND_PIXEL_RECT(c_v_buf);
                                     }
                                     // TODO zero edges for implicit u_or_v so that one alpha is 0
-                                    memcpy(a_y_buf, c_y_buf, c_y_buf_h * c_y_stride);
                                     memcpy(a_u_buf, c_u_buf, c_u_buf_h * c_u_stride);
                                     memcpy(a_v_buf, c_v_buf, c_v_buf_h * c_v_stride);
-                                    if (itse) {
-                                        if (type == CFL_EXPLICIT) {
-                                            INIT_PIXEL_RECT(c_top_sb);
-                                        } else {
-                                            if (implicit_test_overflow) {
-                                                for (unsigned i = 0; i < ARRAY_SIZE(c_top_sb); i++)
-                                                    c_top_sb[i] = bitdepth_max;
-                                            } else {
-                                                RAND_PIXEL_RECT(c_top_sb);
-                                            }
-                                        }
-                                        memcpy(a_top_sb, c_top_sb, 3 * 128 * sizeof(pixel));
-                                    }
 
                                     call_ref(c_ptrs, strides, wpad, hpad, w, h, flags HIGHBD_TAIL_SUFFIX);
                                     call_new(a_ptrs, strides, wpad, hpad, w, h, flags HIGHBD_TAIL_SUFFIX);
                                     checkasm_check_pixel_padded(c_u, strides[1],
-                                                                a_u, strides[1],
-                                                                w, h, "u_dst");
+                                                                a_u, strides[1], w, h, "u_dst");
                                     checkasm_check_pixel_padded(c_v, strides[1],
-                                                                a_v, strides[1],
-                                                                w, h, "v_dst");
+                                                                a_v, strides[1], w, h, "v_dst");
 
                                     if (padding) {
                                         wpad = imax(w / 8 - 1, 0);
                                         hpad = imax(h / 8 - 1, 0);
                                     }
                                     // re-init luma buffers to prevent 0 alphas
-                                    RAND_PIXEL_RECT(c_y_buf);
-                                    RAND_PIXEL_RECT(c_top_sb);
-                                    memcpy(a_y_buf, c_y_buf, sizeof(c_y_buf));
-                                    memcpy(a_top_sb, c_top_sb, sizeof(c_top_sb));
+                                    if (type == CFL_IMPLICIT) {
+                                        RAND_PIXEL_RECT(y_buf);
+                                        RAND_PIXEL_RECT(top_sb);
+                                    }
 
                                     bench_new(a_ptrs, strides, wpad, hpad, w, h,
                                               flags | (CFL_HAS_TOP | CFL_HAS_LEFT)
