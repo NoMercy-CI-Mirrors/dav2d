@@ -3011,7 +3011,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         const int cbx4 = (t->cbx & 63) >> ss_hor, cby4 = (t->cby & 63) >> ss_ver;
         int refw = ctw4 * 4, refh = cth4 * 4;
         uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES];
-        int32_t mat[3][3] = { { 0 } };
+        int32_t mat[3][3];
         int n_tr = 0, n_bl = 0;
         if (has_top) {
             const int csbsz = sbsz >> ss_hor;
@@ -3068,7 +3068,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                                                      edge_flags HIGHBD_CALL_SUFFIX);
 
         for (int pl = 1; pl <= 2; pl++) {
-            int alpha[3] = { 0 };
+            int alpha[3];
             pixel *chroma = ((pixel *) f->cur.p.data[pl]) +
                 4 * (ssby * PXSTRIDE(cstride) + ssbx);
             const pixel *const ctop_sb_edge = is_top_sb_edge ?
@@ -3081,6 +3081,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                                               refw, refh, mat, imat, edge_flags
                                               HIGHBD_CALL_SUFFIX);
             } else { // XXX optimize for no edge case? (single const alpha)
+                alpha[0] = alpha[1] = 0;
                 alpha[2] = 0x10000;
             }
             const int n_top = has_top ? has_top + (b->cfl_mh_dir == CFL_DIR_TOP) : 0;

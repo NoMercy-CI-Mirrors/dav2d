@@ -1282,6 +1282,8 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES]
     const int n_left = has_l ? 1 + dir_l : 0;
     const pixel *left = y + n_top * 128 + 64 * 64;
 
+    memset(mat, 0, 3 * sizeof(*mat));
+
     int n = 0;
     if (has_t) {
         for (int i = 0; i < n_left; i++, n++) {
@@ -1406,6 +1408,8 @@ cfl_mh_calc_alphas_c(int alpha[3], const pixel *const c,
     const int bd = bitdepth_from_max(bitdepth_max);
     const int has_t = !!(edge_flags & CFL_HAS_TOP);
     const int has_l = !!(edge_flags & CFL_HAS_LEFT);
+
+    alpha[0] = alpha[1] = alpha[2] = 0;
 
     int n = 0;
     if (has_t) {
