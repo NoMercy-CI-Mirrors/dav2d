@@ -1499,7 +1499,7 @@ cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *src,
     for (; y < h; y++) {
         int x = 0;
         for (; x < dir_l && has_l; x++) {
-            const int v0 = left[y * n_left + dir_l];
+            const int v0 = left[y * 2 + 1];
             const int v1 = SQRND(src[0]);
             dst[0] = iclip_pixel(mul32(alpha[0], v0, 16) +
                                  mul32(alpha[1], v1, 16) + a2v2);
