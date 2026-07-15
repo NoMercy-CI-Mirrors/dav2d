@@ -1107,7 +1107,7 @@ static NOINLINE void
 cfl_mh_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
                    const pixel *src, const pixel *const top_sb_edge,
                    const ptrdiff_t src_stride, const int refw, const int refh,
-                   const int tw, const int th, const int flags, const int filter_type)
+                   const int w, const int h, const int flags, const int filter_type)
 {
     const int has_t = flags & CFL_HAS_TOP;
     const int has_l = flags & CFL_HAS_LEFT;
@@ -1178,7 +1178,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
     const ptrdiff_t b = src_stride;
     const pixel *top = has_t ? top_sb_edge ?
         top_sb_edge - n_left * 2 : src - src_stride : src;
-    for (int y = 0; y < th; y++) {
+    for (int y = 0; y < h; y++) {
         int x = 0;
         for (; x < n_left; x++) {
             const int c = x * 2, r = c + 1;
@@ -1195,7 +1195,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
                 break;
             }
         }
-        for (; x < n_left + tw; x++) {
+        for (; x < n_left + w; x++) {
             const int c = x * 2, r = c + 1;
             const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
             switch (filter_type) {
@@ -1213,11 +1213,11 @@ cfl_mh_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
         src += src_stride << 1;
         top = src - src_stride;
         dst_left += n_left;
-        dst += tw;
+        dst += w;
     }
 
     // bl
-    const int n_bl = refh - th;
+    const int n_bl = refh - h;
     for (int y = 0; y < n_bl; y++) {
         for (int x = 0; x < n_left; x++) {
             const int c = x * 2, r = c + 1;
@@ -1245,10 +1245,10 @@ static void \
 cfl_mh_gen_y_420_##lcflt##_c(pixel *const dst, const ptrdiff_t dst_top_stride, \
                              const pixel *const src, const pixel *const top_sb_edge, \
                              ptrdiff_t const src_stride, const int refw, const int refh, \
-                             int const tw, int const th, int flags) \
+                             int const w, int const h, int flags) \
 { \
     cfl_mh_gen_y_420_c(dst, PXSTRIDE(dst_top_stride), src, top_sb_edge, \
-                       PXSTRIDE(src_stride), refw, refh, tw, th, flags, \
+                       PXSTRIDE(src_stride), refw, refh, w, h, flags, \
                        CFL_FLT_TYPE_##ucflt); \
 }
 

@@ -114,7 +114,7 @@ typedef decl_cfl_pred_fn(*cfl_pred_fn);
 #define decl_cfl_mh_gen_y_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_top_stride, \
             const pixel *src, const pixel *top_sb_edge, ptrdiff_t src_stride, \
-            int refw, int refh, int tw, int th, int flags)
+            int refw, int refh, int w, int h, int flags)
 typedef decl_cfl_mh_gen_y_fn(*cfl_mh_gen_y_fn);
 
 /*
