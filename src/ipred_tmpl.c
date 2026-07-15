@@ -1104,10 +1104,10 @@ cfl_implicit_fn(444, 0, 0)
 /* CFL MHCCP */
 
 static NOINLINE void
-cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
-                const pixel *src, const pixel *const top_sb_edge,
-                const ptrdiff_t src_stride, const int refw, const int refh,
-                const int tw, const int th, const int flags, const int filter_type)
+cfl_mh_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
+                   const pixel *src, const pixel *const top_sb_edge,
+                   const ptrdiff_t src_stride, const int refw, const int refh,
+                   const int tw, const int th, const int flags, const int filter_type)
 {
     const int has_t = flags & CFL_HAS_TOP;
     const int has_l = flags & CFL_HAS_LEFT;
@@ -1240,24 +1240,24 @@ cfl_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
     }
 }
 
-#define cfl_gen_y_420_fn(ucflt, lcflt) \
+#define cfl_mh_gen_y_420_fn(ucflt, lcflt) \
 static void \
-cfl_gen_y_420_##lcflt##_c(pixel *const dst, const ptrdiff_t dst_top_stride, \
-                          const pixel *const src, const pixel *const top_sb_edge, \
-                          ptrdiff_t const src_stride, const int refw, const int refh, \
-                          int const tw, int const th, int flags) \
+cfl_mh_gen_y_420_##lcflt##_c(pixel *const dst, const ptrdiff_t dst_top_stride, \
+                             const pixel *const src, const pixel *const top_sb_edge, \
+                             ptrdiff_t const src_stride, const int refw, const int refh, \
+                             int const tw, int const th, int flags) \
 { \
-    cfl_gen_y_420_c(dst, PXSTRIDE(dst_top_stride), src, top_sb_edge, \
-                    PXSTRIDE(src_stride), refw, refh, tw, th, flags, \
-                    CFL_FLT_TYPE_##ucflt); \
+    cfl_mh_gen_y_420_c(dst, PXSTRIDE(dst_top_stride), src, top_sb_edge, \
+                       PXSTRIDE(src_stride), refw, refh, tw, th, flags, \
+                       CFL_FLT_TYPE_##ucflt); \
 }
 
-#define cfl_gen_y_fn(fmt) \
-cfl_gen_y_##fmt##_fn(UNIFORM, uniform) \
-cfl_gen_y_##fmt##_fn(VSTRIP, vstrip) \
-cfl_gen_y_##fmt##_fn(GAUSS, gauss)
+#define cfl_mh_gen_y_fn(fmt) \
+cfl_mh_gen_y_##fmt##_fn(UNIFORM, uniform) \
+cfl_mh_gen_y_##fmt##_fn(VSTRIP, vstrip) \
+cfl_mh_gen_y_##fmt##_fn(GAUSS, gauss)
 
-cfl_gen_y_fn(420)
+cfl_mh_gen_y_fn(420)
 
 #define SQRND(v) (((v) * (v) + mid) >> bd)
 #define GEN_MATRIX() \
@@ -1270,10 +1270,10 @@ cfl_gen_y_fn(420)
     } while (0);
 
 static void
-cfl_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES],
-              const pixel *y, const ptrdiff_t y_top_stride,
-              const int refw, const int refh, const int edge_flags,
-              const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
+cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES],
+                 const pixel *y, const ptrdiff_t y_top_stride,
+                 const int refw, const int refh, const int edge_flags,
+                 const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
     const int mid = 1 << (bd - 1);
@@ -1333,20 +1333,20 @@ cfl_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES],
     mat[2][1] = mat[1][2];
 }
 
-#define cfl_gen_mat_fn(name, dir) \
+#define cfl_mh_gen_mat_fn(name, dir) \
 static void \
-cfl_gen_mat_##name##_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
-                       const pixel *const y, const ptrdiff_t y_top_stride, \
-                       const int refw, const int refh, const int edge_flags \
-                       HIGHBD_DECL_SUFFIX) \
+cfl_mh_gen_mat_##name##_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
+                         const pixel *const y, const ptrdiff_t y_top_stride, \
+                         const int refw, const int refh, const int edge_flags \
+                         HIGHBD_DECL_SUFFIX) \
 { \
-    cfl_gen_mat_c(mat, imat, y, PXSTRIDE(y_top_stride), refw, refh, \
-                  edge_flags, dir HIGHBD_TAIL_SUFFIX); \
+    cfl_mh_gen_mat_c(mat, imat, y, PXSTRIDE(y_top_stride), refw, refh, \
+                    edge_flags, dir HIGHBD_TAIL_SUFFIX); \
 }
 
-cfl_gen_mat_fn(c, CFL_DIR_CENTER)
-cfl_gen_mat_fn(t, CFL_DIR_TOP)
-cfl_gen_mat_fn(l, CFL_DIR_LEFT)
+cfl_mh_gen_mat_fn(c, CFL_DIR_CENTER)
+cfl_mh_gen_mat_fn(t, CFL_DIR_TOP)
+cfl_mh_gen_mat_fn(l, CFL_DIR_LEFT)
 
 static void get_div_scale_sh(int d, int *scale, int *sh) {
     d = imax(1, abs(d));
@@ -1402,11 +1402,11 @@ static int mul32(int a, int b, int sh) {
 }
 
 static void
-cfl_calc_alphas_c(int alpha[3], const pixel *const c,
-                  const pixel *const top_sb_edge, ptrdiff_t stride,
-                  const int refw, const int refh,
-                  int32_t mat[3][3], const uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES],
-                  const int edge_flags HIGHBD_DECL_SUFFIX)
+cfl_mh_calc_alphas_c(int alpha[3], const pixel *const c,
+                     const pixel *const top_sb_edge, const ptrdiff_t stride,
+                     const int refw, const int refh,
+                     const int32_t mat[3][3], const uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES],
+                     const int edge_flags HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
     const int has_t = !!(edge_flags & CFL_HAS_TOP);
@@ -1470,11 +1470,10 @@ cfl_calc_alphas_c(int alpha[3], const pixel *const c,
     alpha[0] -= mul32(tmp[0][0], alpha[1], 16) + mul32(tmp[0][1], alpha[2], 16);
 }
 
-static void
-cfl_mhccp_pred_c(pixel *dst, const ptrdiff_t dst_stride,
-                 const pixel *src, const ptrdiff_t src_top_stride,
-                 const int w, const int h, const int alpha[3],
-                 const int edge_flags, const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
+static void cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride,
+                          const pixel *src, const ptrdiff_t src_top_stride,
+                          const int w, const int h, const int alpha[3],
+                          const int edge_flags, const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
     const int mid = 1 << (bd - 1);
@@ -1518,20 +1517,20 @@ cfl_mhccp_pred_c(pixel *dst, const ptrdiff_t dst_stride,
     }
 }
 
-#define cfl_mhccp_pred_fn(name, dir) \
+#define cfl_mh_pred_fn(name, dir) \
 static void \
-cfl_mhccp_pred_##name##_c(pixel *dst, ptrdiff_t dst_stride, \
-                          const pixel *src, const ptrdiff_t src_top_stride, \
-                          int w, int h, const int alpha[3], int edge_flags \
-                          HIGHBD_DECL_SUFFIX) \
+cfl_mh_pred_##name##_c(pixel *dst, ptrdiff_t dst_stride, \
+                       const pixel *src, const ptrdiff_t src_top_stride, \
+                       int w, int h, const int alpha[3], int edge_flags \
+                       HIGHBD_DECL_SUFFIX) \
 { \
-    cfl_mhccp_pred_c(dst, PXSTRIDE(dst_stride), src, PXSTRIDE(src_top_stride), \
-                     w, h, alpha, edge_flags, dir HIGHBD_TAIL_SUFFIX); \
+    cfl_mh_pred_c(dst, PXSTRIDE(dst_stride), src, PXSTRIDE(src_top_stride), \
+                  w, h, alpha, edge_flags, dir HIGHBD_TAIL_SUFFIX); \
 }
 
-cfl_mhccp_pred_fn(c, CFL_DIR_CENTER)
-cfl_mhccp_pred_fn(t, CFL_DIR_TOP)
-cfl_mhccp_pred_fn(l, CFL_DIR_LEFT)
+cfl_mh_pred_fn(c, CFL_DIR_CENTER)
+cfl_mh_pred_fn(t, CFL_DIR_TOP)
+cfl_mh_pred_fn(l, CFL_DIR_LEFT)
 
 static void pal_pred_c(pixel *dst, const ptrdiff_t stride,
                        const pixel *const pal, const uint8_t *idx,
@@ -1709,13 +1708,13 @@ COLD void bitfn(dav2d_intra_pred_dsp_init)(Dav2dIntraPredDSPContext *const c) {
     c->cfl_pred[CFL_IMPLICIT][DAV2D_PIXEL_LAYOUT_I444 - 1] = cfl_implicit_444_c;
 
 #define assign_cfl_mhccp(dir, name) \
-    c->cfl_gen_mat[dir] = cfl_gen_mat_##name##_c; \
-    c->cfl_mhccp_pred[dir] = cfl_mhccp_pred_##name##_c;
+    c->cfl_mh_gen_mat[dir] = cfl_mh_gen_mat_##name##_c; \
+    c->cfl_mh_pred[dir] = cfl_mh_pred_##name##_c;
 
-    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][0] = cfl_gen_y_420_uniform_c;
-    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][1] = cfl_gen_y_420_vstrip_c;
-    c->cfl_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][2] = cfl_gen_y_420_gauss_c;
-    c->cfl_calc_alphas = cfl_calc_alphas_c;
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][0] = cfl_mh_gen_y_420_uniform_c;
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][1] = cfl_mh_gen_y_420_vstrip_c;
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][2] = cfl_mh_gen_y_420_gauss_c;
+    c->cfl_mh_calc_alphas = cfl_mh_calc_alphas_c;
     assign_cfl_mhccp(CFL_DIR_CENTER, c);
     assign_cfl_mhccp(CFL_DIR_TOP   , t);
     assign_cfl_mhccp(CFL_DIR_LEFT  , l);

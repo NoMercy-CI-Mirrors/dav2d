@@ -100,7 +100,7 @@ void (name)(pixel *const *ptrs, const ptrdiff_t *stride, int wpad, \
             int hpad, int w, int h, unsigned flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_pred_fn(*cfl_pred_fn);
 
-/* CFL - multi-hypothesis cross component prediction (MHCCP) */
+/* CFL - Multi-Hypothesis Cross Component Prediction (MHCCP) */
 
 /*
  * max luma size
@@ -111,11 +111,11 @@ typedef decl_cfl_pred_fn(*cfl_pred_fn);
  */
 #define CFL_MHCCP_MAX_LUMA_SIZE 4736
 
-#define decl_cfl_gen_y_fn(name) \
+#define decl_cfl_mh_gen_y_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_top_stride, \
             const pixel *src, const pixel *top_sb_edge, ptrdiff_t src_stride, \
             int refw, int refh, int tw, int th, int flags)
-typedef decl_cfl_gen_y_fn(*cfl_gen_y_fn);
+typedef decl_cfl_mh_gen_y_fn(*cfl_mh_gen_y_fn);
 
 /*
  * max edge samples
@@ -125,32 +125,32 @@ typedef decl_cfl_gen_y_fn(*cfl_gen_y_fn);
  */
 #define CFL_MHCCP_MAX_EDGE_SAMPLES 386
 
-#define decl_cfl_gen_mat_fn(name) \
+#define decl_cfl_mh_gen_mat_fn(name) \
 void (name)(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
             const pixel *y, ptrdiff_t y_top_stride, int refw, int refh, \
             int edge_flags HIGHBD_DECL_SUFFIX)
-typedef decl_cfl_gen_mat_fn(*cfl_gen_mat_fn);
+typedef decl_cfl_mh_gen_mat_fn(*cfl_mh_gen_mat_fn);
 
 /*
- * alpha[3] = gauss elimination(mat <- imat)
+ * alpha[3] = gauss elimination
  */
-#define decl_cfl_calc_alphas_fn(name) \
+#define decl_cfl_mh_calc_alphas_fn(name) \
 void (name)(int alpha[3], const pixel *c, const pixel *top_sb_edge, \
-            ptrdiff_t stride, int w, int h, int32_t mat[3][3], \
+            ptrdiff_t stride, int refw, int refh, const int32_t mat[3][3], \
             const uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
             int edge_flags HIGHBD_DECL_SUFFIX)
-typedef decl_cfl_calc_alphas_fn(*cfl_calc_alphas_fn);
+typedef decl_cfl_mh_calc_alphas_fn(*cfl_mh_calc_alphas_fn);
 
 /*
  * dst[x,y] = alpha[0] * (luma[center/above/left] >> 3) +
  *            alpha[1] * ((luma[center]/8)^2 + (1 << (bd/2)) >> 3) +
  *            alpha[2] << (bd/2)
  */
-#define decl_cfl_mhccp_pred_fn(name) \
+#define decl_cfl_mh_pred_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, const pixel *src, \
             ptrdiff_t src_top_stride, int w, int h, const int alpha[3], \
             int edge_flags HIGHBD_DECL_SUFFIX)
-typedef decl_cfl_mhccp_pred_fn(*cfl_mhccp_pred_fn);
+typedef decl_cfl_mh_pred_fn(*cfl_mh_pred_fn);
 
 /*
  * dst[x,y] = pal[idx[x,y]]
@@ -168,10 +168,10 @@ typedef struct Dav2dIntraPredDSPContext {
     // cfl explicit / implicit
     cfl_pred_fn cfl_pred[2 /* explicit, implicit */][3 /* 420, 422, 444 */];
     // cfl mhccp
-    cfl_gen_y_fn        cfl_gen_y[3 /* 420, 422, 444 */][3 /* cfl_ds_filter_type */];
-    cfl_gen_mat_fn      cfl_gen_mat[3 /* CflMhDir */];
-    cfl_calc_alphas_fn  cfl_calc_alphas;
-    cfl_mhccp_pred_fn   cfl_mhccp_pred[3 /* CflMhDir */];
+    cfl_mh_gen_y_fn        cfl_mh_gen_y[3 /* 420, 422, 444 */][3 /* cfl_ds_filter_type */];
+    cfl_mh_gen_mat_fn      cfl_mh_gen_mat[3 /* CflMhDir */];
+    cfl_mh_calc_alphas_fn  cfl_mh_calc_alphas;
+    cfl_mh_pred_fn         cfl_mh_pred[3 /* CflMhDir */];
 
     // palette
     pal_pred_fn pal_pred;
