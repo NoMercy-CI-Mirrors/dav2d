@@ -203,7 +203,7 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
             const ptrdiff_t strides[2] = { y_stride, c_u_stride >> ss_hor };
             for (int w = 4; w <= 64; w <<= 1)
                 for (int padding = 0; padding <= 1; padding++)
-                    for (int rng0 = 1; rng0 >= 0 + (type == CFL_IMPLICIT); rng0--)
+                    for (int rng0 = 1; rng0 >= 0; rng0--)
                         for (int flt_type = CFL_FLT_TYPE_UNIFORM;
                              flt_type <= CFL_FLT_TYPE_GAUSS; flt_type++)
                         {
@@ -250,14 +250,17 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                         INIT_PIXEL_RECT(c_v_buf);
                                     } else {
                                         RAND_PIXEL_RECT(c_u_buf);
-                                        RAND_PIXEL_RECT(c_v_buf);
+                                        if (rng0)
+                                            RAND_PIXEL_RECT(c_v_buf);
+                                        else
+                                            memset(c_v_buf, 0, sizeof(c_v_buf));
                                     }
-                                    // TODO zero edges for implicit u_or_v so that one alpha is 0
                                     memcpy(a_u_buf, c_u_buf, c_u_buf_h * c_u_stride);
                                     memcpy(a_v_buf, c_v_buf, c_v_buf_h * c_v_stride);
 
                                     call_ref(c_ptrs, strides, wpad, hpad, w, h, flags HIGHBD_TAIL_SUFFIX);
                                     call_new(a_ptrs, strides, wpad, hpad, w, h, flags HIGHBD_TAIL_SUFFIX);
+
                                     checkasm_check_pixel_padded(c_u, strides[1],
                                                                 a_u, strides[1], w, h, "u_dst");
                                     checkasm_check_pixel_padded(c_v, strides[1],
