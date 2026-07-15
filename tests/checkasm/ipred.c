@@ -50,6 +50,7 @@ static const char *const intra_pred_mode_names[N_IMPL_INTRA_PRED_MODES] = {
 
 static const char *const cfl_pred_type_names[3] = { "cfl_explicit", "cfl_implicit" };
 static const char *const cfl_luma_filter_names[3] = { "uniform", "vstrip", "gauss" };
+static const char cfl_mh_dir_names[3] = { 'c', 't', 'l' };
 static const char *const layout_names[3] = { "420", "422", "444" };
 
 static const uint8_t z_angles[27] = {
@@ -287,6 +288,303 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
     }
 }
 
+static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
+    PIXEL_RECT(src0, 128, 128);
+    ALIGN_STK_64(pixel, top_sb0, 64+128,);
+    ALIGN_STK_64(pixel, c_dst, CFL_MH_MAX_LUMA_SIZE,);
+    ALIGN_STK_64(pixel, a_dst, CFL_MH_MAX_LUMA_SIZE,);
+#if BITDEPTH == 16
+    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+    const int bitdepth_max = 0xff;
+#endif
+
+    declare_func(void, pixel *dst, const pixel *src, const pixel *top_sb_edge,
+                 ptrdiff_t src_stride, int refw, int refh, int w, int h, int flags);
+
+    INIT_PIXEL_RECT(src0_buf);
+    INIT_PIXEL_RECT(top_sb0);
+
+    for (int layout = 1; layout <= DAV2D_PIXEL_LAYOUT_I444; layout++) {
+        const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
+        const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
+        for (int w = 4; w <= 64; w <<= 1)
+#define BENCH_DIR 0
+#if BENCH_DIR
+            for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++)
+#endif
+            for (int padding = 0; padding <= 1; padding++)
+                for (int flt_type = CFL_FLT_TYPE_UNIFORM;
+                     flt_type <= CFL_FLT_TYPE_GAUSS; flt_type++)
+                {
+#if BENCH_DIR
+                    if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
+                        "cfl_mh_gen_y_%s_%s_w%d_%c_pad%d_%dbpc",
+                        layout_names[layout - 1], cfl_luma_filter_names[flt_type],
+                        w, cfl_mh_dir_names[dir], padding, BITDEPTH))
+#else
+                    if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
+                        "cfl_mh_gen_y_%s_%s_w%d_pad%d_%dbpc",
+                        layout_names[layout - 1], cfl_luma_filter_names[flt_type],
+                        w, padding, BITDEPTH))
+#endif
+                    {
+#if !BENCH_DIR
+                        for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++) {
+#endif
+                            const int h0 = padding && w < 16 ? 16 : 4;
+                            for (int h = h0; h <= 64; h <<= 1) {
+                                int wpad = 0, hpad = 0;
+                                if (padding) {
+                                    wpad = imax(w > 8, rnd() & imax(w / 8 - 1, 0));
+                                    hpad = imax(h > 8, rnd() & imax(h / 8 - 1, 0));
+                                }
+
+                                const int has_t = rnd() & CFL_HAS_TOP;
+                                const int has_l = rnd() & CFL_HAS_LEFT;
+                                const int itse = rnd() & CFL_IS_TOP_SB_EDGE;
+                                const int flags = dir | has_t | has_l | itse;
+                                const int dir_l = dir == CFL_DIR_LEFT;
+
+                                int refw = w - wpad * 4, refh = h - hpad * 4;
+                                int subleft = 0;
+                                if (has_t && !wpad) {
+                                    const int avail = rnd() % (3 - (w == 4));
+                                    if (avail == 1) // full
+                                        refw += w;
+                                    else if (avail == 2) // partial
+                                        refw += (rnd() % w) & ~3;
+                                }
+                                if (has_l && !hpad) {
+                                    const int avail = rnd() % 3;
+                                    if (avail == 1)
+                                        refh += (rnd() % h) & ~3;
+                                    else if (avail == 2)
+                                        refh += h;
+                                    refw += 2;
+                                    subleft = !dir_l;
+                                }
+                                if (refw > 128 >> ss_hor) {
+                                    refw = 128 >> ss_hor;
+                                    subleft = 0;
+                                }
+                                refh = imin(refh, (128 >> ss_ver) - 2 * has_t);
+
+                                const int unaligned_offset = imax(w / 4, 4);
+                                pixel *const src = src0 + (unaligned_offset << ss_hor);
+                                pixel *const top_sb = itse ? top_sb0 + 64 : NULL;
+
+                                call_ref(c_dst, src, top_sb, src0_stride,
+                                         refw - subleft, refh, w, h, flags);
+                                call_new(a_dst, src, top_sb, src0_stride,
+                                         refw - subleft, refh, w, h, flags);
+
+                                const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
+                                const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT) : 0;
+                                const int blk_off = n_top * CFL_MH_TOP_STRIDE;
+                                const pixel *const c_left = c_dst + blk_off + 64 * 64;
+                                const pixel *const a_left = a_dst + blk_off + 64 * 64;
+                                const pixel *const c_blk = c_dst + blk_off;
+                                const pixel *const a_blk = a_dst + blk_off;
+
+                                checkasm_check_pixel(c_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
+                                                     a_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
+                                                     refw - subleft, n_top, "top");
+                                checkasm_check_pixel(c_left, n_left, a_left, n_left,
+                                                     n_left, refh, "left");
+                                checkasm_check_pixel(c_blk, w, a_blk, w, w, h, "blk");
+
+                                bench_new(a_dst, src, top_sb, src0_stride,
+                                          refw - subleft, refh, w, h,
+                                          flags | CFL_HAS_TOP | CFL_HAS_LEFT);
+                            }
+#if !BENCH_DIR
+                        }
+#endif
+                    }
+                }
+    }
+
+    report("cfl_mh_gen_y");
+}
+
+static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
+    ALIGN_STK_64(pixel, luma, CFL_MH_MAX_LUMA_SIZE,);
+    uint16_t c_imat[2][CFL_MH_MAX_EDGE_SAMPLES];
+    uint16_t a_imat[2][CFL_MH_MAX_EDGE_SAMPLES];
+    int32_t c_mat[3][3], *c_mat_ptr = (int32_t *) c_mat;
+    int32_t a_mat[3][3], *a_mat_ptr = (int32_t *) a_mat;
+    const ptrdiff_t mat_stride = 3 * sizeof(int32_t);
+#if BITDEPTH == 16
+    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+    const int bitdepth_max = 0xff;
+#endif
+
+    declare_func(void, int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
+                 const pixel *luma, int refw, int refh, int edge_flags HIGHBD_DECL_SUFFIX);
+
+    INIT_PIXEL_RECT(luma);
+
+    for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++)
+        if (check_func(c->cfl_mh_gen_mat[dir], "cfl_mh_gen_mat_%c_%dbpc",
+            cfl_mh_dir_names[dir], BITDEPTH))
+        {
+            const int has_t = rnd() & 1;
+            const int has_l = has_t ? rnd() & 1 : 1;
+            const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT) : 0;
+            const int refw = imin(4 + 4 * (rnd() & 31) + n_left, 128);
+            const int refh = imin(4 + 4 * (rnd() & 31), 128 - has_t);
+            const int edge_flags = (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
+
+            call_ref(c_mat, c_imat, luma, refw, refh, edge_flags HIGHBD_TAIL_SUFFIX);
+            call_new(a_mat, a_imat, luma, refw, refh, edge_flags HIGHBD_TAIL_SUFFIX);
+
+            checkasm_check1d(uint16_t, c_imat[0], a_imat[0],
+                             has_t * (refw - 2) + has_l * (refh - 2), "imat0");
+            checkasm_check1d(uint16_t, c_imat[1], a_imat[1],
+                             has_t * (refw - 2) + has_l * (refh - 2), "imat1");
+            checkasm_check2d(int32_t, c_mat_ptr, mat_stride, a_mat_ptr, mat_stride,
+                             3, 3, "mat");
+
+            bench_new(a_mat, a_imat, luma, refw, refh, edge_flags HIGHBD_TAIL_SUFFIX);
+        }
+
+    report("cfl_mh_gen_mat");
+}
+
+static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
+    PIXEL_RECT(chroma, 129, 129);
+    pixel luma[CFL_MH_MAX_EDGE_SAMPLES];
+    uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES];
+    int32_t mat[3][3] = {{ 0 }};
+#if BITDEPTH == 16
+    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+    const int bitdepth_max = 0xff;
+#endif
+    const int bd = bitdepth_from_max(bitdepth_max);
+    const int mid = 1 << (bd - 1);
+    int c_alpha[3], a_alpha[3];
+
+    declare_func(void, int alpha[3], const pixel *c, const pixel *top_sb_edge,
+                 ptrdiff_t stride, int refw, int refh, const int32_t mat[3][3],
+                 const uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
+                 int edge_flags HIGHBD_DECL_SUFFIX);
+
+    INIT_PIXEL_RECT(chroma_buf);
+    INIT_PIXEL_RECT(luma);
+
+    if (check_func(c->cfl_mh_calc_alphas, "cfl_mh_calc_alphas_%dbpc", BITDEPTH)) {
+        const int has_t = rnd() & 1;
+        const int has_l = has_t ? rnd() & 1 : 1;
+        const int itse = rnd() & 1;
+        const int dir = rnd() % 3;
+        const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT) : 0;
+        const int refw = imin(4 + 4 * (rnd() & 31) + n_left, 128);
+        const int refh = imin(4 + 4 * (rnd() & 31), 128 - has_t);
+        const int edge_flags = (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
+        int n;
+
+        for (n = 0; n < has_t * (refw - 2) + has_l * (refh - 2); n++) {
+            const int v0 = luma[n];
+            int v1 = dir == CFL_DIR_CENTER ? v0 :
+                rnd() & 1 ? // allow_far_neighbor
+                    rnd() & bitdepth_max : iclip_pixel(v0 + (rnd() & 15) - 8);
+            v1 = (v1 * v1 + mid) >> bd;
+
+            imat[0][n] = v0;
+            imat[1][n] = v1;
+            mat[0][0] += v0 * v0;
+            mat[0][1] += v0 * v1;
+            mat[0][2] += v0 << (bd - 1);
+            mat[1][1] += v1 * v1;
+            mat[1][2] += v1 << (bd - 1);
+        }
+        mat[2][2] = n << ((bd - 1) << 1);
+
+        const int nl2 = 31 - clz(n);
+        const int mat_sh = 22 - 2 * bd - nl2 - !!(n & ((1 << nl2) - 1));
+        if (mat_sh > 0)
+            for (int i = 0; i < 3; i++)
+                for (int j = i; j < 3; j++)
+                    mat[i][j] <<= mat_sh;
+        else if (mat_sh < 0)
+            for (int i = 0; i < 3; i++)
+                for (int j = i; j < 3; j++)
+                    mat[i][j] >>= -mat_sh;
+        mat[0][0] += 2 << (bd - 8);
+        mat[1][1] += 2 << (bd - 8);
+        mat[2][2] += 2 << (bd - 8);
+        mat[1][0] = mat[0][1];
+        mat[2][0] = mat[0][2];
+        mat[2][1] = mat[1][2];
+
+        call_ref(c_alpha, chroma, itse ? chroma + PXSTRIDE(chroma_stride) : NULL,
+                 chroma_stride, refw, refh, mat, imat, edge_flags HIGHBD_TAIL_SUFFIX);
+        call_new(a_alpha, chroma, itse ? chroma + PXSTRIDE(chroma_stride) : NULL,
+                 chroma_stride, refw, refh, mat, imat, edge_flags HIGHBD_TAIL_SUFFIX);
+
+        if (memcmp(c_alpha, a_alpha, sizeof(c_alpha)) && fail())
+            fprintf(stderr, "expected { %d, %d, %d }, got { %d, %d, %d }\n",
+                    c_alpha[0], c_alpha[1], c_alpha[2],
+                    a_alpha[0], a_alpha[1], a_alpha[2]);
+
+        bench_new(a_alpha, chroma, itse ? chroma + PXSTRIDE(chroma_stride) : NULL,
+                  chroma_stride, refw, refh, mat, imat, edge_flags HIGHBD_TAIL_SUFFIX);
+    }
+
+    report("cfl_calc_alphas");
+}
+
+static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
+    ALIGN_STK_64(pixel, luma_buf, CFL_MH_MAX_LUMA_SIZE,);
+    PIXEL_RECT(c_chroma, 64, 64);
+    PIXEL_RECT(a_chroma, 64, 64);
+    int alpha[3];
+#if BITDEPTH == 16
+    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+    const int bitdepth_max = 0xff;
+#endif
+
+    INIT_PIXEL_RECT(luma_buf);
+    for (int i = 0; i < 3; i++)
+        alpha[i] = -0x20000 + rnd() % (0x40001);
+
+    declare_func(void, pixel *dst, ptrdiff_t dst_stride, const pixel *src,
+                 int w, int h, const int alpha[3], int edge_flags HIGHBD_DECL_SUFFIX);
+
+    for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++)
+        for (int w = 4; w <= 64; w <<= 1)
+            if (check_func(c->cfl_mh_pred[dir], "cfl_mh_pred_%c_w%d_%dbpc",
+                           cfl_mh_dir_names[dir], w, BITDEPTH))
+                for (int h = 4; h <= 64; h <<= 1) {
+                    const int has_t = rnd() & CFL_HAS_TOP;
+                    const int has_l = rnd() & CFL_HAS_LEFT;
+                    const int edge_flags = has_t | has_l;
+                    const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
+                    const pixel *luma = luma_buf + n_top * 128;
+
+                    CLEAR_PIXEL_RECT(c_chroma);
+                    CLEAR_PIXEL_RECT(a_chroma);
+
+                    call_ref(c_chroma, c_chroma_stride, luma, w, h, alpha,
+                             edge_flags HIGHBD_TAIL_SUFFIX);
+                    call_new(a_chroma, a_chroma_stride, luma, w, h, alpha,
+                             edge_flags HIGHBD_TAIL_SUFFIX);
+
+                    checkasm_check_pixel_padded(c_chroma, c_chroma_stride,
+                                                a_chroma, a_chroma_stride, w, h, "dst");
+
+                    luma = luma_buf + (1 + (dir == CFL_DIR_TOP)) * 128;
+                    bench_new(a_chroma, a_chroma_stride, luma, w, h, alpha,
+                              edge_flags | CFL_HAS_TOP | CFL_HAS_LEFT HIGHBD_TAIL_SUFFIX);
+                }
+
+    report("cfl_mh_pred");
+}
+
 static void check_pal_pred(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
@@ -327,10 +625,14 @@ static void check_pal_pred(Dav2dIntraPredDSPContext *const c) {
 }
 
 void bitfn(checkasm_check_ipred)(void) {
-    Dav2dIntraPredDSPContext c;
+    Dav2dIntraPredDSPContext c = {{ 0 }};
     bitfn(dav2d_intra_pred_dsp_init)(&c);
 
     check_intra_pred(&c);
     check_cfl_pred(&c);
+    check_cfl_mh_gen_y(&c);
+    check_cfl_mh_gen_mat(&c);
+    check_cfl_mh_calc_alphas(&c);
+    check_cfl_mh_pred(&c);
     check_pal_pred(&c);
 }
