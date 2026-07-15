@@ -112,9 +112,8 @@ typedef decl_cfl_pred_fn(*cfl_pred_fn);
 #define CFL_MHCCP_MAX_LUMA_SIZE 4736
 
 #define decl_cfl_mh_gen_y_fn(name) \
-void (name)(pixel *dst, ptrdiff_t dst_top_stride, \
-            const pixel *src, const pixel *top_sb_edge, ptrdiff_t src_stride, \
-            int refw, int refh, int w, int h, int flags)
+void (name)(pixel *dst, const pixel *src, const pixel *top_sb_edge, \
+            ptrdiff_t src_stride, int refw, int refh, int w, int h, int flags)
 typedef decl_cfl_mh_gen_y_fn(*cfl_mh_gen_y_fn);
 
 /*
@@ -127,8 +126,7 @@ typedef decl_cfl_mh_gen_y_fn(*cfl_mh_gen_y_fn);
 
 #define decl_cfl_mh_gen_mat_fn(name) \
 void (name)(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
-            const pixel *y, ptrdiff_t y_top_stride, int refw, int refh, \
-            int edge_flags HIGHBD_DECL_SUFFIX)
+            const pixel *y, int refw, int refh, int edge_flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_mh_gen_mat_fn(*cfl_mh_gen_mat_fn);
 
 /*
@@ -148,8 +146,7 @@ typedef decl_cfl_mh_calc_alphas_fn(*cfl_mh_calc_alphas_fn);
  */
 #define decl_cfl_mh_pred_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, const pixel *src, \
-            ptrdiff_t src_top_stride, int w, int h, const int alpha[3], \
-            int edge_flags HIGHBD_DECL_SUFFIX)
+            int w, int h, const int alpha[3], int edge_flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_mh_pred_fn(*cfl_mh_pred_fn);
 
 /*

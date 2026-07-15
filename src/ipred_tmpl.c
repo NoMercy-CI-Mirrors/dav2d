@@ -1104,8 +1104,7 @@ cfl_implicit_fn(444, 0, 0)
 /* CFL MHCCP */
 
 static NOINLINE void
-cfl_mh_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
-                   const pixel *src, const pixel *const top_sb_edge,
+cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
                    const ptrdiff_t src_stride, const int refw, const int refh,
                    const int w, const int h, const int flags, const int filter_type)
 {
@@ -1114,7 +1113,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
     const int dir = flags & CFL_DIR_ALL;
     const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT): 0;
     const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
-    pixel *dst_left = dst + n_top * dst_top_stride + 64 * 64;
+    pixel *dst_left = dst + n_top * 128 + 64 * 64;
     src -= n_left << 1;
 
 // ::
@@ -1170,7 +1169,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
                 t = -src_stride;
             }
             dst_left += n_left;
-            dst += dst_top_stride;
+            dst += 128;
         }
     }
 
@@ -1242,14 +1241,13 @@ cfl_mh_gen_y_420_c(pixel *dst, const ptrdiff_t dst_top_stride,
 
 #define cfl_mh_gen_y_420_fn(ucflt, lcflt) \
 static void \
-cfl_mh_gen_y_420_##lcflt##_c(pixel *const dst, const ptrdiff_t dst_top_stride, \
-                             const pixel *const src, const pixel *const top_sb_edge, \
-                             ptrdiff_t const src_stride, const int refw, const int refh, \
-                             int const w, int const h, int flags) \
+cfl_mh_gen_y_420_##lcflt##_c(pixel *const dst, const pixel *const src, \
+                             const pixel *const top_sb_edge, \
+                             ptrdiff_t const src_stride, const int refw, \
+                             const int refh, int const w, int const h, int flags) \
 { \
-    cfl_mh_gen_y_420_c(dst, PXSTRIDE(dst_top_stride), src, top_sb_edge, \
-                       PXSTRIDE(src_stride), refw, refh, w, h, flags, \
-                       CFL_FLT_TYPE_##ucflt); \
+    cfl_mh_gen_y_420_c(dst, src, top_sb_edge, PXSTRIDE(src_stride), \
+                       refw, refh, w, h, flags, CFL_FLT_TYPE_##ucflt); \
 }
 
 #define cfl_mh_gen_y_fn(fmt) \
@@ -1271,9 +1269,8 @@ cfl_mh_gen_y_fn(420)
 
 static void
 cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES],
-                 const pixel *y, const ptrdiff_t y_top_stride,
-                 const int refw, const int refh, const int edge_flags,
-                 const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
+                 const pixel *y, const int refw, const int refh,
+                 const int edge_flags, const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
     const int mid = 1 << (bd - 1);
@@ -1283,7 +1280,7 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES]
     const int dir_l = dir == CFL_DIR_LEFT;
     const int n_top = has_t ? 1 + dir_t : 0;
     const int n_left = has_l ? 1 + dir_l : 0;
-    const pixel *left = y + n_top * y_top_stride + 64 * 64;
+    const pixel *left = y + n_top * 128 + 64 * 64;
 
     int n = 0;
     if (has_t) {
@@ -1297,7 +1294,7 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES]
         const int start = !dir_l && !has_l;
         for (int i = start; i < refw - n_left - 1 - !start; i++, n++) {
             const int v0 = y[i];
-            const int v1 = SQRND(y[dir_t * y_top_stride + i + dir_l]);
+            const int v1 = SQRND(y[dir_t * 128 + i + dir_l]);
             imat[0][n] = v0;
             imat[1][n] = v1;
             GEN_MATRIX();
@@ -1336,12 +1333,10 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES]
 #define cfl_mh_gen_mat_fn(name, dir) \
 static void \
 cfl_mh_gen_mat_##name##_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
-                         const pixel *const y, const ptrdiff_t y_top_stride, \
-                         const int refw, const int refh, const int edge_flags \
-                         HIGHBD_DECL_SUFFIX) \
+                         const pixel *const y, const int refw, const int refh, \
+                         const int edge_flags HIGHBD_DECL_SUFFIX) \
 { \
-    cfl_mh_gen_mat_c(mat, imat, y, PXSTRIDE(y_top_stride), refw, refh, \
-                    edge_flags, dir HIGHBD_TAIL_SUFFIX); \
+    cfl_mh_gen_mat_c(mat, imat, y, refw, refh, edge_flags, dir HIGHBD_TAIL_SUFFIX); \
 }
 
 cfl_mh_gen_mat_fn(c, CFL_DIR_CENTER)
@@ -1470,10 +1465,10 @@ cfl_mh_calc_alphas_c(int alpha[3], const pixel *const c,
     alpha[0] -= mul32(tmp[0][0], alpha[1], 16) + mul32(tmp[0][1], alpha[2], 16);
 }
 
-static void cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride,
-                          const pixel *src, const ptrdiff_t src_top_stride,
-                          const int w, const int h, const int alpha[3],
-                          const int edge_flags, const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
+static void
+cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *src,
+              const int w, const int h, const int alpha[3], const int edge_flags,
+              const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
     const int mid = 1 << (bd - 1);
@@ -1489,7 +1484,7 @@ static void cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride,
     int y = 0;
     for (; y < dir_t && has_t; y++) {
         for (int x = 0; x < w; x++) {
-            const int v0 = src[x - src_top_stride];
+            const int v0 = src[x - 128];
             const int v1 = SQRND(src[x]);
             dst[x] = iclip_pixel(mul32(alpha[0], v0, 16) +
                                  mul32(alpha[1], v1, 16) + a2v2);
@@ -1519,13 +1514,12 @@ static void cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride,
 
 #define cfl_mh_pred_fn(name, dir) \
 static void \
-cfl_mh_pred_##name##_c(pixel *dst, ptrdiff_t dst_stride, \
-                       const pixel *src, const ptrdiff_t src_top_stride, \
+cfl_mh_pred_##name##_c(pixel *dst, ptrdiff_t dst_stride,  const pixel *src, \
                        int w, int h, const int alpha[3], int edge_flags \
                        HIGHBD_DECL_SUFFIX) \
 { \
-    cfl_mh_pred_c(dst, PXSTRIDE(dst_stride), src, PXSTRIDE(src_top_stride), \
-                  w, h, alpha, edge_flags, dir HIGHBD_TAIL_SUFFIX); \
+    cfl_mh_pred_c(dst, PXSTRIDE(dst_stride), src, w, h, alpha, edge_flags, dir \
+                  HIGHBD_TAIL_SUFFIX); \
 }
 
 cfl_mh_pred_fn(c, CFL_DIR_CENTER)
