@@ -74,18 +74,18 @@ static void check_intra_pred(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
     ALIGN_STK_64(pixel, topleft_buf, 64 * 8 + 2 * 1 + 2 * 9,);
-
-    int bitdepth_max;
-    if (BITDEPTH == 16)
-        bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
-    else
-        bitdepth_max = (1 << BITDEPTH) - 1;
-    for (int i = 0; i < 64 * 8 + 2 * 1 + 2 * 9; i++)
-        topleft_buf[i] = rnd() & bitdepth_max;
+#if BITDEPTH == 16
+    const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+    const int bitdepth_max = 0xff;
+#endif
 
     declare_func(void, pixel *dst, ptrdiff_t stride, const pixel *topleft,
                  int width, int height, int angle, int max_width, int max_height
                  HIGHBD_DECL_SUFFIX);
+
+    for (int i = 0; i < 64 * 8 + 2 * 1 + 2 * 9; i++)
+        topleft_buf[i] = rnd() & bitdepth_max;
 
     for (int mode = 0; mode < N_IMPL_INTRA_PRED_MODES; mode++) {
         for (int w = 4; w <= 64; w <<= 1) {
