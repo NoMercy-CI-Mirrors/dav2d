@@ -727,7 +727,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pshuflw                 m2, m1, q2301
     pshufhw                 m2, m2, q2301
 %ifidn %1, implicit
-    pshufd                  m1, m2, q1032
+    pshufd                  m1, m1, q1032
 %endif
     paddw                   m1, m2
 %ifidn %1, implicit
