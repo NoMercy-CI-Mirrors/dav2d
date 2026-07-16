@@ -232,12 +232,19 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                     pixel *const c_ptrs[6] = { c_ytop, c_utop, c_vtop, c_y, c_u, c_v };
                                     pixel *const a_ptrs[6] = { a_ytop, a_utop, a_vtop, a_y, a_u, a_v };
 
+                                    int implicit_test_overflow = 0;
                                     if (type == CFL_EXPLICIT) {
                                         INIT_PIXEL_RECT(c_y_buf);
                                         INIT_PIXEL_RECT(c_u_buf);
                                         INIT_PIXEL_RECT(c_v_buf);
                                     } else {
-                                        RAND_PIXEL_RECT(c_y_buf);
+                                        implicit_test_overflow = !(rnd() & 3);
+                                        if (implicit_test_overflow) {
+                                            for (unsigned i = 0; i < ARRAY_SIZE(c_y_buf); i++)
+                                                c_y_buf[i] = bitdepth_max;
+                                        } else {
+                                            RAND_PIXEL_RECT(c_y_buf);
+                                        }
                                         RAND_PIXEL_RECT(c_u_buf);
                                         RAND_PIXEL_RECT(c_v_buf);
                                     }
@@ -246,7 +253,16 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                     memcpy(a_u_buf, c_u_buf, c_u_buf_h * c_u_stride);
                                     memcpy(a_v_buf, c_v_buf, c_v_buf_h * c_v_stride);
                                     if (itse) {
-                                        INIT_PIXEL_RECT(c_top_sb);
+                                        if (type == CFL_EXPLICIT) {
+                                            INIT_PIXEL_RECT(c_top_sb);
+                                        } else {
+                                            if (implicit_test_overflow) {
+                                                for (unsigned i = 0; i < ARRAY_SIZE(c_top_sb); i++)
+                                                    c_top_sb[i] = bitdepth_max;
+                                            } else {
+                                                RAND_PIXEL_RECT(c_top_sb);
+                                            }
+                                        }
                                         memcpy(a_top_sb, c_top_sb, 3 * 128 * sizeof(pixel));
                                     }
 
@@ -263,6 +279,12 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                         wpad = imax(w / 8 - 1, 0);
                                         hpad = imax(h / 8 - 1, 0);
                                     }
+                                    // re-init luma buffers to prevent 0 alphas
+                                    RAND_PIXEL_RECT(c_y_buf);
+                                    RAND_PIXEL_RECT(c_top_sb);
+                                    memcpy(a_y_buf, c_y_buf, sizeof(c_y_buf));
+                                    memcpy(a_top_sb, c_top_sb, sizeof(c_top_sb));
+
                                     bench_new(a_ptrs, strides, wpad, hpad, w, h,
                                               flags | (CFL_HAS_TOP | CFL_HAS_LEFT)
                                               HIGHBD_TAIL_SUFFIX);
