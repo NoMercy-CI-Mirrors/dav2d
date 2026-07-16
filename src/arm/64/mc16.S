@@ -3678,3 +3678,45 @@ function sad_refine_mv_16bpc_neon, export=1
         sad_refine_mv_16bpc_w 16
 1:      sad_refine_mv_16bpc_w 8
 endfunc
+
+// unsigned sad8x8_16bpc_neon(const pixel *p0, const ptrdiff_t p0_stride,
+//                            const pixel *p1, const ptrdiff_t p1_stride
+//                            const int bitdepth_max)
+function sad8x8_16bpc_neon, export=1
+        // Sum always fits in 16-bit accumulator lanes: (2^12 - 1) * 8 < 2^16 - 1.
+        ldr             q0,  [x0]
+        ldr             q1,  [x2]
+        ldr             q2,  [x0, x1]
+        ldr             q3,  [x2, x3]
+        add             x0,  x0,  x1, lsl #1
+        add             x2,  x2,  x3, lsl #1
+        uabd            v4.8h,   v0.8h,   v1.8h
+        uabd            v5.8h,   v2.8h,   v3.8h
+
+.rept 2
+        ldr             q0,  [x0]
+        ldr             q1,  [x2]
+        ldr             q2,  [x0, x1]
+        ldr             q3,  [x2, x3]
+        add             x0,  x0,  x1, lsl #1
+        add             x2,  x2,  x3, lsl #1
+        uaba            v4.8h,   v0.8h,   v1.8h
+        uaba            v5.8h,   v2.8h,   v3.8h
+.endr
+
+        ldr             q0,  [x0]
+        ldr             q1,  [x2]
+        ldr             q2,  [x0, x1]
+        ldr             q3,  [x2, x3]
+        uaba            v4.8h,   v0.8h,   v1.8h
+        uaba            v5.8h,   v2.8h,   v3.8h
+
+        clz             w4,  w4
+        add             v4.8h,   v4.8h,   v5.8h
+        mov             w5,  #24
+        uaddlv          s5,  v4.8h
+        sub             w4,  w5,  w4    // bitdepth_from_max(bitdepth_max) - 8
+        fmov            w0,  s5
+        lsr             w0,  w0,  w4
+        ret
+endfunc
