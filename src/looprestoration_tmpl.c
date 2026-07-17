@@ -38,8 +38,6 @@
 
 // 64 + 6 + 6
 #define REST_UNIT_STRIDE (76)
-// 64 / 4
-#define CLASS_BUF_SIZE (16)
 
 //         C
 //   E     A     F
@@ -420,18 +418,12 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
     }
 }
 
-static int get_class_lut_idx(const pixel *ptrs[10], const uint16_t *noskip_mask,
-                             const WienerQValApproxData *qval_approx,
-                             const int bx, const int by, const int bh,
-                             const int bitdepth_min_8)
+static void calc_features_2x2(uint16_t f[3], const int x2, const int y2,
+                              pixel *const *ptrs)
 {
-    int f[3] = {0, 0, 0};
-    int s = 0;
-
-    for (int dy = -1; dy <= 4; dy++) {
-        for (int dx = -1; dx <= 4; dx++) {
-            const int x = (bx << 2) + dx;
-            const int y = 4 + dy;
+    f[0] = f[1] = f[2] = 0;
+    for (int y = y2; y < y2 + 2; y++) {
+        for (int x = x2; x < x2 + 2; x++) {
             const int m = ptrs[y][x];
             const int up = ptrs[y - 1][x];
             const int down = ptrs[y + 1][x];
@@ -450,39 +442,38 @@ static int get_class_lut_idx(const pixel *ptrs[10], const uint16_t *noskip_mask,
             f[2] += abs(diag);
         }
     }
+}
 
-    // count skip masks for center, sides, and corners.
-    const uint8_t num_pixels[3] = {16, 4, 1};
-    for (int dy = -1; dy <= 1; dy++) {
-        for (int dx = -1; dx <= 1; dx++) {
-            const int edge = !!dy + !!dx;
-            const int fx = iclip((bx & 15) + dx, 0, 15);
-            const int fy = iclip(by + dy, 0, bh - 1);
-            s += num_pixels[edge] * !((noskip_mask[fy] >> fx) & 1);
-        }
-    }
-
-    const int rnd = 1 << bitdepth_min_8 >> 1;
+static void add_features_2x2_u32(uint32_t f[3], const int x2, const int y2,
+                                 pixel *const *ptrs)
+{
+    uint16_t tmp_f[3];
+    calc_features_2x2(tmp_f, x2, y2, ptrs);
     for (int i = 0; i < 3; i++) {
-        f[i] = (f[i] * pc_wiener_normalizer[i] + rnd) >> bitdepth_min_8;
+        f[i] += tmp_f[i];
     }
+}
 
-    int lut_idx = (s < qval_approx->idx0_changeover) << 9;
-    for (int i = 0; i < 3; i++) {
-        const int qval = qval_approx->slopes[i] * s +
-                         qval_approx->error_lut[i*64 + s] +
-                         qval_approx->offsets[i];
-        int sub_idx = (imax(0, f[i] + 255 * qval) + 8192) >> 14;
-        sub_idx = imin(sub_idx, 255) >> 5;
-        lut_idx |= sub_idx << (3 * (2-i));
+static void cache_skip_count_row(uint8_t s[16], unsigned noskip_mask,
+                                 const int bw)
+{
+    // pad edges
+    noskip_mask = (noskip_mask << 1) |
+                  (noskip_mask & 1) |
+                  ((noskip_mask & 0x8000) << 2);
+    noskip_mask = ~noskip_mask;
+    for (int bx = 0; bx < bw; bx++) {
+        s[bx] = 4 * ((noskip_mask >> 1) & 1) + // center
+                (noskip_mask & 1) +            // right
+                ((noskip_mask >> 2) & 1);      // left
+        noskip_mask >>= 1;
     }
-    return lut_idx;
 }
 
 static void wiener_multi(pixel *p, const ptrdiff_t stride,
                          const pixel (*left)[8],
                          const pixel *lpf, const pixel *lpf_bottom,
-                         const int w, int h,
+                         const int w, int const h,
                          const int8_t (*filters_user)[16],
                          const int16_t (*filters_pretrained)[13],
                          const uint8_t *class_lut,
@@ -492,92 +483,180 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
                          const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
     const int bitdepth_min_8 = bitdepth_from_max(bitdepth_max) - 8;
+    const int bh = h >> 2;
+    const int bw = w >> 2;
 
-    uint8_t classes[CLASS_BUF_SIZE];
-    pixel row_buffers[10][REST_UNIT_STRIDE];
-    pixel *bak_rows[10];
-    const pixel *ptrs[10];
+    pixel row_buffers[12][REST_UNIT_STRIDE];
+    pixel *bak_rows[12];
+    pixel *ptrs[12];
 
-    for (int i = 0; i < 10; i++)
+    uint8_t classes[16];
+    uint8_t s_rows[3][16];
+
+    // When accumulating features, there is some overlap between adjacent
+    // blocks. The diagram below demonstrates how results are reused and
+    // backed up.
+    //
+    //    -1 +0 +1 +2 +3 +4 +5 +6 +7 +8     -1 +0 +1 +2 +3 +4 +5 +6 +7 +8
+    //   ┌─────┬─────┬─────┬─────┬─────┐   ┌─────┬─────┬─────┬─────┬─────┐
+    // -1│*****│above│#+#+#│     │     │ -1│     │     │*****│above│#+#+#│
+    //  0│*****│+++++│+#+#+│     │     │  0│     │     │*****│+++++│+#+#+│
+    //   ├─────┼─────┼─────┼─────┼─────┤   ├─────┼─────┼─────┼─────┼─────┤
+    // +1│*left│bx=0 │#####│     │     │ +1│     │  ┌─►│*left│bx=1 │#####│
+    // +2│*****│ by=0│right│──┐  │     │ +2│     │  │  │*****│ by=0│right│
+    //   ┼─────┼─────┼─────┼──│──┼─────┤   ├─────┼──│──┼─────┼─────┼─────┤
+    // +3│*****│below│.#.#.│  │  │     │ +3│     │  │  │*****│below│.#.#.│
+    // +4│*****│.....│#.#.#│  │  │     │ +4│     │  │  │*****│.....│#.#.#│
+    //   └─────┴─────┴─────┴──│──┴─────┘   └─────┴──│──┴─────┴─────┴─────┘
+    //            │           └─────────────────────┘
+    //            └───────────────┐
+    //    -1 +0 +1 +2 +3 +4 +5 +6 │
+    //   ┌─────┬─────┬─────┬─────┐│
+    // -1│     │  ┌───────────────┘
+    //  0│     │  │  │     │     │
+    //   ├─────┼──┼──┼─────┼─────┤
+    // +1│     │  │  │     │     │
+    // +2│     │  ▼  │     │     │
+    //   ├─────┼─────┼─────┼─────┤
+    // +3│*****│above│#+#+#│     │
+    // +4│*****│+++++│+#+#+│     │
+    //   ├─────┼─────┼─────┼─────┤
+    // +5│*left│bx=0 │#####│     │
+    // +6│*****│ by=1│right│     │
+    //   ┼─────┼─────┼─────┼─────┤
+    // +7│*****│below│.#.#.│     │
+    // +8│*****│.....│#.#.#│     │
+    //   └─────┴─────┴─────┴─────┘
+    //
+    // There is also a special case for the above left at the beginning of
+    // each row.
+    uint16_t f_a[32][3];
+    uint32_t f_l[3];
+    uint16_t f_al[3];
+
+    for (int i = 0; i < 12; i++)
         bak_rows[i] = row_buffers[i] + 6;
 
-    backup_row(bak_rows[4], p, left[0], w, 4, edges);
-    ptrs[4] = bak_rows[4];
+    for (int y = 0; y < 8; y++)
+        ptrs[y] = bak_rows[y];
+    for (int y = 0; y < 4; y++)
+        backup_row(ptrs[4+y], p + y*PXSTRIDE(stride), left[y], w, 4, edges);
     if (edges & LR_HAVE_TOP_INTEGRATED) {
         for (int i = 0; i < 4; i++) {
-            backup_row_lpf(bak_rows[i], lpf, w, 4, edges);
+            backup_row_lpf(ptrs[i], lpf, w, 4, edges);
             lpf += PXSTRIDE(stride);
-            ptrs[i] = bak_rows[i];
         }
     } else if (edges & LR_HAVE_TOP) {
         // y = -2,-1
-        backup_row_lpf(bak_rows[2], lpf, w, 4, edges);
-        ptrs[2] = bak_rows[2];
-        backup_row_lpf(bak_rows[3], lpf + PXSTRIDE(stride), w, 4, edges);
-        ptrs[3] = bak_rows[3];
-
+        backup_row_lpf(bak_rows[2], lpf + 0*PXSTRIDE(stride), w, 4, edges);
+        backup_row_lpf(bak_rows[3], lpf + 1*PXSTRIDE(stride), w, 4, edges);
         // y = -3,-4
         ptrs[0] = ptrs[1] = ptrs[2];
     } else {
         ptrs[0] = ptrs[1] = ptrs[2] = ptrs[3] = ptrs[4];
     }
-
-    backup_row(bak_rows[5], p + PXSTRIDE(stride), left[1], w, 4, edges);
-    ptrs[5] = bak_rows[5];
-    backup_row(bak_rows[6], p + 2*PXSTRIDE(stride), left[2], w, 4, edges);
-    ptrs[6] = bak_rows[6];
-    backup_row(bak_rows[7], p + 3*PXSTRIDE(stride), left[3], w, 4, edges);
-    ptrs[7] = bak_rows[7];
     int bak_idx = 8;
 
-    const int bh = h >> 2;
-    const int bw = w >> 2;
+    cache_skip_count_row(s_rows[0], *noskip_mask, bw);
+    memcpy(s_rows[1], s_rows[0], sizeof(s_rows[0]));
+
+    calc_features_2x2(f_al, -1, 4 - 1, ptrs);
+    for (int x = 1, i = 0; x < w + 1; x += 2, i++) {
+        calc_features_2x2(f_a[i], x, 4 - 1, ptrs);
+    }
+
     for (int by = 0; by < bh; by++) {
-        // Backup an extra row to compute class
+        // Backup the next 4 lines
+        for (int y = 0; y < 4; y++)
+            ptrs[8+y] = bak_rows[bak_idx+y];
+        bak_idx += 4;
+        if (bak_idx == 12) bak_idx = 0;
         if (by + 1 < bh) {
-            // TODO: don't backup lines twice
-            backup_row(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), left[(by << 2) + 4], w, 4, edges);
-            ptrs[8] = bak_rows[bak_idx];
-            backup_row(bak_rows[9], p + 5*PXSTRIDE(stride), left[(by << 2) + 5], w, 4, edges);
-            ptrs[9] = bak_rows[9];
+            for (int y = 0; y < 4; y++)
+                backup_row(ptrs[8+y], p + (4+y)*PXSTRIDE(stride), left[(by << 2) + 4+y], w, 4, edges);
         } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
-            backup_row_lpf(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), w, 4, edges);
-            ptrs[8] = bak_rows[bak_idx];
-            backup_row_lpf(bak_rows[9], p + 5*PXSTRIDE(stride), w, 4, edges);
-            ptrs[9] = bak_rows[9];
+            for (int y = 0; y < 4; y++)
+                backup_row_lpf(ptrs[8+y], p + (4+y)*PXSTRIDE(stride), w, 4, edges);
         } else if (edges & LR_HAVE_BOTTOM) {
-            backup_row_lpf(bak_rows[bak_idx], lpf_bottom + 0 * PXSTRIDE(stride), w, 4, edges);
-            ptrs[8] = bak_rows[bak_idx];
-            backup_row_lpf(bak_rows[9], lpf_bottom + 1 * PXSTRIDE(stride), w, 4, edges);
-            ptrs[9] = bak_rows[9];
+            backup_row_lpf(ptrs[8], lpf_bottom + 0*PXSTRIDE(stride), w, 4, edges);
+            backup_row_lpf(ptrs[9], lpf_bottom + 1*PXSTRIDE(stride), w, 4, edges);
+            ptrs[10] = ptrs[11] = ptrs[9];
         } else {
-            ptrs[8] = ptrs[7];
-            ptrs[9] = ptrs[7];
+            for (int y = 0; y < 4; y++)
+                ptrs[8+y] = ptrs[7];
         }
+
+        if (by + 1 < bh)
+            cache_skip_count_row(s_rows[2], noskip_mask[by + 1], bw);
+        else
+            memcpy(s_rows[2], s_rows[1], sizeof(s_rows[1]));
+
+        // above-left
+        for (int i = 0; i < 3; i++)
+            f_l[i] = f_al[i];
+        // center-left
+        add_features_2x2_u32(f_l, -1, 4 + 1, ptrs);
+        // below-left: replace f_al for the next row
+        calc_features_2x2(f_al, -1, 4 + 3, ptrs);
+        for (int i = 0; i < 3; i++)
+            f_l[i] += f_al[i];
+
         for (int bx = 0; bx < bw; bx++) {
-            int lut_idx = get_class_lut_idx(ptrs, noskip_mask, qval_approx,
-                                            bx, by, bh, bitdepth_min_8);
+            const int fi = bx << 1;
+            const int x = bx << 2;
+            uint32_t f[3];
+
+            // left
+            for (int i = 0; i < 3; i++)
+                f[i] = f_l[i];
+
+            // above-center
+            for (int i = 0; i < 3; i++)
+                f[i] += f_a[fi][i];
+            // center-center
+            add_features_2x2_u32(f, x + 1, 4 + 1, ptrs);
+            // below-center
+            calc_features_2x2(f_a[fi], x + 1, 4 + 3, ptrs);
+            for (int i = 0; i < 3; i++)
+                f[i] += f_a[fi][i];
+
+            // right: create the next left sum and add it to 'f'
+            // above-right
+            for (int i = 0; i < 3; i++)
+                f_l[i] = f_a[fi + 1][i];
+            // center-right
+            add_features_2x2_u32(f_l, x + 3, 4 + 1, ptrs);
+            // below-right
+            calc_features_2x2(f_a[fi + 1], x + 3, 4 + 3, ptrs);
+            for (int i = 0; i < 3; i++) {
+                f_l[i] += f_a[fi + 1][i];
+                f[i] += f_l[i];
+            }
+
+            const int s = s_rows[0][bx] + 4 * s_rows[1][bx] + s_rows[2][bx];
+            const int rnd = 1 << bitdepth_min_8 >> 1;
+            for (int i = 0; i < 3; i++) {
+                f[i] = (f[i] * pc_wiener_normalizer[i] + rnd) >> bitdepth_min_8;
+            }
+
+            int lut_idx = (s < qval_approx->idx0_changeover) << 9;
+            for (int i = 0; i < 3; i++) {
+                const int qval = qval_approx->slopes[i] * s +
+                                 qval_approx->error_lut[i*64 + s] +
+                                 qval_approx->offsets[i];
+                int sub_idx = (imax(0, f[i] + 255 * qval) + 8192) >> 14;
+                sub_idx = imin(sub_idx, 255) >> 5;
+                lut_idx |= sub_idx << (3 * (2-i));
+            }
             classes[bx] = class_lut[lut_idx];
         }
-        for (int y = by << 2; y < (by << 2) + 4; y++) {
-            if (y + 4 < h) {
-                backup_row(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), left[y + 4], w, 4, edges);
-                ptrs[8] = bak_rows[bak_idx];
-            } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
-                backup_row_lpf(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), w, 4, edges);
-                ptrs[8] = bak_rows[bak_idx];
-            } else if (y + 2 < h && edges & LR_HAVE_BOTTOM) {
-                int offset_y = y + 4 - h;
-                assert(offset_y < 2);
-                backup_row_lpf(bak_rows[bak_idx], lpf_bottom + offset_y * PXSTRIDE(stride), w, 4, edges);
-                ptrs[8] = bak_rows[bak_idx];
-            } else {
-                ptrs[8] = ptrs[7];
-            }
-            if (++bak_idx == 9) bak_idx = 0;
 
+        memcpy(s_rows[0], s_rows[1], sizeof(s_rows[1]));
+        memcpy(s_rows[1], s_rows[2], sizeof(s_rows[2]));
+
+        for (int y = by << 2; y < (by << 2) + 4; y++) {
             for (int bx = 0; bx < bw; bx++) {
-                if (ll_mask[y >> 2][0] & (1 << bx)) continue;
+                if (ll_mask[by][0] & (1 << bx)) continue;
                 if (filters_user) {
                     const int8_t *filter = filters_user[classes[bx]];
                     for (int x = bx << 2; x < (bx << 2) + 4; x++) {
@@ -608,8 +687,7 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
                     }
                 }
             }
-
-            for (int r = 0; r < 8; r++) ptrs[r] = ptrs[r+1];
+            for (int r = 0; r < 11; r++) ptrs[r] = ptrs[r+1];
             p += PXSTRIDE(stride);
         }
     }
