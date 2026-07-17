@@ -192,24 +192,29 @@ void (name)(const refmvs_frame *rf, \
             refmvs_sngl_mv_block *rp_proj, \
             const ptrdiff_t stride, union tmv *rp_traj[7], \
             refmvs_traj_map *rp_map[3][7], int col_start8, int col_end8, \
-            int row_start8, int row_end8, int sbsz8, int sample_step)
+            int row_start8, int row_end8, int sample_step)
 typedef decl_load_tmvs_refs_fn(*load_tmvs_refs_fn);
+
+#define decl_tip_proj_fn(name) \
+void (name)(refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride, \
+            int col_start8, int col_end8, int row_start8, int row_end8, \
+            int tmvp_sample_step, int tip_delta)
+typedef decl_tip_proj_fn(*tip_proj_fn);
 
 #define decl_tip_fn(name) \
 void (name)(refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride, \
             int col_start8, int col_end8, int row_start8, int row_end8, \
-            int mfmv_sbsz8, int sbsz8, int tmvp_sample_step, int tip_delta)
+            int tmvp_sample_step)
 typedef decl_tip_fn(*tip_fn);
 
 #define decl_fill_gap_proj_fn(name) \
 void (name)(refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride, \
-            int col_start8, int col_end8, int row_start8, int row_end8, \
-            int mfmv_sbsz8, int sbsz8)
+            int col_start8, int col_end8, int row_start8, int row_end8)
 typedef decl_fill_gap_proj_fn(*fill_gap_proj_fn);
 
 #define decl_fill_gap_traj_fn(name) \
-void (name)(union tmv *rp_traj, ptrdiff_t stride, int col_start8, int col_end8, \
-            int row_start8, int row_end8, int mfmv_sbsz8, int sbsz8)
+void (name)(union tmv *rp_traj, ptrdiff_t stride, \
+            int col_start8, int col_end8, int row_start8, int row_end8)
 typedef decl_fill_gap_traj_fn(*fill_gap_traj_fn);
 
 typedef struct Dav2dRefmvsDSPContext {
@@ -223,7 +228,8 @@ typedef struct Dav2dRefmvsDSPContext {
 
     // tip motion field & mv projection
     load_tmvs_refs_fn load_tmvs_refs;
-    tip_fn tip_projection, tip_fill_holes, tip_smoothen;
+    tip_proj_fn tip_projection;
+    tip_fn tip_fill_holes, tip_smoothen;
     fill_gap_proj_fn fill_gap_proj;
     fill_gap_traj_fn fill_gap_traj;
 } Dav2dRefmvsDSPContext;
