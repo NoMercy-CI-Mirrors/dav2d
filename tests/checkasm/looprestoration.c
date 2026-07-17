@@ -119,9 +119,9 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
         init_filter(filter, 0);
 
         CLEAR_PIXEL_RECT(c_dst);
-        init_tmp(c_dst - 6, c_dst_stride, 64 + 12, 64, bitdepth_max);
-        init_tmp(top - 6, top_stride, 64 + 12, 8, bitdepth_max);
-        init_tmp(bottom - 6, bottom_stride, 64 + 12, 8, bitdepth_max);
+        init_tmp(c_dst - 4, c_dst_stride, 64 + 8, 64 + 4, bitdepth_max);
+        init_tmp(top - 4, top_stride, 64 + 8, 4, bitdepth_max);
+        init_tmp(bottom - 4, bottom_stride, 64 + 8, 4, bitdepth_max);
         init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
         for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
@@ -192,9 +192,9 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
         const int bitdepth_max = (1 << bpc) - 1;
 
         CLEAR_PIXEL_RECT(c_dst);
-        init_tmp(c_dst - 6, c_dst_stride, 64 + 12, 64, bitdepth_max);
-        init_tmp(top - 6, top_stride, 64 + 12, 8, bitdepth_max);
-        init_tmp(bottom - 6, bottom_stride, 64 + 12, 8, bitdepth_max);
+        init_tmp(c_dst - 4, c_dst_stride, 64 + 8, 64 + 4, bitdepth_max);
+        init_tmp(top - 4, top_stride, 64 + 8, 4, bitdepth_max);
+        init_tmp(bottom - 4, bottom_stride, 64 + 8, 4, bitdepth_max);
         init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
         for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
@@ -287,9 +287,9 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c) {
         const int bitdepth_max = (1 << bpc) - 1;
 
         CLEAR_PIXEL_RECT(c_dst);
-        init_tmp(c_dst - 6, c_dst_stride, 64 + 12, 64, bitdepth_max);
-        init_tmp(top - 6, top_stride, 64 + 12, 8, bitdepth_max);
-        init_tmp(bottom - 6, bottom_stride, 64 + 12, 8, bitdepth_max);
+        init_tmp(c_dst - 4, c_dst_stride, 64 + 8, 64 + 4, bitdepth_max);
+        init_tmp(top - 4, top_stride, 64 + 8, 4, bitdepth_max);
+        init_tmp(bottom - 4, bottom_stride, 64 + 8, 4, bitdepth_max);
         init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
         for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
