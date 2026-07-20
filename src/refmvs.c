@@ -1569,7 +1569,12 @@ static void fill_gap_proj_c(refmvs_sngl_mv_block *const rp_proj,
             for (int x = 0; x < xend; x += 2) {
                 const ptrdiff_t pos = bx8 + x;
                 const union tmv mv = rp_proj_ptr->mv[pos];
-                if (mv.n == INVALID_TMV) continue;
+                if (mv.n == INVALID_TMV) {
+                    rp_proj_ptr->mv[pos + 1].n =
+                    rp_proj_ptr[1 * stride >> 5].mv[pos].n =
+                    rp_proj_ptr[1 * stride >> 5].mv[pos + 1].n = INVALID_TMV;
+                    continue;
+                }
                 int mvy = mv.y, mvx = mv.x, sum_y = mvy, sum_x = mvx, sum_n = 1;
                 int ref_off = rp_proj_ptr->refdist[pos];
 
@@ -1664,7 +1669,12 @@ static void fill_gap_traj_c(union tmv *const rp_traj, const ptrdiff_t stride,
             for (int x = sx; x < xend; x += 2) {
                 const ptrdiff_t pos = pos_base + x;
                 const union tmv mv = rp_traj[pos];
-                if (mv.n == INVALID_TMV) continue;
+                if (mv.n == INVALID_TMV) {
+                    rp_traj[pos + stride].n =
+                    rp_traj[pos + 1].n =
+                    rp_traj[pos + 1 + stride].n = INVALID_TMV;
+                    continue;
+                }
                 int mvy = mv.y, mvx = mv.x, sum_y = mvy, sum_x = mvx, sum_n = 1;
 
                 // bottom
@@ -1850,29 +1860,29 @@ static void load_tmvs_refs_c(const refmvs_frame *const rf,
     const int mfmv_sbsz8 = 8 * sample_step;
 
     refmvs_sngl_mv_block *rp_proj_ptr = rp_proj;
-    for (int y = row_start8; y < row_end8; y++) {
-        for (int x = col_start8; x < col_end8; x++)
+    for (int y = row_start8; y < row_end8; y += sample_step) {
+        for (int x = col_start8; x < col_end8; x += sample_step)
             rp_proj_ptr[x >> 5].mv[x & 31].n = INVALID_TMV;
-        rp_proj_ptr += stride >> 5;
+        rp_proj_ptr += sample_step * stride >> 5;
     }
     if (rf->seq_hdr->mv_traj) {
         const int mask = mfmv_sbsz8 - 1;
         for (int n = 0; n < 7 /*rf->frm_hdr->n_ref_frames*/; n++) {
             union tmv *tj = rp_traj[n];
-            for (int y = row_start8; y < row_end8; y++) {
-                for (int x = col_start8; x < col_end8; x++)
+            for (int y = row_start8; y < row_end8; y += sample_step) {
+                for (int x = col_start8; x < col_end8; x += sample_step)
                     tj[x].n = INVALID_TMV;
-                tj += stride;
+                tj += stride * sample_step;
             }
             for (int k = -1; k <= +1; k++) {
                 const int x_start = imax(0, col_start8 - k * mfmv_sbsz8);
                 const int x_end =
                     imin(rf->iw8, ((col_end8 + mask) & ~mask) - k * mfmv_sbsz8);
                 refmvs_traj_map *map = rp_map[k + 1][n];
-                for (int y = row_start8; y < row_end8; y++) {
-                    for (int x = x_start; x < x_end; x++)
+                for (int y = row_start8; y < row_end8; y += sample_step) {
+                    for (int x = x_start; x < x_end; x += sample_step)
                         map[x].n = INVALID_TRAJ;
-                    map += stride;
+                    map += stride * sample_step;
                 }
             }
         }
