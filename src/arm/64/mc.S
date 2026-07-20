@@ -3401,10 +3401,13 @@ endfunc
         ret
 .endm
 
-// void dav2d_sad_refine_mv_8bpc_neon(const pixel *const p0, const ptrdiff_t p0_stride,
-//                                    const pixel *const p1, const ptrdiff_t p1_stride,
-//                                    const int w, const int h, const int is_implicit,
-//                                    struct OpflOffset *const o HIGHBD_DECL_SUFFIX)
+// void sad_refine_mv_8bpc_neon(const pixel *const p0,
+//                              const ptrdiff_t p0_stride,
+//                              const pixel *const p1,
+//                              const ptrdiff_t p1_stride,
+//                              const int w, const int h,
+//                              const int is_implicit,
+//                              struct OpflOffset *const o)
 function sad_refine_mv_8bpc_neon, export=1
         cmp             w4,  #8
         lsl             x1,  x1,  #1
@@ -3414,9 +3417,8 @@ function sad_refine_mv_8bpc_neon, export=1
 1:      sad_refine_mv_8bpc_w 8
 endfunc
 
-// unsigned dav2d_sad8x8_8bpc_neon(const pixel *p0, const ptrdiff_t p0_stride,
-//                                 const pixel *p1, const ptrdiff_t p1_stride
-//                                 HIGHBD_DECL_SUFFIX)
+// unsigned sad8x8_8bpc_neon(const pixel *p0, const ptrdiff_t p0_stride,
+//                           const pixel *p1, const ptrdiff_t p1_stride)
 function sad8x8_8bpc_neon, export=1
         ld1             {v0.8b}, [x0], x1
         ld1             {v1.8b}, [x2], x3
@@ -3443,9 +3445,9 @@ const narrow_shift_tbl, align=4
         .byte 1, 2, 5, 6, 9, 10, 13, 14, 17, 18, 21, 22, 25, 26, 29, 30
 endconst
 
-// void morph_neon(pixel *dst, const ptrdiff_t dst_stride,
-//                 const int alpha, const int beta,
-//                 const int w, const int h HIGHBD_DECL_SUFFIX)
+// void morph_8bpc_neon(pixel *dst, const ptrdiff_t dst_stride,
+//                      const int alpha, const int beta, const int w,
+//                      const int h)
 function morph_8bpc_neon, export=1
         dup             v18.4s, w3
         dup             v0.8h,  w2                        // alpha

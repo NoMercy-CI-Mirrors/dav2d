@@ -1404,8 +1404,8 @@ const flipadst16_coeffs_s16, align=4
         .short            8,  -25,   41,  -55,   67,  -77,   84,  -88,   89,  -87,   81,  -73,   62,  -48,   33,  -17
 endconst
 
-// void cctx_neon(coef *const u, coef *const v, const int16_t angle[3],
-//             const size_t sz HIGHBD_DECL_SUFFIX)
+// void cctx_8bpc_neon(coef *const u, coef *const v, const int16_t angle[3],
+//                     const size_t sz)
 function cctx_8bpc_neon, export=1
         ldr             s6, [x2]
 1:

@@ -3427,9 +3427,9 @@ function emu_edge_16bpc_neon, export=1
         ret
 endfunc
 
-// void morph_neon(pixel *dst, const ptrdiff_t dst_stride,
-//                 const int alpha, const int beta,
-//                 const int w, const int h HIGHBD_DECL_SUFFIX)
+// void morph_16bpc_neon(pixel *dst, const ptrdiff_t dst_stride,
+//                       const int alpha, const int beta, const int w,
+//                       const int h, const int bitdepth_max)
 function morph_16bpc_neon, export=1
         dup             v2.8h,  w2                      // alpha
         dup             v3.4s,  w3                      // beta

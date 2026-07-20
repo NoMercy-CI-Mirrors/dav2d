@@ -37,9 +37,9 @@ const narrow_shift_tbl, align=4
         .byte 1, 2, 17, 18, 5, 6, 21, 22, 9, 10, 25, 26, 13, 14, 29, 30
 endconst
 
-// void morph_sve2(pixel *dst, const ptrdiff_t dst_stride,
-//                 const int alpha, const int beta,
-//                 const int w, const int h HIGHBD_DECL_SUFFIX)
+// void morph_8bpc_sve2(pixel *dst, const ptrdiff_t dst_stride,
+//                      const int alpha, const int beta, const int w,
+//                      const int h)
 function morph_8bpc_sve2, export=1
         dup             v0.8h,  w2                        // alpha
         dup             v18.4s, w3
