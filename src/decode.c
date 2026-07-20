@@ -4239,16 +4239,26 @@ static void setup_tile(Dav2dTileState *const ts,
         if (f->frame_hdr->restoration.p[pl].type == DAV2D_RESTORATION_NS_WIENER ||
             f->frame_hdr->restoration.p[pl].type == DAV2D_RESTORATION_SWITCHABLE)
         {
-            struct NsWienerBank *const bank = &ts->ns_wiener_bank[pl];
-            const int8_t (*const cf_range)[2] = pl ? dav2d_ns_wiener_coef_range_uv :
-                                                     dav2d_ns_wiener_coef_range_y;
-            memset(bank->bank_size, 0, sizeof(bank->bank_size));
-            memset(bank->bank_idx, 0, sizeof(bank->bank_idx));
-            const int n_classes = f->frame_hdr->restoration.p[pl].ns.num_classes;
-            for (int n = 0; n < n_classes; n++) {
-                for (int m = 0; m < 16 + !!pl * 2; m++) {
-                    bank->filter[0][n][m] = cf_range[m][1] +
-                                            ((1 << cf_range[m][0]) >> 1);
+            if (pl) {
+                struct WienerBankUV *const bank = &ts->wiener_bank_uv[pl-1];
+                const int8_t (*const cf_range)[2] = dav2d_ns_wiener_coef_range_uv;
+                bank->idx = 0;
+                bank->size = 0;
+                for (int m = 0; m < 18; m++) {
+                    bank->filter[0][m] = cf_range[m][1] +
+                                         ((1 << cf_range[m][0]) >> 1);
+                }
+            } else {
+                struct WienerBankY *const bank = &ts->wiener_bank_y;
+                const int8_t (*const cf_range)[2] = dav2d_ns_wiener_coef_range_y;
+                memset(bank->size, 0, sizeof(bank->size));
+                memset(bank->idx, 0, sizeof(bank->idx));
+                const int n_classes = f->frame_hdr->restoration.p[pl].ns.num_classes;
+                for (int n = 0; n < n_classes; n++) {
+                    for (int m = 0; m < 16; m++) {
+                        bank->filter[0][n][m] = cf_range[m][1] +
+                                                ((1 << cf_range[m][0]) >> 1);
+                    }
                 }
             }
         }
@@ -4270,6 +4280,50 @@ static inline int decode_4way(MsacContext *const s, const int ref,
     const int n = 1 << n_bits;
     return ref * 2 <= n ? inv_recenter(ref, v) :
                           n - 1 - inv_recenter(n - 1 - ref, v);
+}
+
+static int read_wiener_ref(Dav2dTileState *const ts, const int bank_size,
+                           const int bank_idx, int *const exact_match)
+{
+    *exact_match = dav2d_msac_decode_bool_bypass(&ts->msac);
+    int r;
+    for (r = 0; r < bank_size - 1; r++) {
+        const int found = dav2d_msac_decode_bool_bypass(&ts->msac);
+        if (found) break;
+    }
+    return (bank_idx - r) & 3;
+}
+
+static void read_wiener_filter(Dav2dTileState *const ts,
+                               int8_t *const filter,
+                               const int8_t *const ref_filter,
+                               const int p)
+{
+    const unsigned *const masks = p ? dav2d_subset_masks_uv : dav2d_subset_masks_y;
+    const int8_t (*const cf_range)[2] = p ? dav2d_ns_wiener_coef_range_uv :
+                                            dav2d_ns_wiener_coef_range_y;
+
+    int s;
+    for (s = 0; s < 3 - !!p; s++) {
+        const int found = dav2d_msac_decode_bool_adapt(&ts->msac,
+                              ts->cdf.m.wiener_ns_len[!!p]);
+        if (!found) break;
+    }
+
+    const unsigned mask = masks[s];
+    const int asym = p && s &&
+        dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.wiener_ns_sym);
+    for (int i = 0, m = mask; i < 16 + !!p * 2; i++, m >>= 1) {
+        if (!(m & 1)) continue;
+        filter[i] = decode_4way(&ts->msac, ref_filter[i] - cf_range[i][1],
+                                ts->cdf.m.wiener_ns_cf, cf_range[i][0]) +
+                    cf_range[i][1];
+        if (asym && i >= 6) {
+            filter[i + 1] = filter[i];
+            i++;
+            m >>= 1;
+        }
+    }
 }
 
 static void read_restoration_info(Dav2dTaskContext *const t,
@@ -4299,60 +4353,52 @@ static void read_restoration_info(Dav2dTaskContext *const t,
 
     const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[p].ns;
     if (lr->type == DAV2D_RESTORATION_NS_WIENER && !pd->frame_filters_on) {
-        const int n_classes = pd->num_classes;
-        unsigned exact_match_mask = 0;
-        struct NsWienerBank *const bank = &ts->ns_wiener_bank[p];
-        uint8_t bank_refs[16];
-        for (int n = 0, mask = 1; n < n_classes; n++, mask <<= 1) {
-            const int exact_match = dav2d_msac_decode_bool_bypass(&ts->msac);
-            const int bank_size = bank->bank_size[n];
-            int r;
-            for (r = 0; r < bank_size - 1; r++) {
-                const int found = dav2d_msac_decode_bool_bypass(&ts->msac);
-                if (found) break;
-            }
-            r = (bank->bank_idx[n] - r) & 3;
-            exact_match_mask |= mask * exact_match;
-            bank_refs[n] = r;
-        }
+        if (p) {
+            int exact_match;
+            struct WienerBankUV *const bank = &ts->wiener_bank_uv[p-1];
+            const int r = read_wiener_ref(ts, bank->size, bank->idx,
+                                          &exact_match);
 
-        const unsigned *const masks = p ? dav2d_subset_masks_uv : dav2d_subset_masks_y;
-        const int8_t (*const cf_range)[2] = p ? dav2d_ns_wiener_coef_range_uv :
-                                                dav2d_ns_wiener_coef_range_y;
-        for (int n = 0; n < n_classes; n++, exact_match_mask >>= 1) {
-            const int r = bank_refs[n];
-            int8_t *const filter = lr->ns_filter[n];
-            const int8_t *const ref_filter = bank->filter[r][n];
-            if (exact_match_mask & 1) {
-                memcpy(filter, ref_filter, 16 + 2 * !!p);
-                if (!bank->bank_size[n])
-                    bank->bank_size[n] = 1;
-                continue;
+            int8_t *const filter = lr->ns_filter[0];
+            const int8_t *ref_filter = bank->filter[r];
+            if (exact_match) {
+                memcpy(filter, ref_filter, 18);
+                if (!bank->size)
+                    bank->size = 1;
+            } else {
+                read_wiener_filter(ts, filter, ref_filter, p);
+                const int bidx = bank->idx = (1 + bank->idx) & 3;
+                memcpy(bank->filter[bidx], filter, sizeof(*filter) * 18);
+                bank->size += bank->size < 4;
             }
-            memset(filter, 0, 16 + !!p * 2);
-            int s;
-            for (s = 0; s < 3 - !!p; s++) {
-                const int found = dav2d_msac_decode_bool_adapt(&ts->msac,
-                                      ts->cdf.m.wiener_ns_len[!!p]);
-                if (!found) break;
+        } else {
+            struct WienerBankY *const bank = &ts->wiener_bank_y;
+            const int n_classes = pd->num_classes;
+            unsigned exact_match_mask = 0;
+            uint8_t bank_refs[16];
+            for (int n = 0, mask = 1; n < n_classes; n++, mask <<= 1) {
+                int exact_match;
+                bank_refs[n] = read_wiener_ref(ts, bank->size[n],
+                                               bank->idx[n],
+                                               &exact_match);
+                exact_match_mask |= mask * exact_match;
             }
-            const unsigned mask = masks[s];
-            const int asym = p && s &&
-                dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.wiener_ns_sym);
-            for (int i = 0, m = mask; i < 16 + !!p * 2; i++, m >>= 1) {
-                if (!(m & 1)) continue;
-                filter[i] = decode_4way(&ts->msac, ref_filter[i] - cf_range[i][1],
-                                        ts->cdf.m.wiener_ns_cf, cf_range[i][0]) +
-                            cf_range[i][1];
-                if (asym && i >= 6) {
-                    filter[i + 1] = filter[i];
-                    i++;
-                    m >>= 1;
+
+            for (int n = 0; n < n_classes; n++, exact_match_mask >>= 1) {
+                const int r = bank_refs[n];
+                int8_t *const filter = lr->ns_filter[n];
+                const int8_t *ref_filter = bank->filter[r][n];
+                if (exact_match_mask & 1) {
+                    memcpy(filter, ref_filter, 16);
+                    if (!bank->size[n])
+                        bank->size[n] = 1;
+                    continue;
                 }
+                read_wiener_filter(ts, filter, ref_filter, p);
+                const int bidx = bank->idx[n] = (1 + bank->idx[n]) & 3;
+                memcpy(bank->filter[bidx][n], filter, sizeof(*filter) * 16);
+                bank->size[n] += bank->size[n] < 4;
             }
-            const int bidx = bank->bank_idx[n] = (1 + bank->bank_idx[n]) & 3;
-            memcpy(bank->filter[bidx][n], filter, sizeof(*filter) * (16 + 2 * !!p));
-            bank->bank_size[n] += bank->bank_size[n] < 4;
         }
     }
 }

@@ -425,10 +425,15 @@ struct Dav2dTileState {
 
     Av2RestorationUnit *lr_ref[3];
 
-    struct NsWienerBank {
-        uint8_t bank_size[16], bank_idx[16];
-        int8_t filter[4][16][32];
-    } ns_wiener_bank[3];
+    struct WienerBankY {
+        uint8_t size[16], idx[16];
+        int8_t filter[4][16][16];
+    } wiener_bank_y;
+
+    struct WienerBankUV {
+        uint8_t size, idx;
+        int8_t filter[4][18];
+    } wiener_bank_uv[2];
 };
 
 struct Dav2dTaskContext {
