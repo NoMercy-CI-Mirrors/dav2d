@@ -306,6 +306,7 @@ enum CflMhDir {
     CFL_DIR_TOP,
     CFL_DIR_LEFT,
     CFL_DIR_ALL,
+    CFL_DIR_MASK = CFL_DIR_ALL
 };
 
 #define TIP_FRAME 7

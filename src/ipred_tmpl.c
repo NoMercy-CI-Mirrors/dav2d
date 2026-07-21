@@ -1110,7 +1110,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
 {
     const int has_t = flags & CFL_HAS_TOP;
     const int has_l = flags & CFL_HAS_LEFT;
-    const int dir = flags & CFL_DIR_ALL;
+    const int dir = flags & CFL_DIR_MASK;
     const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT): 0;
     const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
     pixel *dst_left = dst + n_top * 128 + 64 * 64;
