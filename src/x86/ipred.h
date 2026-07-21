@@ -33,10 +33,6 @@
     decl_##type##_fn(BF(dav2d_##name, avx2)); \
     decl_##type##_fn(BF(dav2d_##name, avx512icl))
 
-#define decl_cfl_fns(type, layout) \
-    decl_fn(type, cfl_explicit_##layout); \
-    decl_fn(type, cfl_implicit_##layout)
-
 #define init_fn(type0, type1, name, suffix) \
     c->type0[type1] = BF(dav2d_##name, suffix)
 
@@ -44,8 +40,8 @@
     init_fn(intra_pred, type, name, suffix)
 
 #define init_cfl_pred_fn(type, type_name, layout, suffix) \
-    c->cfl_pred[CFL_##type][DAV2D_PIXEL_LAYOUT_I##layout - 1] = \
-        BF(dav2d_cfl_##type_name##_##layout, suffix)
+    init_fn(cfl_pred[CFL_##type], DAV2D_PIXEL_LAYOUT_I##layout - 1, \
+            cfl_##type_name##_##layout, suffix)
 
 #define init_cfl_explicit_fn(layout, suffix) \
     init_cfl_pred_fn(EXPLICIT, explicit, layout, suffix)
@@ -53,9 +49,17 @@
 #define init_cfl_implicit_fn(layout, suffix) \
     init_cfl_pred_fn(IMPLICIT, implicit, layout, suffix)
 
+#define init_cfl_mh_gen_y(layout, flt_type, flt_name, suffix) \
+    init_fn(cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I##layout - 1], CFL_FLT_TYPE_##flt_type, \
+            cfl_mh_gen_y_##layout##_##flt_name, suffix)
+
+#define init_cfl_mh_fns(layout, suffix) \
+    init_cfl_mh_gen_y(layout, UNIFORM, uniform, suffix)
+
 #define init_cfl_fns(layout, suffix) \
     init_cfl_explicit_fn(layout, suffix); \
-    init_cfl_implicit_fn(layout, suffix)
+    init_cfl_implicit_fn(layout, suffix); \
+    init_cfl_mh_fns(layout, suffix)
 
 decl_fn(angular_ipred, ipred_dc);
 decl_fn(angular_ipred, ipred_dc_128);
@@ -72,7 +76,9 @@ decl_fn(angular_ipred, ipred_z2);
 decl_fn(angular_ipred, ipred_z3);
 decl_fn(angular_ipred, ipred_dip);
 
-decl_cfl_fns(cfl_pred, 420);
+decl_fn(cfl_pred,       cfl_explicit_420);
+decl_fn(cfl_pred,       cfl_implicit_420);
+decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_uniform);
 
 decl_fn(pal_pred, pal_pred);
 

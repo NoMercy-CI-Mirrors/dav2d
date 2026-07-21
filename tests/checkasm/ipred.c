@@ -351,17 +351,17 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                         n_top_rows = 1 + dir_t;
                                     }
                                     if (has_l) {
-                                        const int avail = rnd() % 3;
+                                        const int avail = rnd() % (3 - (h == 4));
                                         refh = h;
                                         if (avail == 1)
-                                            refh += (rnd() % h) & ~3;
-                                        else if (avail == 2)
                                             refh += h;
+                                        else if (avail == 2)
+                                            refh += (rnd() % h) & ~3;
                                         n_left_cols = 1 + dir_l;
                                     }
                                     int needed_top = 0, needed_left = 0;
                                     if (has_t) {
-                                        refw = imin(refw + has_l - 1 - !has_l, (128 >> ss_hor) - 2);
+                                        refw = imin(refw + !!has_l - 1 - !has_l, (128 >> ss_hor) - 2);
                                         needed_top = refw + dir_l;
                                         if (dir_t) {
                                             const int need_first = !has_l && needed_top > w;
@@ -369,9 +369,8 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                         }
                                     }
                                     if (has_l) {
-                                        refh = imin(refh + has_t - 1 - !has_t, (128 >> ss_ver) - 2);
+                                        refh = imin(refh + !!has_t - 1 - !has_t, (128 >> ss_ver) - 2);
                                         needed_left = refh + dir_t;
-                                        refh -= has_t;
                                         if (dir_l) {
                                             const int need_first = !has_t && needed_left > h;
                                             needed_left = need_first + imax(needed_left, h + n_top_rows);
@@ -400,8 +399,25 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                                          n_left_cols, needed_left - n_top_rows, "left");
                                     checkasm_check_pixel(c_blk, w, a_blk, w, w, h, "blk");
 
+                                    const int avail_tr = rnd() % (3 - (w == 4));
+                                    const int avail_bl = rnd() % (3 - (h == 4));
+                                    int n_tr = 0, n_bl = 0;
+                                    if (avail_tr == 1)
+                                        n_tr += w;
+                                    else if (avail_tr == 2)
+                                        n_tr += (rnd() % w) & ~3;
+                                    if (avail_bl == 1)
+                                        n_bl += h;
+                                    else if (avail_bl == 2)
+                                        n_bl += (rnd() % h) & ~3;
+                                    refw = imin(w + n_tr, (128 >> ss_hor) - 2);
+                                    refh = imin(h + n_bl, (128 >> ss_ver) - 2);
+                                    needed_top = refw + dir_l;
+                                    needed_left = refh + dir_t;
+                                    if (dir_t) needed_top = imax(needed_top, w + 1);
+                                    if (dir_l) needed_left = imax(needed_left, h + 1);
                                     bench_new(a_dst, src, top_sb, src0_stride,
-                                              needed_top, needed_left - n_top_rows,
+                                              needed_top, needed_left - (1 + dir_t),
                                               w, h, flags | CFL_HAS_TOP | CFL_HAS_LEFT);
                                 }
 #if !BENCH_DIR
