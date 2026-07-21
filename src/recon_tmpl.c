@@ -3007,10 +3007,10 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         }
 
     } else { // CFL MHCCP
-        ALIGN_STK_64(pixel, luma, CFL_MHCCP_MAX_LUMA_SIZE,);
+        ALIGN_STK_64(pixel, luma, CFL_MH_MAX_LUMA_SIZE,);
         const int cbx4 = (t->cbx & 63) >> ss_hor, cby4 = (t->cby & 63) >> ss_ver;
         int refw = ctw4 * 4, refh = cth4 * 4;
-        uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES];
+        uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES];
         int32_t mat[3][3];
         int n_tr = 0, n_bl = 0;
         if (has_top) {

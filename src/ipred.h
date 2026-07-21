@@ -104,12 +104,13 @@ typedef decl_cfl_pred_fn(*cfl_pred_fn);
 
 /*
  * max luma size
- * = 2 * align64(max_top_w) + max_bl_size + 2 * max_left
- * = 2 * align64(130) + 64 * 64 + 2 * 128
- * = 2 * 192 + 2^12 + 256
- * = 384 + 4096 + 256 = 4736
+ * = 2 * max_refw + max_bl_size + 2 * max_refh_has_top
+ * = 2 * 128 + 64 * 64 + 2 * 126
+ * = 2 * 128 + 2^12 + 252
+ * = 256 + 4096 + 252 = 4604
  */
-#define CFL_MHCCP_MAX_LUMA_SIZE 4736
+#define CFL_MH_MAX_LUMA_SIZE 4604
+#define CFL_MH_TOP_STRIDE 128
 
 #define decl_cfl_mh_gen_y_fn(name) \
 void (name)(pixel *dst, const pixel *src, const pixel *top_sb_edge, \
@@ -122,10 +123,10 @@ typedef decl_cfl_mh_gen_y_fn(*cfl_mh_gen_y_fn);
  *  = 2tl+128a+128tr+64l+64bl   = 2tl+64a+64tr+128l+128bl
  *  = 386
  */
-#define CFL_MHCCP_MAX_EDGE_SAMPLES 386
+#define CFL_MH_MAX_EDGE_SAMPLES 386
 
 #define decl_cfl_mh_gen_mat_fn(name) \
-void (name)(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
+void (name)(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES], \
             const pixel *y, int refw, int refh, int edge_flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_mh_gen_mat_fn(*cfl_mh_gen_mat_fn);
 
@@ -135,7 +136,7 @@ typedef decl_cfl_mh_gen_mat_fn(*cfl_mh_gen_mat_fn);
 #define decl_cfl_mh_calc_alphas_fn(name) \
 void (name)(int alpha[3], const pixel *c, const pixel *top_sb_edge, \
             ptrdiff_t stride, int refw, int refh, const int32_t mat[3][3], \
-            const uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
+            const uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES], \
             int edge_flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_mh_calc_alphas_fn(*cfl_mh_calc_alphas_fn);
 

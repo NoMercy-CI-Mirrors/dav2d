@@ -1113,7 +1113,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
     const int dir = flags & CFL_DIR_MASK;
     const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT): 0;
     const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
-    pixel *dst_left = dst + n_top * 128 + 64 * 64;
+    pixel *dst_left = dst + n_top * CFL_MH_TOP_STRIDE + 64 * 64;
     src -= n_left << 1;
 
 // ::
@@ -1169,7 +1169,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
                 t = -src_stride;
             }
             dst_left += n_left;
-            dst += 128;
+            dst += CFL_MH_TOP_STRIDE;
         }
     }
 
@@ -1268,7 +1268,7 @@ cfl_mh_gen_y_fn(420)
     } while (0);
 
 static void
-cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES],
+cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
                  const pixel *y, const int refw, const int refh,
                  const int edge_flags, const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
 {
@@ -1280,7 +1280,7 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES]
     const int dir_l = dir == CFL_DIR_LEFT;
     const int n_top = has_t ? 1 + dir_t : 0;
     const int n_left = has_l ? 1 + dir_l : 0;
-    const pixel *left = y + n_top * 128 + 64 * 64;
+    const pixel *left = y + n_top * CFL_MH_TOP_STRIDE + 64 * 64;
 
     memset(mat, 0, 3 * sizeof(*mat));
 
@@ -1296,7 +1296,7 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES]
         const int start = !dir_l && !has_l;
         for (int i = start; i < refw - n_left - 1 - !start; i++, n++) {
             const int v0 = y[i];
-            const int v1 = SQRND(y[dir_t * 128 + i + dir_l]);
+            const int v1 = SQRND(y[dir_t * CFL_MH_TOP_STRIDE + i + dir_l]);
             imat[0][n] = v0;
             imat[1][n] = v1;
             GEN_MATRIX();
@@ -1334,7 +1334,7 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES]
 
 #define cfl_mh_gen_mat_fn(name, dir) \
 static void \
-cfl_mh_gen_mat_##name##_c(int32_t mat[3][3], uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES], \
+cfl_mh_gen_mat_##name##_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES], \
                          const pixel *const y, const int refw, const int refh, \
                          const int edge_flags HIGHBD_DECL_SUFFIX) \
 { \
@@ -1402,7 +1402,7 @@ static void
 cfl_mh_calc_alphas_c(int alpha[3], const pixel *const c,
                      const pixel *const top_sb_edge, const ptrdiff_t stride,
                      const int refw, const int refh,
-                     const int32_t mat[3][3], const uint16_t imat[2][CFL_MHCCP_MAX_EDGE_SAMPLES],
+                     const int32_t mat[3][3], const uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
                      const int edge_flags HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
@@ -1488,7 +1488,7 @@ cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *src,
     int y = 0;
     for (; y < dir_t && has_t; y++) {
         for (int x = 0; x < w; x++) {
-            const int v0 = src[x - 128];
+            const int v0 = src[x - CFL_MH_TOP_STRIDE];
             const int v1 = SQRND(src[x]);
             dst[x] = iclip_pixel(mul32(alpha[0], v0, 16) +
                                  mul32(alpha[1], v1, 16) + a2v2);
