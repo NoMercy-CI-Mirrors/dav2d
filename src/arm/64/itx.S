@@ -155,13 +155,13 @@ function inv_dst4_1d_transpose_8bpc_neon
 
         ldp             q0,  q1,  [x7]
 
+        mov             w12, #RECT2_SCALE
+        dup             v31.8h,  w12
         cmp             w6,  #4
         b.eq            L(dst4_transpose_tail)
 L(dst4_transpose_loop8):
         load_4_strided  q4,  q5,  q6,  q7,  x2,  x13, x16, 0
         cbz             w5,  1f
-        mov             w12, #RECT2_SCALE
-        dup             v31.8h,  w12
         sqrdmulh        v4.8h,   v4.8h,   v31.8h
         sqrdmulh        v5.8h,   v5.8h,   v31.8h
         sqrdmulh        v6.8h,   v6.8h,   v31.8h
@@ -196,8 +196,6 @@ L(dst4_transpose_loop8):
 L(dst4_transpose_tail):
         load_4_strided  d4,  d5,  d6,  d7,  x2,  x13, x16, 0
         cbz             w5,  1f
-        mov             w12, #RECT2_SCALE
-        dup             v31.4h,  w12
         sqrdmulh        v4.4h,   v4.4h,   v31.4h
         sqrdmulh        v5.4h,   v5.4h,   v31.4h
         sqrdmulh        v6.4h,   v6.4h,   v31.4h
@@ -283,35 +281,31 @@ L(dst4_done):
 endfunc
 
 
-.macro scale_inplace_s16_x4 do_scale, c, stride, rows
+.macro scale_inplace_s16_x4 do_scale, c, stride, rows, scale
         cbz             \do_scale, 99f
-        mov             w14, #RECT2_SCALE
         mov             x12, \c
-        dup             v31.4h,  w14
         mov             x13, \c
   .rept \rows / 4
         load_4_strided  d0,  d1,  d2,  d3,  x12, x12, \stride, 1
-        sqrdmulh        v0.4h,   v0.4h,   v31.4h
-        sqrdmulh        v1.4h,   v1.4h,   v31.4h
-        sqrdmulh        v2.4h,   v2.4h,   v31.4h
-        sqrdmulh        v3.4h,   v3.4h,   v31.4h
+        sqrdmulh        v0.4h,   v0.4h,   \scale\().4h
+        sqrdmulh        v1.4h,   v1.4h,   \scale\().4h
+        sqrdmulh        v2.4h,   v2.4h,   \scale\().4h
+        sqrdmulh        v3.4h,   v3.4h,   \scale\().4h
         store_4_strided d0,  d1,  d2,  d3,  x13, x13, \stride, 1
   .endr
 99:
 .endm
 
-.macro scale_inplace_s16_x8 do_scale, c, stride, rows
+.macro scale_inplace_s16_x8 do_scale, c, stride, rows, scale
         cbz             \do_scale, 99f
-        mov             w14, #RECT2_SCALE
         mov             x12, \c
-        dup             v31.8h,  w14
         mov             x13, \c
   .rept \rows / 4
         load_4_strided  q0,  q1,  q2,  q3,  x12, x12, \stride, 1
-        sqrdmulh        v0.8h,   v0.8h,   v31.8h
-        sqrdmulh        v1.8h,   v1.8h,   v31.8h
-        sqrdmulh        v2.8h,   v2.8h,   v31.8h
-        sqrdmulh        v3.8h,   v3.8h,   v31.8h
+        sqrdmulh        v0.8h,   v0.8h,   \scale\().8h
+        sqrdmulh        v1.8h,   v1.8h,   \scale\().8h
+        sqrdmulh        v2.8h,   v2.8h,   \scale\().8h
+        sqrdmulh        v3.8h,   v3.8h,   \scale\().8h
         store_4_strided q0,  q1,  q2,  q3,  x13, x13, \stride, 1
   .endr
 99:
@@ -330,10 +324,12 @@ function inv_dst8_1d_transpose_8bpc_neon
         cmp             w8,  #0
         cneg            x11, x11, ne  // (flip ? -16 : 16)
 
+        mov             w12, #RECT2_SCALE
+        dup             v31.8h,  w12
         cmp             w6,  #4
         b.eq            L(dst8_transpose_tail)
 L(dst8_transpose_loop8):
-        scale_inplace_s16_x8 w5,  x2,  x10, 8
+        scale_inplace_s16_x8 w5,  x2,  x10, 8,  v31
         add             x17, x7,  x8,  lsl #4
         mov             x9,  #0
 L(dst8_row_loop8):
@@ -382,7 +378,7 @@ L(dst8_row_loop8):
         cmp             w6,  #4
         b.ne            L(dst8_transpose_loop8)
 L(dst8_transpose_tail):
-        scale_inplace_s16_x4 w5,  x2,  x10, 8
+        scale_inplace_s16_x4 w5,  x2,  x10, 8,  v31
         add             x17, x7,  x8,  lsl #4
         mov             x9,  #0
 L(dst8_row_tail_loop):
@@ -592,10 +588,12 @@ function inv_dst16_1d_transpose_8bpc_neon
         cmp             w8,  #0
         cneg            x10, x10, ne  // (flip ? -32 : 32)
 
+        mov             w12, #RECT2_SCALE
+        dup             v31.8h,  w12
         cmp             w6,  #4
         b.eq            L(dst16_transpose_tail)
 L(dst16_transpose_loop8):
-        scale_inplace_s16_x8 w5,  x2,  x16, 16
+        scale_inplace_s16_x8 w5,  x2,  x16, 16, v31
         mov             x9,  #0
         add             x11, x7,  x8,  lsl #5
 L(dst16_row_loop8):
@@ -628,7 +626,7 @@ L(dst16_row_loop8):
         cmp             w6,  #4
         b.ne            L(dst16_transpose_loop8)
 L(dst16_transpose_tail):
-        scale_inplace_s16_x4 w5,  x2,  x16, 16
+        scale_inplace_s16_x4 w5,  x2,  x16, 16, v31
         mov             x9,  #0
         add             x11, x7,  x8,  lsl #5
 L(dst16_row_tail_loop):
