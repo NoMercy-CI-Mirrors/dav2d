@@ -1133,42 +1133,23 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
         const ptrdiff_t b = !top_sb_edge ? src_stride : 0;
         ptrdiff_t t = n_top == 1 ? -b : 0;
         for (int y = 0; y < n_top; y++) {
-            int x = 0;
-            for (; x < n_left; x++) {
+            for (int x = 0; x < refw; x++) {
                 const int c = x * 2, r = c + 1;
                 const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
                 switch (filter_type) {
                 case CFL_FLT_TYPE_UNIFORM:
-                    dst_left[x] = FILTER_UNIFORM(top);
+                    dst[x] = FILTER_UNIFORM(top);
                     break;
                 case CFL_FLT_TYPE_VSTRIP:
-                    dst_left[x] = FILTER_VSTRIP(top);
+                    dst[x] = FILTER_VSTRIP(top);
                     break;
                 case CFL_FLT_TYPE_GAUSS:
-                    dst_left[x] = FILTER_GAUSS(top, &top[t]);
+                    dst[x] = FILTER_GAUSS(top, &top[t]);
                     break;
                 }
             }
-            for (; x < refw; x++) {
-                const int c = x * 2, r = c + 1;
-                const int l = n_left ? c - 1 : imax(c - 1, 0);
-                switch (filter_type) {
-                case CFL_FLT_TYPE_UNIFORM:
-                    dst[x - n_left] = FILTER_UNIFORM(top);
-                    break;
-                case CFL_FLT_TYPE_VSTRIP:
-                    dst[x - n_left] = FILTER_VSTRIP(top);
-                    break;
-                case CFL_FLT_TYPE_GAUSS:
-                    dst[x - n_left] = FILTER_GAUSS(top, &top[t]);
-                    break;
-                }
-            }
-            if (!top_sb_edge) {
-                top += 2 * src_stride;
-                t = -src_stride;
-            }
-            dst_left += n_left;
+            top += 2 * b;
+            t = -b;
             dst += CFL_MH_TOP_STRIDE;
         }
     }
@@ -1286,15 +1267,8 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
 
     int n = 0;
     if (has_t) {
-        for (int i = 0; i < n_left; i++, n++) {
-            const int v0 = left[i];
-            const int v1 = SQRND(!i ? left[i + (dir_t | dir_l)] : y[0]);
-            imat[0][n] = v0;
-            imat[1][n] = v1;
-            GEN_MATRIX();
-        }
         const int start = !dir_l && !has_l;
-        for (int i = start; i < refw - n_left - 1 - !start; i++, n++) {
+        for (int i = start; i < refw - 1 - !start; i++, n++) {
             const int v0 = y[i];
             const int v1 = SQRND(y[dir_t * CFL_MH_TOP_STRIDE + i + dir_l]);
             imat[0][n] = v0;
@@ -1303,8 +1277,16 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
         }
     }
     if (has_l) {
-        const int start = dir_t && !has_t;
-        for (int i = 1 - start; i < refh - start - 1; i++, n++) {
+        const int use_tl = dir_t && has_t;
+        if (use_tl) {
+            const int v0 = y[CFL_MH_TOP_STRIDE];
+            const int v1 = SQRND(left[0]);
+            imat[0][n] = v0;
+            imat[1][n++] = v1;
+            GEN_MATRIX();
+        }
+        const int start = !dir_t && !has_t;
+        for (int i = start; i < refh - 1 - !start - use_tl; i++, n++) {
             const int v0 = left[i * n_left];
             const int v1 = SQRND(left[(i + dir_t) * n_left + dir_l]);
             imat[0][n] = v0;
@@ -1480,15 +1462,13 @@ cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *src,
     const int has_l = !!(edge_flags & CFL_HAS_LEFT);
     const int dir_t = dir == CFL_DIR_TOP;
     const int dir_l = dir == CFL_DIR_LEFT;
-    const int n_top = has_t ? 1 + dir_t : 0;
-    const int n_left = has_l ? 1 + dir_l : 0;
-    const pixel *const left = src + 64 * 64 + n_left * n_top;
+    const pixel *const left = src + 64 * 64;
 
     const int a2v2 = mul32(alpha[2], mid, 16);
     int y = 0;
     for (; y < dir_t && has_t; y++) {
         for (int x = 0; x < w; x++) {
-            const int v0 = src[x - CFL_MH_TOP_STRIDE];
+            const int v0 = src[x - CFL_MH_TOP_STRIDE + has_l];
             const int v1 = SQRND(src[x]);
             dst[x] = iclip_pixel(mul32(alpha[0], v0, 16) +
                                  mul32(alpha[1], v1, 16) + a2v2);
