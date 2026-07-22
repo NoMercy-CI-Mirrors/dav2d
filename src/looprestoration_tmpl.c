@@ -1001,7 +1001,9 @@ static void gdf_add_c(pixel *p_line, const ptrdiff_t stride,
 }
 
 #if HAVE_ASM
-#if ARCH_X86
+#if ARCH_AARCH64 || ARCH_ARM
+#include "src/arm/looprestoration.h"
+#elif ARCH_X86
 #include "src/x86/looprestoration.h"
 #endif
 #endif
@@ -1016,7 +1018,9 @@ COLD void bitfn(dav2d_loop_restoration_dsp_init)(Dav2dLoopRestorationDSPContext 
     c->gdf_prep = gdf_prep_c;
 
 #if HAVE_ASM
-#if ARCH_X86
+#if ARCH_AARCH64 || ARCH_ARM
+    looprestoration_dsp_init_arm(c);
+#elif ARCH_X86
     loop_restoration_dsp_init_x86(c);
 #endif
 #endif
