@@ -430,7 +430,7 @@ static void check_gdf_add(Dav2dLoopRestorationDSPContext *const c) {
         memcpy(a_dst_buf, c_dst_buf, a_dst_stride * a_dst_buf_h);
 
         for (int i = 0; i < 64 * 64; i++)
-            err[i] = (rnd() & 127) - 64;
+            err[i] = (rnd() % 96) - 53; // -53..42
 
         for (int i = 0; i < 16; i++)
             for (int j = 0; j < 4; j++)
