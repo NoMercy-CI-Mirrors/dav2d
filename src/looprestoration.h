@@ -177,7 +177,7 @@ typedef union WienerParams {
     struct {
         union {
             const int8_t (*user)[16];
-            const int16_t (*pretrained)[13];
+            const int8_t (*pretrained)[13];
         } filters;
         const uint8_t *class_lut;
         const uint16_t *noskip_mask;

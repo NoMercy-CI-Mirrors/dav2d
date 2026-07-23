@@ -78,7 +78,7 @@ EXTERN const int8_t dav2d_ccso_offset[4][8];
 EXTERN const unsigned dav2d_subset_masks_y[4];
 EXTERN const unsigned dav2d_subset_masks_uv[3];
 EXTERN const int8_t dav2d_wiener_ns_filters[64][16];
-EXTERN const int16_t dav2d_pc_wiener_filters[4][64][13];
+EXTERN const int8_t dav2d_pc_wiener_filters[4][64][13];
 EXTERN const int8_t dav2d_ns_wiener_coef_range_y[16][2];
 EXTERN const int8_t dav2d_ns_wiener_coef_range_uv[18][2];
 

@@ -475,7 +475,7 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
                          const pixel *lpf, const pixel *lpf_bottom,
                          const int w, int const h,
                          const int8_t (*filters_user)[16],
-                         const int16_t (*filters_pretrained)[13],
+                         const int8_t (*filters_pretrained)[13],
                          const uint8_t *class_lut,
                          const uint16_t *noskip_mask,
                          const WienerQValApproxData *qval_approx,
@@ -673,9 +673,9 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
                         p[x] = iclip_pixel(v);
                     }
                 } else {
-                    const int16_t *filter = filters_pretrained[classes[bx]];
+                    const int8_t *filter = filters_pretrained[classes[bx]];
                     for (int x = bx << 2; x < (bx << 2) + 4; x++) {
-                        int s = ptrs[4][x] * filter[12];
+                        int s = 2 * ptrs[4][x] * filter[12];
                         for (int i = 0; i < 12; i++) {
                             const int dy = pc_wiener_config[i][0];
                             const int dx = pc_wiener_config[i][1];

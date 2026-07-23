@@ -350,7 +350,7 @@ struct Dav2dFrameContext {
         const uint8_t *ns_subclass_lut;
         const uint8_t *pc_subclass_lut;
         WienerQValApproxData wiener_qval_approx_data;
-        const int16_t (*pc_filters)[13];
+        const int8_t (*pc_filters)[13];
         uint8_t *tx_db_right_edge[2];
         uint8_t *lr_line_buf;
         pixel *lr_db_line[3 /* plane */];
