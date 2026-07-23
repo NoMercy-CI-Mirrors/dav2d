@@ -721,24 +721,77 @@ static void pc_wiener_c(pixel *p, const ptrdiff_t stride,
                  edges, ll_mask HIGHBD_TAIL_SUFFIX);
 }
 
-// Sum 2x2 rows of gradients and store in dst
-static void compute_gradient_row(uint16_t (*dst)[4], const pixel **src,
-                                 const int w, const int shift)
+#if BITDEPTH == 8
+#define up_shift 2
+#define down_shift 0
+#define HBD_SHIFT_DECL
+#define HBD_SHIFT
+#else
+#define up_shift 0
+#define HBD_SHIFT_DECL , const int down_shift
+#define HBD_SHIFT , down_shift
+#endif
+
+static void gdf_backup_row(uint16_t *dst, const pixel *src, const pixel *left,
+                           const int w, const enum LrEdgeFlags edges HBD_SHIFT_DECL)
 {
+    if (edges & LR_HAVE_LEFT)
+        for (int x = -6; x < 0; x++)
+            dst[x] = (left[x + 8] << up_shift) >> down_shift;
+    else
+        for (int x = -6; x < 0; x++)
+            dst[x] = (src[0] << up_shift) >> down_shift;
+
+    for (int x = 0; x < w; x++)
+        dst[x] = (src[x] << up_shift) >> down_shift;
+
+    if (edges & LR_HAVE_RIGHT)
+        for (int x = w; x < w + 6; x++)
+            dst[x] = (src[x] << up_shift) >> down_shift;
+    else
+        for (int x = w; x < w + 6; x++)
+            dst[x] = (src[w - 1] << up_shift) >> down_shift;
+}
+
+static void gdf_backup_row_lpf(uint16_t *dst, const pixel *src, const int w,
+                               const enum LrEdgeFlags edges HBD_SHIFT_DECL)
+{
+    if (edges & LR_HAVE_LEFT) {
+        for (int x = -6; x < 0; x++)
+            dst[x] = (src[x] << up_shift) >> down_shift;
+    } else {
+        for (int x = -6; x < 0; x++)
+            dst[x] = (src[0] << up_shift) >> down_shift;
+    }
+
+    for (int x = 0; x < w; x++)
+        dst[x] = (src[x] << up_shift) >> down_shift;
+
+    if (edges & LR_HAVE_RIGHT) {
+        for (int x = w; x < w + 6; x++)
+            dst[x] = (src[x] << up_shift) >> down_shift;
+    } else {
+        for (int x = w; x < w + 6; x++)
+            dst[x] = (src[w - 1] << up_shift) >> down_shift;
+    }
+}
+
+// Sum 2x2 rows of gradients and store in dst
+static void compute_gradient_row(uint16_t (*dst)[4], const uint16_t **src, const int w) {
     uint16_t tmp[33][4];
 
     for (int x1 = 0; x1 < w + 2; x1 += 2) {
-        const int8_t offs[4][2] = { { 1, 0 }, { 0, 1 }, { 1, 1 }, { -1, 1 } };
+        static const int8_t offs[4][2] = { { 1, 0 }, { 0, 1 }, { 1, 1 }, { -1, 1 } };
         for (int d = 0; d < 4; d++) {
             int grad = 0;
             for (int x2 = 0; x2 < 2; x2++) {
                 int x = x1 + x2;
                 for (int y = 0; y < 2; y++) {
-                    int dy = offs[d][0];
-                    int dx = offs[d][1];
-                    int a = src[y - 1 - dy][x - 1 - dx] >> shift;
-                    int b = src[y - 1][x - 1] >> shift;
-                    int c = src[y - 1 + dy][x - 1 + dx] >> shift;
+                    const int dy = offs[d][0];
+                    const int dx = offs[d][1];
+                    const int a = src[y - 1 - dy][x - 1 - dx];
+                    const int b = src[y - 1][x - 1];
+                    const int c = src[y - 1 + dy][x - 1 + dx];
                     grad += abs(b * 2 - a - c);
                 }
             }
@@ -751,14 +804,11 @@ static void compute_gradient_row(uint16_t (*dst)[4], const pixel **src,
             dst[x][d] = tmp[x][d] + tmp[x + 1][d];
 }
 
-static inline int gdf_sum(int a, int b, const int alpha, const int m,
-                          const int down_shift, const int up_shift)
-{
-    a = iclip(((a >> down_shift) - m) * (1 << up_shift), -alpha, alpha);
-    b = iclip(((b >> down_shift) - m) * (1 << up_shift), -alpha, alpha);
+static inline int gdf_sum(int a, int b, const int alpha, const int m) {
+    a = iclip(a - m, -alpha, alpha);
+    b = iclip(b - m, -alpha, alpha);
     return iclip(a + b, -512, 511);
 }
-#define GDF_SUM(a, b, alpha) gdf_sum(a, b, alpha, m, down_shift, up_shift)
 
 static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
                        const pixel (*const left)[8], const pixel *const lpf,
@@ -769,34 +819,34 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
 {
     assert(w > 0 && w <= 64 && !(w & 7));
     assert(h > 0 && h <= 64 && !(h & 7));
-    const int bitdepth = bitdepth_from_max(bitdepth_max);
-    const int down_shift = bitdepth == 12 ? 2 : 0;
-    const int up_shift = bitdepth == 8 ? 2 : 0;
+#if BITDEPTH == 16
+    const int down_shift = bitdepth_from_max(bitdepth_max) - 10;
+#endif
     const int scale = params->scale;
     assert(scale == 5 || scale == 8);
 
     uint16_t grad[2][32][4];
-    pixel row_buffers[13][REST_UNIT_STRIDE];
+    uint16_t row_buffers[13][REST_UNIT_STRIDE]; // Normalized to 10-bit
     int32_t bias[32];
     uint8_t cls[32];
-    pixel *bak_rows[13];
-    const pixel *ptrs[13];
+    uint16_t *bak_rows[13];
+    const uint16_t *ptrs[13];
 
     for (int i = 0; i < 13; i++)
         bak_rows[i] = row_buffers[i] + 6;
 
-    backup_row(bak_rows[6], p, left[0], w, 6, edges);
+    gdf_backup_row(bak_rows[6], p, left[0], w, edges HBD_SHIFT);
     ptrs[6] = bak_rows[6];
     if (edges & LR_HAVE_TOP_INTEGRATED) {
         for (int n = 0; n < 6; n++) {
-            backup_row_lpf(bak_rows[n], lpf + n * PXSTRIDE(stride), w, 6, edges);
+            gdf_backup_row_lpf(bak_rows[n], lpf + n * PXSTRIDE(stride), w, edges HBD_SHIFT);
             ptrs[n] = bak_rows[n];
         }
     } else if (edges & LR_HAVE_TOP) {
         // y = -2,-1
-        backup_row_lpf(bak_rows[4], lpf, w, 6, edges);
+        gdf_backup_row_lpf(bak_rows[4], lpf, w, edges HBD_SHIFT);
         ptrs[4] = bak_rows[4];
-        backup_row_lpf(bak_rows[5], lpf + PXSTRIDE(stride), w, 6, edges);
+        gdf_backup_row_lpf(bak_rows[5], lpf + PXSTRIDE(stride), w, edges HBD_SHIFT);
         ptrs[5] = bak_rows[5];
 
         // y = -3,-4,-5,-6
@@ -807,23 +857,23 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
 
     int bak_idx = 7;
     for (int y = 1; y < 6; y++, bak_idx++) {
-        backup_row(bak_rows[bak_idx], p + y * PXSTRIDE(stride), left[y], w, 6, edges);
+        gdf_backup_row(bak_rows[bak_idx], p + y * PXSTRIDE(stride), left[y], w, edges HBD_SHIFT);
         ptrs[bak_idx] = bak_rows[bak_idx];
     }
 
-    compute_gradient_row(grad[1], &ptrs[6], w, down_shift);
+    compute_gradient_row(grad[1], &ptrs[6], w);
 
     for (int y = 0; y < h; y++) {
         if (y + 6 < h) {
-            backup_row(bak_rows[bak_idx], p + 6*PXSTRIDE(stride), left[y + 6], w, 6, edges);
+            gdf_backup_row(bak_rows[bak_idx], p + 6*PXSTRIDE(stride), left[y + 6], w, edges HBD_SHIFT);
             ptrs[12] = bak_rows[bak_idx];
         } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
-            backup_row_lpf(bak_rows[bak_idx], p + 6*PXSTRIDE(stride), w, 6, edges);
+            gdf_backup_row_lpf(bak_rows[bak_idx], p + 6*PXSTRIDE(stride), w, edges HBD_SHIFT);
             ptrs[12] = bak_rows[bak_idx];
         } else if (y + 4 < h && edges & LR_HAVE_BOTTOM) {
             int offset_y = y + 6 - h;
             assert(offset_y < 2);
-            backup_row_lpf(bak_rows[bak_idx], lpf_bottom + offset_y * PXSTRIDE(stride), w, 6, edges);
+            gdf_backup_row_lpf(bak_rows[bak_idx], lpf_bottom + offset_y * PXSTRIDE(stride), w, edges HBD_SHIFT);
             ptrs[12] = bak_rows[bak_idx];
         } else {
             ptrs[12] = ptrs[11];
@@ -831,14 +881,13 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
         if (++bak_idx == 13) bak_idx = 0;
         if ((y & 1) == 0) {
             // Compute gradients over a 4x4 region
-            compute_gradient_row(grad[(y & 2) >> 1], &ptrs[8], w, down_shift);
+            compute_gradient_row(grad[(y & 2) >> 1], &ptrs[8], w);
             for (int x = 0; x < (w >> 1); x++) {
                 uint16_t grad_sums[4];
                 bias[x] = params->bias[2];
                 for (int d = 0; d < 4; d++) {
                     grad_sums[d] = grad[0][x][d] + grad[1][x][d];
-                    const int alpha = params->gradient_alpha[d];
-                    const int v = imin(grad_sums[d] >> (4 - up_shift), alpha);
+                    const int v = imin(grad_sums[d] >> 4, params->gradient_alpha[d]);
                     bias[x] += v * params->gradient_weight[d];
                 }
                 cls[x] = (grad_sums[0] <= grad_sums[1]) | ((grad_sums[2] <= grad_sums[3]) << 1);
@@ -853,14 +902,14 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
             for (int x2 = 0; x2 < 2; x2++) {
                 int idx_vals[3] = { params->bias[0], params->bias[1], bias2 };
                 const int x = x1 * 2 + x2;
-                const int m = ptrs[6][x] >> down_shift;
+                const int m = ptrs[6][x];
 
                 // { 1, 0 }, { 0, 1 }, { 2, 0 }, { 0, 2 }, { 3, 0 }, { 0, 3 }
                 for (int k = 0; k < 3; k++) {
-                    const int sum_v = GDF_SUM(ptrs[5 - k][x], ptrs[7 + k][x],
-                                              params->alpha[k][cls1 ^ 0]);
-                    const int sum_h = GDF_SUM(ptrs[6][x - k - 1],  ptrs[6][x + k + 1],
-                                              params->alpha[k][cls1 ^ 1]);
+                    const int sum_v = gdf_sum(ptrs[5 - k][x], ptrs[7 + k][x],
+                                              params->alpha[k][cls1 ^ 0], m);
+                    const int sum_h = gdf_sum(ptrs[6][x - k - 1],  ptrs[6][x + k + 1],
+                                              params->alpha[k][cls1 ^ 1], m);
                     for (int idx = 0; idx < 3; idx++)
                         idx_vals[idx] += sum_v * params->weight1[idx][k][cls1 ^ 0] +
                                          sum_h * params->weight1[idx][k][cls1 ^ 1];
@@ -868,10 +917,10 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
 
                 // { 4, 0 }, { 0, 4 }, { 5, 0 }, { 0, 5 }, { 6, 0 }, { 0, 6 }
                 for (int k = 0; k < 3; k++) {
-                    const int sum_v = GDF_SUM(ptrs[2 - k][x], ptrs[10 + k][x],
-                                              params->alpha[3 + k][cls1 ^ 0]);
-                    const int sum_h = GDF_SUM(ptrs[6][x - k - 4],  ptrs[6][x + k + 4],
-                                              params->alpha[3 + k][cls1 ^ 1]);
+                    const int sum_v = gdf_sum(ptrs[2 - k][x], ptrs[10 + k][x],
+                                              params->alpha[3 + k][cls1 ^ 0], m);
+                    const int sum_h = gdf_sum(ptrs[6][x - k - 4],  ptrs[6][x + k + 4],
+                                              params->alpha[3 + k][cls1 ^ 1], m);
                     idx_vals[0] += (cls1 ? sum_h : sum_v) * params->weight2[0][k];
                     idx_vals[1] += (cls1 ? sum_v : sum_h) * params->weight2[1][k];
                 }
@@ -879,8 +928,8 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
                 // { 1, 1 }, { 1, -1 }
                 for (int k = 0; k < 2; k++) {
                     const int dx = k ? -1 : 1;
-                    const int sum = GDF_SUM(ptrs[5][x - dx], ptrs[7][x + dx],
-                                            params->alpha[6][cls2 ^ k]);
+                    const int sum = gdf_sum(ptrs[5][x - dx], ptrs[7][x + dx],
+                                            params->alpha[6][cls2 ^ k], m);
                     idx_vals[0] += sum * params->weight3[0][cls2 ^ k];
                     idx_vals[1] += sum * params->weight3[1][cls2 ^ k];
                 }
@@ -888,10 +937,10 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
                 // { 1, 2 }, { 1, -2 }, { 2, 1 }, { 2, -1 }
                 for (int k = 0; k < 2; k++) {
                     const int dx = k ? -1 : 1;
-                    const int sum_v = GDF_SUM(ptrs[4][x - dx * 1], ptrs[8][x + dx * 1],
-                                              params->alpha[7 + cls1][cls2 ^ k]);
-                    const int sum_h = GDF_SUM(ptrs[5][x - dx * 2], ptrs[7][x + dx * 2],
-                                              params->alpha[8 - cls1][cls2 ^ k]);
+                    const int sum_v = gdf_sum(ptrs[4][x - dx * 1], ptrs[8][x + dx * 1],
+                                              params->alpha[7 + cls1][cls2 ^ k], m);
+                    const int sum_h = gdf_sum(ptrs[5][x - dx * 2], ptrs[7][x + dx * 2],
+                                              params->alpha[8 - cls1][cls2 ^ k], m);
                     idx_vals[0] += (cls1 ? sum_h : sum_v) * params->weight4[0][cls2 ^ k];
                     idx_vals[1] += (cls1 ? sum_v : sum_h) * params->weight4[1][cls2 ^ k];
                 }
