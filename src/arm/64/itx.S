@@ -2226,7 +2226,7 @@ inv_txfm_add_4x4_s16 flipadst_identity, flipadst, identity
 inv_txfm_add_4x4_s16 flipadst_adst,     flipadst, adst
 inv_txfm_add_4x4_s16 flipadst_flipadst, flipadst, flipadst
 
-// x0: dst, x1: dst_stride, x2: coeff, w3: txtp
+// x0: dst, x1: dst_stride, x2: coeff, x3: txtp
 function inv_txfm_add_4x4_wht_wht_8bpc_neon, export=1
         lsr             w5,  w3,  #8
         ldp             d16, d17, [x2]
