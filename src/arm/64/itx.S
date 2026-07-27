@@ -2133,8 +2133,109 @@ residual_add_idtx_s16 residual_add_idtx8_8bpc_neon, 181
 residual_add_idtx_s16 residual_add_idtx16_8bpc_neon, 256
 residual_add_idtx_s16 residual_add_idtx32_8bpc_neon, 362
 
+.macro shift_and_narrow_4x4s_imm dst0, dst1, dst2, dst3, src0, src1, src2, src3, shift
+        sqrshrn         \dst0\().4h, \src0\().4s, #\shift
+        sqrshrn         \dst1\().4h, \src1\().4s, #\shift
+        sqrshrn         \dst2\().4h, \src2\().4s, #\shift
+        sqrshrn         \dst3\().4h, \src3\().4s, #\shift
+.endm
+
+.macro txfm4_dct_s16 shift
+        movi            v4.4h,   #83  // dct_qtable_s16[0]
+        movi            v5.4h,   #35  // dct_qtable_s16[1]
+        dct4_1d_body_s16 0, wzr, v30, v4,  v5
+        shift_and_narrow_4x4s_imm v16, v17, v18, v19, v0,  v1,  v2,  v3,  \shift
+.endm
+
+.macro txfm4_dst_s16 coeffs, shift
+        movrel          x8,  \coeffs
+        ldp             q4,  q5,  [x8]
+
+        dot1_4rows_s16  smull, v16, v17, v18, v19, v0,  .4h, v4,  v4,  v5,  v5,  0, 4
+        dot1_4rows_s16  smlal, v16, v17, v18, v19, v1,  .4h, v4,  v4,  v5,  v5,  1, 5
+        dot1_4rows_s16  smlal, v16, v17, v18, v19, v2,  .4h, v4,  v4,  v5,  v5,  2, 6
+        dot1_4rows_s16  smlal, v16, v17, v18, v19, v3,  .4h, v4,  v4,  v5,  v5,  3, 7
+
+        shift_and_narrow_4x4s_imm v16, v17, v18, v19, v16, v17, v18, v19, \shift
+.endm
+
+.macro txfm4_adst_s16 shift
+        txfm4_dst_s16   adst4_coeffs_s16, \shift
+.endm
+
+.macro txfm4_flipadst_s16 shift
+        txfm4_dst_s16   flipadst4_coeffs_s16, \shift
+.endm
+
+.macro txfm4_identity_s16 shift
+        sshll           v16.4s,  v0.4h,   #7
+        sshll           v17.4s,  v1.4h,   #7
+        sshll           v18.4s,  v2.4h,   #7
+        sshll           v19.4s,  v3.4h,   #7
+        shift_and_narrow_4x4s_imm v16, v17, v18, v19, v16, v17, v18, v19, \shift
+.endm
+
+.macro inv_txfm_add_4x4_body first, second
+        ldp             d0,  d1,  [x2]
+        ldp             d2,  d3,  [x2,  #16]
+        stp             xzr, xzr, [x2]
+        stp             xzr, xzr, [x2,  #16]
+
+        txfm4_\first\()_s16 7
+        transpose_4x4h  v0,  v1,  v2,  v3,  v16, v17, v18, v19, v20, v21, v22, v23
+
+        txfm4_\second\()_s16 10
+.endm
+
+// x0: dst, x1: dst_stride, x2: coeff, x3: txtp
+.macro inv_txfm_add_4x4_s16 name, first, second
+function inv_txfm_add_4x4_\name\()_8bpc_neon, export=1
+        inv_txfm_add_4x4_body \first, \second
+        residual_add_store4_u8_x4 x0,  x1,  x6,  16, 17, 18, 19
+        ret
+endfunc
+.endm
+
+// x0: dst, x1: dst_stride, x2: coeff, x3: txtp
+function inv_txfm_add_4x4_identity_identity_dpcm_8bpc_neon, export=1
+        inv_txfm_add_4x4_body identity, identity
+
+        // The residual_add DPCM case 0 is unreachable here, so just need to
+        // distinguish between transposed prefix and normal prefix sum.
+        tbz             w3,  #9, 1f
+
+        prefix_sum_local_s16 v16, v17, v18, v19
+        b               99f
+
+1:
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
+        prefix_sum_local_s16 v16, v17, v18, v19
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
+
+99:
+        residual_add_store4_u8_x4 x0,  x1,  x6,  16, 17, 18, 19
+        ret
+endfunc
+
+inv_txfm_add_4x4_s16 dct_dct,           dct,      dct
+inv_txfm_add_4x4_s16 dct_identity,      dct,      identity
+inv_txfm_add_4x4_s16 dct_adst,          dct,      adst
+inv_txfm_add_4x4_s16 dct_flipadst,      dct,      flipadst
+inv_txfm_add_4x4_s16 identity_dct,      identity, dct
+inv_txfm_add_4x4_s16 identity_identity, identity, identity
+inv_txfm_add_4x4_s16 identity_adst,     identity, adst
+inv_txfm_add_4x4_s16 identity_flipadst, identity, flipadst
+inv_txfm_add_4x4_s16 adst_dct,          adst,     dct
+inv_txfm_add_4x4_s16 adst_identity,     adst,     identity
+inv_txfm_add_4x4_s16 adst_adst,         adst,     adst
+inv_txfm_add_4x4_s16 adst_flipadst,     adst,     flipadst
+inv_txfm_add_4x4_s16 flipadst_dct,      flipadst, dct
+inv_txfm_add_4x4_s16 flipadst_identity, flipadst, identity
+inv_txfm_add_4x4_s16 flipadst_adst,     flipadst, adst
+inv_txfm_add_4x4_s16 flipadst_flipadst, flipadst, flipadst
+
 // x0: dst, x1: dst_stride, x2: coeff, w3: txtp
-function inv_txfm_add_wht_wht_4x4_8bpc_neon, export=1
+function inv_txfm_add_4x4_wht_wht_8bpc_neon, export=1
         lsr             w5,  w3,  #8
         mov             x6,  #8
         load_4_strided  d16, d17, d18, d19, x2,  x7,  x6,  0

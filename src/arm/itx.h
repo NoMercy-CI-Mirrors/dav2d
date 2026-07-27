@@ -46,6 +46,11 @@ typedef decl_itx_1d_row_fn(*itx_1d_fn_row);
              uint64_t howmany HIGHBD_DECL_SUFFIX)
 typedef decl_itx_1d_col_fn(*itx_1d_fn_col);
 
+#define decl_itx_2d_fn(name)                                                   \
+  void(name)(pixel *dst, ptrdiff_t dst_stride, coef *coeff,                    \
+             enum TxfmType txtp HIGHBD_DECL_SUFFIX)
+typedef decl_itx_2d_fn(*itx_2d_fn);
+
 #define decl_residual_add_fn(name)                                             \
   void(name)(pixel* dst, ptrdiff_t dst_stride, const coef *c, uint64_t w,      \
              uint64_t h, uint64_t shift,                                       \
@@ -57,6 +62,9 @@ decl_itx_1d_col_fn(BF(dav2d_inv_##name##_1d_col, neon))
 
 #define decl_residual_add_idtx_fn(sz) \
 decl_residual_add_fn(BF(dav2d_residual_add_idtx##sz, neon))
+
+#define decl_itx_2d(size, hor, ver) \
+decl_itx_2d_fn(BF(dav2d_inv_txfm_add_##size##_##hor##_##ver, neon))
 
 decl_itx_1d_pair(dct4);
 decl_itx_1d_pair(dct8);
@@ -82,9 +90,27 @@ decl_residual_add_idtx_fn(8);
 decl_residual_add_idtx_fn(16);
 decl_residual_add_idtx_fn(32);
 
-void BF(dav2d_inv_txfm_add_wht_wht_4x4,
-        neon)(pixel *dst, ptrdiff_t dst_stride, coef *coeff,
-              enum TxfmType txtp HIGHBD_DECL_SUFFIX);
+decl_itx_2d(4x4, dct,      dct);
+decl_itx_2d(4x4, dct,      identity);
+decl_itx_2d(4x4, dct,      adst);
+decl_itx_2d(4x4, dct,      flipadst);
+decl_itx_2d(4x4, identity, dct);
+decl_itx_2d(4x4, identity, identity);
+decl_itx_2d(4x4, identity, adst);
+decl_itx_2d(4x4, identity, flipadst);
+decl_itx_2d(4x4, adst,     dct);
+decl_itx_2d(4x4, adst,     identity);
+decl_itx_2d(4x4, adst,     adst);
+decl_itx_2d(4x4, adst,     flipadst);
+decl_itx_2d(4x4, flipadst, dct);
+decl_itx_2d(4x4, flipadst, identity);
+decl_itx_2d(4x4, flipadst, adst);
+decl_itx_2d(4x4, flipadst, flipadst);
+
+// Special-case IDTX + DPCM to fuse the final identity with residual_add.
+decl_itx_2d_fn(BF(dav2d_inv_txfm_add_4x4_identity_identity_dpcm, neon));
+decl_itx_2d_fn(BF(dav2d_inv_txfm_add_4x4_wht_wht, neon));
+
 void BF(dav2d_itx_dc_only, neon)(pixel *dst, ptrdiff_t stride, coef *coeff,
                                  uint64_t shift0, uint64_t shift1, uint64_t w,
                                  uint64_t h, uint64_t is_rect2
@@ -143,6 +169,30 @@ static const itx_1d_fn_row itx_1d_x4_fns_row[N_TX_SIZES][N_TX_1D_TYPES - 1] = {
         [IDENTITY] = BF(dav2d_inv_identity32_1d_row, neon),
     }, [TX_64X64] = {
         [DCT]      = BF(dav2d_inv_dct32_1d_row, neon),
+    },
+};
+
+static const itx_2d_fn itx_4x4_fns[N_TX_1D_TYPES - 1][N_TX_1D_TYPES - 1] = {
+    [DCT] = {
+        [DCT]      = BF(dav2d_inv_txfm_add_4x4_dct_dct, neon),
+        [IDENTITY] = BF(dav2d_inv_txfm_add_4x4_dct_identity, neon),
+        [ADST]     = BF(dav2d_inv_txfm_add_4x4_dct_adst, neon),
+        [FLIPADST] = BF(dav2d_inv_txfm_add_4x4_dct_flipadst, neon),
+    }, [IDENTITY] = {
+        [DCT]      = BF(dav2d_inv_txfm_add_4x4_identity_dct, neon),
+        [IDENTITY] = BF(dav2d_inv_txfm_add_4x4_identity_identity, neon),
+        [ADST]     = BF(dav2d_inv_txfm_add_4x4_identity_adst, neon),
+        [FLIPADST] = BF(dav2d_inv_txfm_add_4x4_identity_flipadst, neon),
+    }, [ADST] = {
+        [DCT]      = BF(dav2d_inv_txfm_add_4x4_adst_dct, neon),
+        [IDENTITY] = BF(dav2d_inv_txfm_add_4x4_adst_identity, neon),
+        [ADST]     = BF(dav2d_inv_txfm_add_4x4_adst_adst, neon),
+        [FLIPADST] = BF(dav2d_inv_txfm_add_4x4_adst_flipadst, neon),
+    }, [FLIPADST] = {
+        [DCT]      = BF(dav2d_inv_txfm_add_4x4_flipadst_dct, neon),
+        [IDENTITY] = BF(dav2d_inv_txfm_add_4x4_flipadst_identity, neon),
+        [ADST]     = BF(dav2d_inv_txfm_add_4x4_flipadst_adst, neon),
+        [FLIPADST] = BF(dav2d_inv_txfm_add_4x4_flipadst_flipadst, neon),
     },
 };
 
@@ -214,37 +264,31 @@ static void BF(dav2d_inv_txfm_add_4x4, neon)(pixel *dst,
 {
     const enum TxfmType base_txtp = txtp & 0xff;
     if (base_txtp == WHT_WHT) {
-        BF(dav2d_inv_txfm_add_wht_wht_4x4, neon)(dst, dst_stride, coeff, txtp
+        BF(dav2d_inv_txfm_add_4x4_wht_wht, neon)(dst, dst_stride, coeff, txtp
                                                  HIGHBD_TAIL_SUFFIX);
         return;
     }
 
+    assert(eob >= 0 && eob < 32 * 32);
+
     // Special-case IDTX + DPCM to fuse the final identity with residual_add.
-    if (txtp >> 8) { \
-        assert((txtp & 0xe7) == IDTX); \
-        assert(eob >= 0 && eob < 32 * 32);
-        coef tmp[4 * 4];
-        BF(dav2d_inv_identity4_1d_row, neon)(tmp, 4, coeff, 4, 7, 0, 4
-                                             HIGHBD_TAIL_SUFFIX);
-        BF(dav2d_residual_add_idtx4, neon)(dst, dst_stride, tmp, 4, 4,
-                                           10, txtp HIGHBD_TAIL_SUFFIX);
+    if (txtp >> 8) {
+        assert((txtp & 0xe7) == IDTX);
+        const itx_2d_fn fn =
+            BF(dav2d_inv_txfm_add_4x4_identity_identity_dpcm, neon);
+        fn(dst, dst_stride, coeff, txtp HIGHBD_TAIL_SUFFIX);
         return;
     }
 
-    const itx_1d_fn_row first_1d_fn = itx_1d_x4_fns_row[0][base_txtp & 7];
-    const itx_1d_fn_col second_1d_fn = itx_1d_x4_fns_col[0][base_txtp >> 5];
-    assert(first_1d_fn && second_1d_fn);
-    assert(eob >= 0 && eob < 32 * 32);
     if (eob == 0 && txtp == DCT_DCT) {
         BF(dav2d_itx_dc_only, neon)(dst, dst_stride, coeff, 7, 10, 4, 4, 0
                                     HIGHBD_TAIL_SUFFIX);
         return;
     }
 
-    coef tmp[4 * 4];
-    first_1d_fn(tmp, 4, coeff, 4, 7, 0, 4 HIGHBD_TAIL_SUFFIX);
-    second_1d_fn(dst, dst_stride, tmp, 4, 4, 4, 10, 4
-                 HIGHBD_TAIL_SUFFIX);
+    const itx_2d_fn fn = itx_4x4_fns[base_txtp & 7][base_txtp >> 5];
+    assert(fn);
+    fn(dst, dst_stride, coeff, txtp HIGHBD_TAIL_SUFFIX);
 }
 
 //        w   h lw lh shift0 shift1 rect2  sw  sh  tx
@@ -274,11 +318,13 @@ ITX_WRAP(64, 32, 4, 3,     6,    12,    1, 32, 32, RTX_64X32)
 ITX_WRAP(64, 64, 4, 4,     6,    13,    0, 32, 32, TX_64X64)
 
 #undef ITX_WRAP
-#undef decl_residual_add_idtx_fn
-#undef decl_itx_1d_pair
-#undef decl_residual_add_fn
 #undef decl_itx_1d_col_fn
+#undef decl_itx_1d_pair
 #undef decl_itx_1d_row_fn
+#undef decl_itx_2d
+#undef decl_itx_2d_fn
+#undef decl_residual_add_fn
+#undef decl_residual_add_idtx_fn
 
 #endif
 
