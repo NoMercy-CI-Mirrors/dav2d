@@ -180,10 +180,10 @@ L(dst4_transpose_loop8):
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v30
         shift_and_narrow_4x4s v20, v21, v22, v23, v20, v21, v22, v23, v30
 
-        transpose_4x4h  v16, v17, v18, v19, v24, v25, v26, v27
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v24, v25, v26, v27
         store_4_strided d16, d17, d18, d19, x0,  x13, x17, 0
 
-        transpose_4x4h  v20, v21, v22, v23, v24, v25, v26, v27
+        transpose_4x4h  v20, v21, v22, v23, v20, v21, v22, v23, v24, v25, v26, v27
         add             x13, x0,  x1,  lsl #3
         store_4_strided d20, d21, d22, d23, x13, x13, x17, 0
 
@@ -211,7 +211,7 @@ L(dst4_transpose_tail):
 
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v30
 
-        transpose_4x4h  v16, v17, v18, v19, v24, v25, v26, v27
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v24, v25, v26, v27
 
         store_4_strided d16, d17, d18, d19, x0,  x13, x17, 0
         add             x2,  x2,  #8
@@ -361,12 +361,12 @@ L(dst8_row_loop8):
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v30
         shift_and_narrow_4x4s v20, v21, v22, v23, v20, v21, v22, v23, v30
 
-        transpose_4x4h  v16, v17, v18, v19, v24, v25, v26, v27
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v24, v25, v26, v27
 
         add             x13, x0,  x9,  lsl #1
         store_4_strided d16, d17, d18, d19, x13, x13, x16
 
-        transpose_4x4h  v20, v21, v22, v23, v24, v25, v26, v27
+        transpose_4x4h  v20, v21, v22, v23, v20, v21, v22, v23, v24, v25, v26, v27
 
         add             x13, x0,  x1,  lsl #3
         add             x13, x13, x9,  lsl #1
@@ -401,7 +401,7 @@ L(dst8_row_tail_loop):
 
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v30
 
-        transpose_4x4h  v16, v17, v18, v19, v24, v25, v26, v27
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v24, v25, v26, v27
 
         add             x13, x0,  x9,  lsl #1
         store_4_strided d16, d17, d18, d19, x13, x13, x16
@@ -607,12 +607,12 @@ L(dst16_row_loop8):
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v30
         shift_and_narrow_4x4s v20, v21, v22, v23, v20, v21, v22, v23, v30
 
-        transpose_4x4h  v16, v17, v18, v19, v24, v25, v26, v27
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v24, v25, v26, v27
 
         add             x13, x0,  x9,  lsl #1
         store_4_strided d16, d17, d18, d19, x13, x13, x17
 
-        transpose_4x4h  v20, v21, v22, v23, v24, v25, v26, v27
+        transpose_4x4h  v20, v21, v22, v23, v20, v21, v22, v23, v24, v25, v26, v27
 
         add             x13, x0,  x1,  lsl #3
         add             x13, x13, x9,  lsl #1
@@ -639,7 +639,7 @@ L(dst16_row_tail_loop):
 
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v30
 
-        transpose_4x4h  v16, v17, v18, v19, v24, v25, v26, v27
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v24, v25, v26, v27
 
         add             x13, x0,  x9,  lsl #1
         store_4_strided d16, d17, d18, d19, x13, x13, x17
@@ -1097,11 +1097,11 @@ inv_dst_col_wrapper_s16 inv_flipddt16_1d_col_8bpc_neon, 4, ddt16_coeffs_s16, 15,
         dup             v31.4s,  \neg_shift
 
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v31
-        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
         store_4_strided d16, d17, d18, d19, \dst0, \dst0, \step
 
         shift_and_narrow_4x4s v3,  v2,  v1,  v0,  v3,  v2,  v1,  v0,  v31
-        transpose_4x4h  v3,  v2,  v1,  v0,  v20, v21, v22, v23
+        transpose_4x4h  v3,  v2,  v1,  v0,  v3,  v2,  v1,  v0,  v20, v21, v22, v23
         store_4_strided d3,  d2,  d1,  d0,  \dst1, \dst1, \step
 .endm
 
@@ -1167,7 +1167,7 @@ L(dct4_row_s16_loop):
         dct4_1d_body_s16 1, w5,  v30, v4,  v5
 
         shift_and_narrow_4x4s v16, v17, v18, v19, v0,  v1,  v2,  v3,  v31
-        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
         store_4_strided d16, d17, d18, d19, x11, x11, x15
 
         add             x9,  x9,  #8
@@ -1238,10 +1238,10 @@ L(dct8_row_s16_loop):
 
         add             x14, x12, #8
         shift_and_narrow_4x4s v16, v17, v18, v19, v0,  v1,  v2,  v3,  v31
-        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
         store_4_strided d16, d17, d18, d19, x12, x12, x15
         shift_and_narrow_4x4s v16, v17, v18, v19, v4,  v5,  v6,  v7,  v31
-        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
         store_4_strided d16, d17, d18, d19, x14, x14, x15
 
         add             x10, x10, #8
@@ -1381,11 +1381,11 @@ L(dct16_row_s16_loop):
         add             x15, x17, #24
 
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v31
-        transpose_4x4h  v16, v17, v18, v19, v0,  v1,  v2,  v3
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v0,  v1,  v2,  v3
         store_4_strided d16, d17, d18, d19, x17, x17, x16
 
         shift_and_narrow_4x4s v23, v22, v21, v20, v23, v22, v21, v20, v31
-        transpose_4x4h  v23, v22, v21, v20, v0,  v1,  v2,  v3
+        transpose_4x4h  v23, v22, v21, v20, v23, v22, v21, v20, v0,  v1,  v2,  v3
         store_4_strided d23, d22, d21, d20, x15, x15, x16
 
         add             v16.4s,  v8.4s,    v12.4s
@@ -1398,11 +1398,11 @@ L(dct16_row_s16_loop):
         sub             v23.4s,  v11.4s,   v15.4s
 
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v31
-        transpose_4x4h  v16, v17, v18, v19, v0,  v1,  v2,  v3
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v0,  v1,  v2,  v3
         store_4_strided d16, d17, d18, d19, x13, x13, x16
 
         shift_and_narrow_4x4s v23, v22, v21, v20, v23, v22, v21, v20, v31
-        transpose_4x4h  v23, v22, v21, v20, v0,  v1,  v2,  v3
+        transpose_4x4h  v23, v22, v21, v20, v23, v22, v21, v20, v0,  v1,  v2,  v3
         store_4_strided d23, d22, d21, d20, x14, x14, x16
         add             x9,  x9,  #8
         add             x17, x17, x16, lsl #1
@@ -1873,7 +1873,7 @@ endfunc
         smull           v18.4s,  v6.4h,   v0.4h
         smull           v19.4s,  v7.4h,   v0.4h
         shift_and_narrow_4x4s v16, v17, v18, v19, v16, v17, v18, v19, v31
-        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
         store_4_strided d16, d17, d18, d19, \dst, \dst, \dst_stride, \dst_inc
 .endm
 
@@ -2088,7 +2088,7 @@ L(ridtx_s16_case1_y_\@):
         mov             w15, w3
 L(ridtx_s16_case1_x_\@):
         load_idtx_s16_x4 x13, x8,  x16, 16, 17, 18, 19
-        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
         prefix_sum_accum_s16_to_s32 v24, v16, v17, v18, v19, v20, v21, v22, v23
         transpose_4x4s  v20, v21, v22, v23, v16, v17, v18, v19
         sqxtn           v20.4h,  v20.4s
@@ -2146,7 +2146,7 @@ function inv_txfm_add_wht_wht_4x4_8bpc_neon, export=1
         stp             xzr, xzr, [x2,  #16]
 
         inv_wht4_1d_s16 v16, v17, v18, v19, v20, v21, v22
-        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
         inv_wht4_1d_s16 v16, v17, v18, v19, v20, v21, v22
 
         cbz             w5,  L(wht4_s16_store)
@@ -2156,9 +2156,9 @@ function inv_txfm_add_wht_wht_4x4_8bpc_neon, export=1
         b               L(wht4_s16_store)
 
 L(wht4_s16_case1):
-        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
         prefix_sum_local_s16 v16, v17, v18, v19
-        transpose_4x4h  v16, v17, v18, v19, v20, v21, v22, v23
+        transpose_4x4h  v16, v17, v18, v19, v16, v17, v18, v19, v20, v21, v22, v23
 
 L(wht4_s16_store):
         residual_add_store4_u8_x4 x0,  x1,  x6,  16, 17, 18, 19

@@ -243,16 +243,16 @@
         trn2            \r3\().8h,  \t5\().8h,  \t7\().8h
 .endm
 
-.macro  transpose_4x4h  r0, r1, r2, r3, t4, t5, t6, t7
-        trn1            \t4\().4h,  \r0\().4h,  \r1\().4h
-        trn2            \t5\().4h,  \r0\().4h,  \r1\().4h
-        trn1            \t6\().4h,  \r2\().4h,  \r3\().4h
-        trn2            \t7\().4h,  \r2\().4h,  \r3\().4h
+.macro  transpose_4x4h  d0, d1, d2, d3, s0, s1, s2, s3, t4, t5, t6, t7
+        trn1            \t4\().4h,  \s0\().4h,  \s1\().4h
+        trn2            \t5\().4h,  \s0\().4h,  \s1\().4h
+        trn1            \t6\().4h,  \s2\().4h,  \s3\().4h
+        trn2            \t7\().4h,  \s2\().4h,  \s3\().4h
 
-        trn1            \r0\().2s,  \t4\().2s,  \t6\().2s
-        trn2            \r2\().2s,  \t4\().2s,  \t6\().2s
-        trn1            \r1\().2s,  \t5\().2s,  \t7\().2s
-        trn2            \r3\().2s,  \t5\().2s,  \t7\().2s
+        trn1            \d0\().2s,  \t4\().2s,  \t6\().2s
+        trn2            \d2\().2s,  \t4\().2s,  \t6\().2s
+        trn1            \d1\().2s,  \t5\().2s,  \t7\().2s
+        trn2            \d3\().2s,  \t5\().2s,  \t7\().2s
 .endm
 
 .macro  transpose_4x4s  r0, r1, r2, r3, t4, t5, t6, t7
