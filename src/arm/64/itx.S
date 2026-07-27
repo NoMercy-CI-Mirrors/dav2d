@@ -2237,8 +2237,8 @@ inv_txfm_add_4x4_s16 flipadst_flipadst, flipadst, flipadst
 // x0: dst, x1: dst_stride, x2: coeff, w3: txtp
 function inv_txfm_add_4x4_wht_wht_8bpc_neon, export=1
         lsr             w5,  w3,  #8
-        mov             x6,  #8
-        load_4_strided  d16, d17, d18, d19, x2,  x7,  x6,  0
+        ldp             d16, d17, [x2]
+        ldp             d18, d19, [x2,  #16]
         sshr            v16.4h,  v16.4h,  #3
         sshr            v17.4h,  v17.4h,  #3
         sshr            v18.4h,  v18.4h,  #3
