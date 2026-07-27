@@ -176,6 +176,7 @@ if is_asm_enabled
                 'x86/stx_avx512.asm',
                 'x86/filmgrain_avx2.asm',
                 'x86/ipred_avx2.asm',
+                'x86/ccso_avx2.asm',
                 'x86/cfl_avx2.asm',
                 'x86/itx_avx2.asm',
                 'x86/deblock_avx2.asm',

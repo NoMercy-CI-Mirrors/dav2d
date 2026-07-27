@@ -191,6 +191,12 @@ static void ccso_add_c(pixel *line, const ptrdiff_t dst_stride,
     }
 }
 
+#if HAVE_ASM
+#if ARCH_X86
+#include "src/x86/ccso.h"
+#endif
+#endif
+
 COLD void bitfn(dav2d_ccso_dsp_init)(Dav2dCcsoDSPContext *const c) {
     c->prep_bo[0] = ccso_prep_444_bo_c;
     c->prep_bo[1] = ccso_prep_422_bo_c;
@@ -201,4 +207,10 @@ COLD void bitfn(dav2d_ccso_dsp_init)(Dav2dCcsoDSPContext *const c) {
     c->prep_clf[2] = ccso_prep_420_clf_c;
 
     c->add = ccso_add_c;
+
+#if HAVE_ASM
+#if ARCH_X86
+    ccso_dsp_init_x86(c);
+#endif
+#endif
 }
