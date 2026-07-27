@@ -51,9 +51,9 @@ static void padding(pixel *const tmp, const ptrdiff_t tmp_stride,
 {
     int x_min = edges & CDEF_HAVE_LEFT ? -2 : 0;
     int x_max = w - 1 + (edges & CDEF_HAVE_RIGHT ? 2 : 0);
-    int y_min = edges & CDEF_HAVE_TOP ? -2 : 0;
-    int y_max = h - 1 + (edges & CDEF_HAVE_BOTTOM ? 2 : 0);
-    for (int y = -2; y < h + 2; y++) {
+    int y_min = edges & CDEF_HAVE_TOP ? -1 : 0;
+    int y_max = h - 1 + (edges & CDEF_HAVE_BOTTOM ? 1 : 0);
+    for (int y = -1; y < h + 1; y++) {
         int src_y = iclip(y, y_min, y_max);
         for (int x = -2; x < w + 2; x++) {
             pixel v;
