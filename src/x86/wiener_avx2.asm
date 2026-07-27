@@ -65,6 +65,8 @@ pb_left2_diag1_hi: db 4*3+1, -1, 4*3+2, -1
 
 pb_user_filter_shuf: db 14, 15,  6,  7, 12, 10,  2,  0
                      db  8,  4,  3,  1,  9,  5, 13, 11
+pb_pt_filter_shuf:   db 11, 11,  6,  7, 10,  2,  0, 12
+                     db  8,  4,  3,  1,  9,  5, -1, -1
 center_tap_shuf: db  0,  1,  0,  1,  8,  9,  8,  9
                  db  4,  5,  4,  5, 12, 13, 12, 13
 
@@ -78,18 +80,23 @@ pb_shuf_4xAB_4xEF: times 4 db 10, 11
                    times 4 db 14, 15
 pb_rev_bw: db  1,  0,  3,  2,  5,  4,  7,  6,  9,  8, 11, 10, 13, 12, 15, 14
 
+pb_pt_ll_filt: times 8 db 0
+               times 2 db 0, 0, 0, 64
+
+pb_3:    times 4 db 3
 pb_128:  times 4 db 128
-pw_128:  times 2 dw 128
-pw_1088: times 2 dw 1088
-pw_4096: times 2 dw 4096
-pw_3739: times 2 dw 3739
-pw_3273: times 2 dw 3273
-pw_3074: times 2 dw 3074
 pw_1:    times 2 dw 1
+pw_128:  times 2 dw 128
 pw_256:  times 2 dw 256
+pw_1088: times 2 dw 1088
+pw_3072: times 2 dw 3072
+pw_3074: times 2 dw 3074
+pw_3273: times 2 dw 3273
+pw_3739: times 2 dw 3739
+pw_4096: times 2 dw 4096
 pd_255:  dd 255
 pd_8192: dd 8192
-pb_3:    times 4 db 3
+pd_3072: dd 3072
 
 %define m(x) mangle(private_prefix %+ _ %+ x %+ SUFFIX)
 %define BUF_STRIDE 128
@@ -176,6 +183,26 @@ INIT_YMM avx2
     paddw             %1, %3
 %endmacro
 
+%macro start_pair 7 ; dst_lo, dst_hi, in0, in1, mul_lo, mul_hi, tmp
+    movu              %2, %3
+    movu              %7, %4
+    punpcklbw         %1, %2, %7
+    punpckhbw         %2, %7
+    pmaddubsw         %1, %5
+    pmaddubsw         %2, %6
+%endmacro
+
+%macro accum_pair 9 ; dst_lo, dst_hi, in0, in1, mul_lo, mul_hi, tmp0-2
+    movu              %7, %3
+    movu              %8, %4
+    punpcklbw         %9, %7, %8
+    punpckhbw         %7, %8
+    pmaddubsw         %9, %5
+    pmaddubsw         %7, %6
+    paddw             %1, %9
+    paddw             %2, %7
+%endmacro
+
 ; NOTES:
 ; * This implementation splits the backup for the weiner filter across cache
 ;   lines for each iteration to prevent loads crossing cache boundries. The
@@ -197,7 +224,7 @@ cglobal wiener_multi_8bpc, 10, 14, 16, \
     not            tmp0d
     mov            tmp1d, edged
     or             edged, 64
-    test           tmp0d, 3
+    test           tmp0b, 3
     cmovne         edged, tmp1d
 
     mov        [Stk(bw)], bwd
@@ -282,14 +309,17 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
     mov       class_lutq, [Stk(class_lut)]
 
     vextracti128     xm1, m0, 1
-    ; f0/f1
-    movq           tmp1q, xm0
+%macro get_user_filter_offset 0
     mov            tmp0d, tmp1d
     shr            tmp1q, 32
     movzx          tmp0d, byte [class_lutq+tmp0q]
     movzx          tmp1d, byte [class_lutq+tmp1q]
     shl            tmp0d, 2
     shl            tmp1d, 2
+%endmacro
+    ; f0/f1
+    movq           tmp1q, xm0
+    get_user_filter_offset
     mova            xm10, [Stk(filters) + tmp0q*4]
     mova            xm13, [Stk(filters) + tmp1q*4]
     movd             xm8, [Stk(center_tap) + tmp0q]
@@ -297,12 +327,7 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
 
     ; f4/f5
     movq           tmp1q, xm1
-    mov            tmp0d, tmp1d
-    shr            tmp1q, 32
-    movzx          tmp0d, byte [class_lutq+tmp0q]
-    movzx          tmp1d, byte [class_lutq+tmp1q]
-    shl            tmp0d, 2
-    shl            tmp1d, 2
+    get_user_filter_offset
     vinserti128      m10, [Stk(filters) + tmp0q*4], 1
     vinserti128      m13, [Stk(filters) + tmp1q*4], 1
     movd             xm9, [Stk(center_tap) + tmp0q]
@@ -310,12 +335,7 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
 
     ; f2/f3
     pextrq         tmp1q, xm0, 1
-    mov            tmp0d, tmp1d
-    shr            tmp1q, 32
-    movzx          tmp0d, byte [class_lutq+tmp0q]
-    movzx          tmp1d, byte [class_lutq+tmp1q]
-    shl            tmp0d, 2
-    shl            tmp1d, 2
+    get_user_filter_offset
     mova            xm14, [Stk(filters) + tmp0q*4]
     mova            xm15, [Stk(filters) + tmp1q*4]
     pinsrd           xm8, [Stk(center_tap) + tmp0q], 2
@@ -323,12 +343,7 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
 
     ; f6/f7
     pextrq         tmp1q, xm1, 1
-    mov            tmp0d, tmp1d
-    shr            tmp1q, 32
-    movzx          tmp0d, byte [class_lutq+tmp0q]
-    movzx          tmp1d, byte [class_lutq+tmp1q]
-    shl            tmp0d, 2
-    shl            tmp1d, 2
+    get_user_filter_offset
     vinserti128      m14, [Stk(filters) + tmp0q*4], 1
     vinserti128      m15, [Stk(filters) + tmp1q*4], 1
     pinsrd           xm9, [Stk(center_tap) + tmp0q], 2
@@ -339,10 +354,10 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
     ; Note: The indexes in the comments do not match the filter value pattern
     ;       since they were shuffled beforehand
     ; f0   f1   f0   f1   | f4   f5   f4   f5
-    ; 0123 0123 4567 4567 | 0123 4567 0123 4567
+    ; 0123 0123 4567 4567 | 0123 0123 4567 4567
     punpckldq        m11, m10, m13
     ; f2   f3   f2   f3   | f6   f7   f6   f7
-    ; 0123 0123 4567 4567 | 0123 4567 0123 4567
+    ; 0123 0123 4567 4567 | 0123 0123 4567 4567
     punpckldq        m12, m14, m15
 
     ; f0 f1 f0 f1 f0 f1 f0 f1 | f4 f5 f4 f5 f4 f5 f4 f5
@@ -428,92 +443,28 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
     pshufb           m14, m11, m15
     pshufb           m15, m12, m15
 
-%macro start_pair 6 ; dst_lo, dst_hi, in0, in1, mul_lo, mul_hi
-    punpcklbw         %1, %3, %4
-    punpckhbw         %2, %3, %4
-    pmaddubsw         %1, %5
-    pmaddubsw         %2, %6
-%endmacro
-
-%macro accum_pair 7 ; dst_lo, dst_hi, in0, in1, mul_lo, mul_hi, tmp
-    punpcklbw         %7, %3, %4
-    punpckhbw         %3, %4
-    pmaddubsw         %7, %5
-    pmaddubsw         %3, %6
-    paddw             %1, %7
-    paddw             %2, %3
-%endmacro
-
     ; Group A
     ; Filters: E, F
-    movu              m8, [buf_addr(-3,-3)]
-    movu              m9, [buf_addr( 3,-3)]
-    start_pair m0, m1, m8, m9, m14, m15
+    start_pair m0, m1, [buf_addr(-3,-3)], [buf_addr( 3, -3)], m14, m15, m8
+    start_pair m2, m3, [buf_addr(-3,-2)], [buf_addr( 3, -2)], m14, m15, m8
+    start_pair m4, m5, [buf_addr(-3,-1)], [buf_addr( 3, -1)], m14, m15, m8
+    start_pair m6, m7, [buf_addr(-3, 0)], [buf_addr( 3,  0)], m14, m15, m8
 
-    movu              m8, [buf_addr(-3,-2)]
-    movu              m9, [buf_addr( 3,-2)]
-    start_pair m2, m3, m8, m9, m14, m15
-
-    movu              m8, [buf_addr(-3,-1)]
-    movu              m9, [buf_addr( 3,-1)]
-    start_pair m4, m5, m8, m9, m14, m15
-
-    movu              m8, [buf_addr(-3, 0)]
-    movu              m9, [buf_addr( 3, 0)]
-    start_pair m6, m7, m8, m9, m14, m15
-
-    movu              m8, [buf_addr( 3, 3)]
-    movu              m9, [buf_addr(-3, 3)]
-    accum_pair m0, m1, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr( 3, 4)]
-    movu              m9, [buf_addr(-3, 4)]
-    accum_pair m2, m3, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr( 3, 5)]
-    movu              m9, [buf_addr(-3, 5)]
-    accum_pair m4, m5, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr( 3, 6)]
-    movu              m9, [buf_addr(-3, 6)]
-    accum_pair m6, m7, m8, m9, m14, m15, m10
+    accum_pair m0, m1, [buf_addr( 3, 3)], [buf_addr(-3, 3)], m14, m15, \
+               m8, m9, m10
+    accum_pair m2, m3, [buf_addr( 3, 4)], [buf_addr(-3, 4)], m14, m15, \
+               m8, m9, m10
+    accum_pair m4, m5, [buf_addr( 3, 5)], [buf_addr(-3, 5)], m14, m15, \
+               m8, m9, m10
+    accum_pair m6, m7, [buf_addr( 3, 6)], [buf_addr(-3, 6)], m14, m15, \
+               m8, m9, m10
 
     vbroadcasti128   m10, [pb_shuf_4x23_4x67]
     pshufb           m14, m11, m10
     pshufb           m15, m12, m10
 
     ; Filters: 6, 7
-    movu              m8, [buf_addr(-1,-2)]
-    movu              m9, [buf_addr( 1,-2)]
-    accum_pair m0, m1, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr(-1,-1)]
-    movu              m9, [buf_addr( 1,-1)]
-    accum_pair m2, m3, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr(-1, 0)]
-    movu              m9, [buf_addr( 1, 0)]
-    accum_pair m4, m5, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr(-1, 1)]
-    movu              m9, [buf_addr( 1, 1)]
-    accum_pair m6, m7, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr( 1, 2)]
-    movu              m9, [buf_addr(-1, 2)]
-    accum_pair m0, m1, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr( 1, 3)]
-    movu              m9, [buf_addr(-1, 3)]
-    accum_pair m2, m3, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr( 1, 4)]
-    movu              m9, [buf_addr(-1, 4)]
-    accum_pair m4, m5, m8, m9, m14, m15, m10
-
-    movu              m8, [buf_addr( 1, 5)]
-    movu              m9, [buf_addr(-1, 5)]
-    accum_pair m6, m7, m8, m9, m14, m15, m10
+    call .filters67
 
     vbroadcasti128    m8, [pb_shuf_4x89_4xCD]
     vbroadcasti128    m9, [pb_shuf_4xAB_4xEF]
@@ -826,6 +777,26 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
     jg .row_loop
 
     RET
+%assign call_depth 1
+.filters67:
+    accum_pair m0, m1, [buf_addr(-1,-2)], [buf_addr( 1,-2)], m14, m15, \
+               m8, m9, m10
+    accum_pair m2, m3, [buf_addr(-1,-1)], [buf_addr( 1,-1)], m14, m15, \
+               m8, m9, m10
+    accum_pair m4, m5, [buf_addr(-1, 0)], [buf_addr( 1, 0)], m14, m15, \
+               m8, m9, m10
+    accum_pair m6, m7, [buf_addr(-1, 1)], [buf_addr( 1, 1)], m14, m15, \
+               m8, m9, m10
+
+    accum_pair m0, m1, [buf_addr( 1, 2)], [buf_addr(-1, 2)], m14, m15, \
+               m8, m9, m10
+    accum_pair m2, m3, [buf_addr( 1, 3)], [buf_addr(-1, 3)], m14, m15, \
+               m8, m9, m10
+    accum_pair m4, m5, [buf_addr( 1, 4)], [buf_addr(-1, 4)], m14, m15, \
+               m8, m9, m10
+    accum_pair m6, m7, [buf_addr( 1, 5)], [buf_addr(-1, 5)], m14, m15, \
+               m8, m9, m10
+    ret
 
 %assign call_depth 1
 .setup_new_row:
@@ -1616,3 +1587,414 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, stride3, \
     movq             xm6, [pq+strideq*2-8]
     movq             xm7, [pq+stride3q-8]
     jmp .store_left
+
+%assign call_depth 0
+cglobal wiener_pretrained_8bpc, 10, 15, 16, \
+                           0 - ((UserMultiFilterStk.size + 31) & ~31), \
+                           p, stride, left, top, mid, bot, ll_mask, bw, bh, \
+                           edge, tmp0, tmp1
+    shr              bwd, 2
+    shr              bhd, 2
+
+    ; edge |= ((edge & 3) == 3) << 6;
+    mov            tmp0d, edged
+    not            tmp0d
+    mov            tmp1d, edged
+    or             edged, 64
+    test           tmp0b, 3
+    cmovne         edged, tmp1d
+
+    mov        [Stk(bw)], bwd
+    mov         [Stk(p)], pq
+
+    ; Reorder filters and backup
+DEFINE_ARGS p, stride, left, lpf, lpf_bot, params, ll_mask, bw, bh, edge, \
+            cnt, _12, _13, _14, filters
+    mov         filtersq, [paramsq + WienerParams.filters]
+    pxor             m14, m14
+    vpbroadcastd     m13, [pb_128]
+    vpbroadcastd     m12, [pw_1088]
+    vbroadcasti128   m11, [center_tap_shuf]
+
+DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
+            class_lut, tmp0, tmp1, filters
+    call m(wiener_multi_8bpc).setup_common
+    mov               pq, [Stk(p)]
+    mov              bwd, [Stk(bw)]
+
+    lea             topq, [Stk(row_bufs) + 8]
+    lea             midq, [Stk(row_bufs) + BUF_STRIDE*4 + 8]
+    lea             botq, [Stk(row_bufs) + BUF_STRIDE*8 + 8]
+.row_loop:
+    call m(wiener_multi_8bpc).setup_new_row
+
+    xor              bxd, bxd
+.col_loop:
+    call m(wiener_multi_8bpc).calc_features
+
+    mov       class_lutq, [Stk(class_lut)]
+
+    vbroadcasti128    m7, [pb_pt_filter_shuf]
+
+%macro get_pretrained_filter_offsets 0
+    mov            tmp0d, tmp1d
+    shr            tmp1q, 32
+    movzx          tmp0d, byte [class_lutq+tmp0q]
+    movzx          tmp1d, byte [class_lutq+tmp1q]
+    imul           tmp0d, 13
+    imul           tmp1d, 13
+%endmacro
+    vextracti128     xm1, m0, 1
+    ; f0/f1
+    movq           tmp1q, xm0
+    get_pretrained_filter_offsets
+    movu            xm10, [filtersq + tmp0q]
+    movu            xm13, [filtersq + tmp1q]
+
+    ; f4/f5
+    movq           tmp1q, xm1
+    get_pretrained_filter_offsets
+    vinserti128      m10, [filtersq + tmp0q], 1
+    vinserti128      m13, [filtersq + tmp1q], 1
+    pshufb           m10, m7
+    pshufb           m13, m7
+
+    ; f2/f3
+    pextrq         tmp1q, xm0, 1
+    get_pretrained_filter_offsets
+    movu            xm14, [filtersq + tmp0q]
+    movu            xm15, [filtersq + tmp1q]
+
+    ; f6/f7
+    pextrq         tmp1q, xm1, 1
+    get_pretrained_filter_offsets
+    vinserti128      m14, [filtersq + tmp0q], 1
+    vinserti128      m15, [filtersq + tmp1q], 1
+    pshufb           m14, m7
+    pshufb           m15, m7
+
+    ; Transpose
+    ; Note: The indexes in the comments do not match the filter value pattern
+    ;       since they were shuffled beforehand
+    ; f0   f1   f0   f1   | f4   f5   f4   f5
+    ; 0123 0123 4567 4567 | 0123 0123 4567 4567
+    punpckldq        m11, m10, m13
+    ; f2   f3   f2   f3   | f6   f7   f6   f7
+    ; 0123 0123 4567 4567 | 0123 0123 4567 4567
+    punpckldq        m12, m14, m15
+
+    ; f0 f1 f0 f1 f0 f1 f0 f1 | f4 f5 f4 f5 f4 f5 f4 f5
+    ; 89 89 AB AB CD CD EF EF | 89 89 AB AB CD CD EF EF
+    punpckhwd        m10, m13
+    ; f2 f3 f2 f3 f2 f3 f2 f3 | f6 f7 f6 f7 f6 f7 f6 f7
+    ; 89 89 AB AB CD CD EF EF | 89 89 AB AB CD CD EF EF
+    punpckhwd        m14, m15
+    ; f0 f1 f2 f3 f0 f1 f2 f3 | f4 f5 f6 f7 f4 f5 f6 f7
+    punpckldq        m15, m10, m14
+    punpckhdq        m10, m14
+
+    ; TODO: Mask the stored values or mess with the indices or just use
+    ;       branch prediction to skip this most of the time.
+    ; Create an empty filter for lossless blocks
+    vpbroadcastb      m7, [ll_maskq]
+    mova              m6, [pd_mask]
+    vbroadcasti128    m4, [pb_pt_ll_filt]
+    pand              m7, m6
+    pcmpeqd           m7, m6
+    pshufd            m6, m7, q1010
+    pshufd            m5, m7, q3232
+    vblendvps        m11, m4, m6
+    vblendvps        m12, m4, m5
+    packssdw          m7, m7
+    pandn            m15, m7, m15
+    pandn            m10, m7, m10
+
+    mova [Stk(scratch) + 32*24], m15
+    mova [Stk(scratch) + 32*25], m10
+
+    ; Pattern of filter values:
+    ;     -3 -2 -1  0  1  2  3
+    ;    ┌──┬──┬──┬──┬──┬──┬──┐
+    ; -3 │  │  │  │ A│  │  │  │
+    ; -2 │  │  │ 6│ 2│ 7│  │  │
+    ; -1 │  │ 8│ 4│ 0│ 5│ 9│  │
+    ;  0 │ B│ 3│ 1│ X│ 1│ 3│ B│
+    ;  1 │  │ 9│ 5│ 0│ 4│ 8│  │
+    ;  2 │  │  │ 7│ 2│ 6│  │  │
+    ;  3 │  │  │  │ A│  │  │  │
+    ;    └──┴──┴──┴──┴──┴──┴──┘
+    ; Initial accumulation happens in 16 bits in 4 seperate groups to avoid
+    ; overflows. To find a pattern that works, you have to go through all of
+    ; the pretrained filters.
+    ; The groups use the pattern below:
+    ;     -3 -2 -1  0  1  2  3
+    ;    ┌──┬──┬──┬──┬──┬──┬──┐
+    ; -3 │  │  │  │ A│  │  │  │
+    ; -2 │  │  │ A│ A│ A│  │  │
+    ; -1 │  │ C│ C│ A│ D│ D│  │
+    ;  0 │ A│ C│ C│AB│ D│ D│ A│
+    ;  1 │  │ C│ C│ B│ D│ D│  │
+    ;  2 │  │  │ A│ B│ A│  │  │
+    ;  3 │  │  │  │ B│  │  │  │
+    ;    └──┴──┴──┴──┴──┴──┴──┘
+    ; Groups A/B unpack loaded values and then run maddubsw. This includes
+    ;   half of the center tap value for each (see AB).
+    ; Groups C/D runs maddubsw on horz adjacent pairs of values together.
+    ;  is the center tap.
+
+    ; Group A
+    ; Filters: B
+
+    ; duplicate pairs of filters
+    vbroadcasti128   m15, [pb_shuf_4x01_4x45]
+    pshufb           m14, m11, m15
+    pshufb           m15, m12, m15
+
+    start_pair m0, m1, [buf_addr(-3, 0)], [buf_addr( 3, 0)], m14, m15, m8
+    start_pair m2, m3, [buf_addr(-3, 1)], [buf_addr( 3, 1)], m14, m15, m8
+    start_pair m4, m5, [buf_addr(-3, 2)], [buf_addr( 3, 2)], m14, m15, m8
+    start_pair m6, m7, [buf_addr(-3, 3)], [buf_addr( 3, 3)], m14, m15, m8
+
+    ; Offset to prevent overflowing
+    vpbroadcastd     m10, [pw_3072]
+    REPX {psubw x, m10}, m0, m1, m2, m3, m4, m5, m6, m7
+
+    ; Filters: 6, 7
+    vbroadcasti128   m10, [pb_shuf_4x23_4x67]
+    pshufb           m14, m11, m10
+    pshufb           m15, m12, m10
+
+    call m(wiener_multi_8bpc).filters67
+
+    vbroadcasti128    m8, [pb_shuf_4x89_4xCD]
+    vbroadcasti128    m9, [pb_shuf_4xAB_4xEF]
+
+    ; Filters: A, 2, 0, X
+    ; duplicate pairs of filters
+    pshufb           m13, m12, m8
+    pshufb           m15, m12, m9
+    pshufb           m12, m11, m8
+    pshufb           m14, m11, m9
+
+    movu              m8, [buf_addr(0,-3)]
+    movu              m9, [buf_addr(0,-2)]
+    punpcklbw        m10, m8, m9
+    punpckhbw         m8, m9
+    pmaddubsw        m10, m12
+    pmaddubsw         m8, m13
+    paddw             m0, m10
+    paddw             m1, m8
+    movu              m8, [buf_addr(0,-1)]
+    punpcklbw        m10, m9, m8
+    punpckhbw         m9, m8
+    pmaddubsw        m10, m12
+    pmaddubsw         m9, m13
+    paddw             m2, m10
+    paddw             m3, m9
+    movu              m9, [buf_addr(0, 0)]
+    punpcklbw        m10, m8, m9
+    punpckhbw         m8, m9
+    pmaddubsw        m11, m10, m14
+    pmaddubsw        m10, m12
+    paddw             m0, m11
+    paddw             m4, m10
+    pmaddubsw        m11, m8, m15
+    pmaddubsw         m8, m13
+    paddw             m1, m11
+    paddw             m5, m8
+    movu              m8, [buf_addr(0, 1)]
+    mova [Stk(scratch) + 32*16], m0
+    mova [Stk(scratch) + 32*17], m1
+    punpcklbw         m0, m9, m8
+    pmaddubsw        m10, m0, m14
+    punpckhbw         m1, m9, m8
+    pmaddubsw        m11, m0, m12
+    paddw             m2, m10
+    paddw             m6, m11
+    pmaddubsw        m10, m1, m15
+    pmaddubsw        m11, m1, m13
+    paddw             m3, m10
+    paddw             m7, m11
+
+    movu              m9, [buf_addr(0, 2)]
+    mova [Stk(scratch) + 32*18], m2
+    mova [Stk(scratch) + 32*19], m3
+    punpcklbw         m2, m8, m9
+    punpckhbw         m3, m8, m9
+    pmaddubsw        m10, m2, m14
+    pmaddubsw        m11, m3, m15
+    paddw             m4, m10
+    paddw             m5, m11
+    movu              m8, [buf_addr(0, 3)]
+    mova [Stk(scratch) + 32*20], m4
+    mova [Stk(scratch) + 32*21], m5
+    punpcklbw         m4, m9, m8
+    punpckhbw         m5, m9, m8
+    pmaddubsw        m10, m4, m14
+    pmaddubsw        m11, m5, m15
+    paddw             m6, m10
+    paddw             m7, m11
+
+    vbroadcasti128   m10, [pb_rev_bw]
+    mova [Stk(scratch) + 32*22], m6
+    mova [Stk(scratch) + 32*23], m7
+    REPX {pshufb x, m10}, m14, m15, m12, m13
+
+    ; Group B
+    pmaddubsw         m0, m14
+    pmaddubsw         m1, m15
+    pmaddubsw         m2, m14
+    pmaddubsw         m3, m15
+    pmaddubsw         m9, m4, m12
+    pmaddubsw        m10, m5, m13
+    pmaddubsw         m4, m14
+    pmaddubsw         m5, m15
+    paddw             m0, m9
+    paddw             m1, m10
+
+    movu              m9, [buf_addr(0, 4)]
+    punpcklbw         m6, m8, m9
+    punpckhbw         m7, m8, m9
+    pmaddubsw         m8, m6, m12
+    pmaddubsw         m6, m14
+    paddw             m2, m8
+    pmaddubsw         m8, m7, m13
+    pmaddubsw         m7, m15
+    paddw             m3, m8
+
+    movu              m8, [buf_addr(0, 5)]
+    punpcklbw        m10, m9, m8
+    punpckhbw         m9, m8
+    pmaddubsw        m10, m12
+    pmaddubsw         m9, m13
+    paddw             m4, m10
+    paddw             m5, m9
+
+    movu              m9, [buf_addr(0, 6)]
+    punpcklbw        m10, m8, m9
+    punpckhbw         m8, m9
+    pmaddubsw        m10, m12
+    pmaddubsw         m8, m13
+    paddw             m6, m10
+    paddw             m7, m8
+
+    mova [Stk(scratch) + 32*8], m0
+    mova [Stk(scratch) + 32*9], m1
+    mova [Stk(scratch) + 32*10], m2
+    mova [Stk(scratch) + 32*11], m3
+    mova [Stk(scratch) + 32*12], m4
+    mova [Stk(scratch) + 32*13], m5
+    mova [Stk(scratch) + 32*14], m6
+    mova [Stk(scratch) + 32*15], m7
+
+    ; Group C
+    mova m13, [Stk(scratch) + 32*24]
+    mova m15, [Stk(scratch) + 32*25]
+    ; duplicate multipliers
+    ; f0 f1 f2 f3 | f4 f5 f6 f7
+    punpcklwd  m12, m13, m13
+    punpckhwd  m13, m13
+    punpcklwd  m14, m15, m15
+
+    group_cd_inner m0, m1, m2, m3, m12, m13, m14, -2
+    group_cd_inner m4, m5, m6, m7, m12, m13, m14, -1
+
+    vbroadcasti128   m11, [pb_rev_bw]
+    REPX {pshufb x, m11}, m15, m14, m13, m12
+
+    mova [Stk(scratch) + 32*0], m0
+    mova [Stk(scratch) + 32*1], m1
+    mova [Stk(scratch) + 32*2], m2
+    mova [Stk(scratch) + 32*3], m3
+    mova [Stk(scratch) + 32*4], m4
+    mova [Stk(scratch) + 32*5], m5
+    mova [Stk(scratch) + 32*6], m6
+    mova [Stk(scratch) + 32*7], m7
+
+    ; Group D
+    group_cd_inner m0, m1, m2, m3, m14, m13, m12, 1
+    group_cd_inner m4, m5, m6, m7, m14, m13, m12, 2
+
+%macro accum_groups_pt 4 ; y, in0/out, in1, ones
+    punpckhwd         m8, %2, %3
+    punpcklwd         %2, %3
+
+    mova             m10, [Stk(scratch) + 32*(%1)]
+    mova             m11, [Stk(scratch) + 32*(%1+4)]
+    punpckhwd         %3, m10, m11
+    punpcklwd        m10, m11
+
+    punpckhwd         m9, %2, m10
+    punpcklwd         %2, m10
+    REPX {pmaddwd x, %4}, %2, m9
+    punpckhwd        m10, m8, %3
+    punpcklwd         m8, %3
+    REPX {pmaddwd x, %4}, m10, m8
+
+    REPX {paddd x, m14}, %2, m9, m10, m8
+
+    mova             m11, [Stk(scratch) + 32*(8+2*%1)]
+    mova             m12, [Stk(scratch) + 32*(16+2*%1)]
+    punpckhwd         %3, m11, m12
+    punpcklwd        m11, m12
+    REPX {pmaddwd x, %4}, m11, %3
+    paddd             %2, m11
+    paddd             m9, %3
+
+    mova             m11, [Stk(scratch) + 32*(8+2*%1+1)]
+    mova             m12, [Stk(scratch) + 32*(16+2*%1+1)]
+    punpckhwd         %3, m11, m12
+    punpcklwd        m11, m12
+    REPX {pmaddwd x, %4}, m11, %3
+    paddd             m8, m11
+    paddd            m10, %3
+
+%if %1 == 0
+    ; hardcode this to first rows input reg
+    vpbroadcastd     m4, [pw_256]
+%endif
+    packssdw         %2, m9
+    packssdw         m8, m10
+    pmulhrsw         %2, m4
+    pmulhrsw         m8, m4
+
+    packuswb         %2, m8
+%endmacro
+
+    lea            tmp0q, [strideq*3]
+
+    vpbroadcastd     m13, [pw_1]
+    vpbroadcastd     m14, [pd_3072]
+    accum_groups_pt 0, m0, m4, m13
+    mova  [pq+strideq*0], m0
+
+    accum_groups_pt 1, m1, m5, m13
+    mova  [pq+strideq*1], m1
+
+    accum_groups_pt 2, m2, m6, m13
+    mova  [pq+strideq*2], m2
+
+    accum_groups_pt 3, m3, m7, m13
+    mova      [pq+tmp0q], m3
+
+    inc         ll_maskq
+    add              bxd, 8
+    add               pq, 32
+    add             topq, 64
+    add             midq, 64
+    add             botq, 64
+    sub              bwd, 8
+    jg .col_loop
+
+    add         ll_maskq, 7
+    and         ll_maskq, ~1
+    mov               pq, [Stk(p)]
+    lea               pq, [pq+strideq*4]
+    mov             botq, [Stk(top)]
+    mov             topq, [Stk(mid)]
+    mov             midq, [Stk(bot)]
+    mov              bwd, [Stk(bw)]
+    dec              bhd
+    jg .row_loop
+
+    RET
