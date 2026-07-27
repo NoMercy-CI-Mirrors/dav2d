@@ -61,27 +61,27 @@ typedef struct WienerQValApproxData {
     uint16_t gradient_alpha[4];    \
     int16_t gradient_weight[4];    \
     uint16_t alpha[9][2];          \
-    int16_t weight1[3][3][2];      \
-    int16_t weight2[2][3];         \
+    int16_t weight1[7][2];         \
+    int16_t weight2[2][4];         \
     int16_t weight3[2][2];         \
     int16_t weight4[2][2];         \
     int8_t error_lut[__VA_ARGS__]; \
 }
 
-PACKED(typedef GDF_PARAMS()) ALIGN(Dav2dGdfParams, 4);
-CHECK_SIZE(Dav2dGdfParams, 124);
+PACKED(typedef GDF_PARAMS()) ALIGN(Dav2dGdfParams, 8);
+CHECK_SIZE(Dav2dGdfParams, 120);
 
 PACKED(typedef union {
-    ALIGN(Dav2dGdfParams p, 4);
+    ALIGN(Dav2dGdfParams p, 8);
     GDF_PARAMS(4096);
-}) ALIGN(Dav2dGdfIntraParams, 4);
-CHECK_SIZE(Dav2dGdfIntraParams, 4220);
+}) ALIGN(Dav2dGdfIntraParams, 8);
+CHECK_SIZE(Dav2dGdfIntraParams, 4216);
 
 PACKED(typedef union {
-    ALIGN(Dav2dGdfParams p, 4);
+    ALIGN(Dav2dGdfParams p, 8);
     GDF_PARAMS(1000);
-}) ALIGN(Dav2dGdfInterParams, 4);
-CHECK_SIZE(Dav2dGdfInterParams, 1124);
+}) ALIGN(Dav2dGdfInterParams, 8);
+CHECK_SIZE(Dav2dGdfInterParams, 1120);
 #undef GDF_PARAMS
 
 EXTERN const Dav2dGdfIntraParams dav2d_gdf_intra_params[6];

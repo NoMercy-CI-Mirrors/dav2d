@@ -910,25 +910,29 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
                 const int x = x1 * 2 + x2;
                 const int m = ptrs[6][x];
 
-                // { 1, 0 }, { 0, 1 }, { 2, 0 }, { 0, 2 }, { 3, 0 }, { 0, 3 }
-                for (int k = 0; k < 3; k++) {
+                // { 1, 0 }, { 0, 1 }, { 2, 0 }, { 0, 2 }
+                for (int k = 0; k < 2; k++) {
                     const int sum_v = gdf_sum(ptrs[5 - k][x], ptrs[7 + k][x],
                                               params->alpha[k][cls1 ^ 0], m);
                     const int sum_h = gdf_sum(ptrs[6][x - k - 1],  ptrs[6][x + k + 1],
                                               params->alpha[k][cls1 ^ 1], m);
                     for (int idx = 0; idx < 3; idx++)
-                        idx_vals[idx] += sum_v * params->weight1[idx][k][cls1 ^ 0] +
-                                         sum_h * params->weight1[idx][k][cls1 ^ 1];
+                        idx_vals[idx] += sum_v * params->weight1[k * 3 + idx][cls1 ^ 0] +
+                                         sum_h * params->weight1[k * 3 + idx][cls1 ^ 1];
                 }
 
-                // { 4, 0 }, { 0, 4 }, { 5, 0 }, { 0, 5 }, { 6, 0 }, { 0, 6 }
-                for (int k = 0; k < 3; k++) {
-                    const int sum_v = gdf_sum(ptrs[2 - k][x], ptrs[10 + k][x],
-                                              params->alpha[3 + k][cls1 ^ 0], m);
-                    const int sum_h = gdf_sum(ptrs[6][x - k - 4],  ptrs[6][x + k + 4],
-                                              params->alpha[3 + k][cls1 ^ 1], m);
+                // { 3, 0 }, { 0, 3 }, { 4, 0 }, { 0, 4 },
+                // { 5, 0 }, { 0, 5 }, { 6, 0 }, { 0, 6 }
+                for (int k = 0; k < 4; k++) {
+                    const int sum_v = gdf_sum(ptrs[3 - k][x], ptrs[9 + k][x],
+                                              params->alpha[2 + k][cls1 ^ 0], m);
+                    const int sum_h = gdf_sum(ptrs[6][x - k - 3],  ptrs[6][x + k + 3],
+                                              params->alpha[2 + k][cls1 ^ 1], m);
                     idx_vals[0] += (cls1 ? sum_h : sum_v) * params->weight2[0][k];
                     idx_vals[1] += (cls1 ? sum_v : sum_h) * params->weight2[1][k];
+                    if (!k)
+                        idx_vals[2] += sum_v * params->weight1[6][cls1 ^ 0] +
+                                       sum_h * params->weight1[6][cls1 ^ 1];
                 }
 
                 // { 1, 1 }, { 1, -1 }
