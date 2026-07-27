@@ -59,9 +59,9 @@ static void padding(pixel *const tmp, const ptrdiff_t tmp_stride,
             pixel v;
             int src_x = iclip(x, x_min, x_max);
             if (src_y < 0) {
-                v = top[src_x + (2 + src_y) * PXSTRIDE(src_stride)];
+                v = top[src_x];
             } else if (src_y >= h) {
-                v = bottom[src_x + (src_y - h) * PXSTRIDE(src_stride)];
+                v = bottom[src_x];
             } else if (src_x < 0) {
                 v = left[src_y][2 + src_x];
             } else {
@@ -110,8 +110,8 @@ ccso_prep_clf_c(uint8_t *dst, const pixel *src, const ptrdiff_t src_stride,
     const int dx = ccso_pos[ext_filter][1];
     const ptrdiff_t tmp_stride = 68;
     const ptrdiff_t luma_offset = dx + dy * tmp_stride;
-    pixel tmp_buf[68 * 12]; // 68*12 is the maximum value of tmp_stride * (h + 4)
-    pixel *tmp = tmp_buf + 2 * tmp_stride + 2;
+    pixel tmp_buf[68 * 10]; // 68*10 is the maximum value of tmp_stride * (h + 2)
+    pixel *tmp = tmp_buf + 1 * tmp_stride + 2;
     const int h = 8 >> ss_ver;
     padding(tmp, tmp_stride, src, src_stride, left, top, bottom, w << ss_hor, h << ss_ver, edges);
 

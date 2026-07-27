@@ -195,6 +195,7 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
                         top = &tc->lf.cdef_line[tf][0][sb64x * 64];
                         bot = &iptrs[0][8 * y_stride];
                     }
+                    top += PXSTRIDE(f->cur.p.stride[0]);
 
                     dsp->ccso.prep_clf[pl_uv * uv_idx](ccso_lut_idx[pl],
                         iptrs[0], f->cur.p.stride[0], lr_bak[bit][0], top, bot,
