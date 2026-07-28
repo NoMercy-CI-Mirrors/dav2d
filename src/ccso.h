@@ -33,16 +33,15 @@
 #include "src/cdef.h"
 
 #define decl_ccso_prep_bo_fn(name) \
-void (name)(uint8_t *dst, ptrdiff_t dst_stride, const pixel *src, ptrdiff_t src_stride, \
-            unsigned max_band_log2, int w, int h HIGHBD_DECL_SUFFIX)
+void (name)(uint8_t *dst, const pixel *src, ptrdiff_t src_stride, \
+            unsigned max_band_log2, int w HIGHBD_DECL_SUFFIX)
 typedef decl_ccso_prep_bo_fn(*ccso_prep_bo_fn);
 
 #define decl_ccso_prep_clf_fn(name) \
-void (name)(uint8_t *dst, ptrdiff_t dst_stride, const pixel *src, ptrdiff_t src_stride, \
+void (name)(uint8_t *dst, const pixel *src, ptrdiff_t src_stride, \
             const_left_pixel_row_2px left, const pixel *top, const pixel *bottom, \
             unsigned max_band_log2, unsigned ext_filter, unsigned quant_step, \
-            int edge_clf, int w, int h, enum CdefEdgeFlags edges \
-            HIGHBD_DECL_SUFFIX)
+            int edge_clf, int w, enum CdefEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_ccso_prep_clf_fn(*ccso_prep_clf_fn);
 
 #define decl_ccso_add_fn(name) \

@@ -165,12 +165,8 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
 
                     if (hdr->ccso.p[pl].bo_only) {
                         dsp->ccso.prep_bo[pl_uv * uv_idx](ccso_lut_idx[pl],
-                                                          64 >> (pl_uv * ss_hor),
-                                                          iptrs[0], f->cur.p.stride[0],
-                                                          max_band,
-                                                          w >> (pl_uv * ss_hor),
-                                                          8 >> (pl_uv * ss_ver)
-                                                          HIGHBD_CALL_SUFFIX);
+                            iptrs[0], f->cur.p.stride[0], max_band,
+                            w >> (pl_uv * ss_hor) HIGHBD_CALL_SUFFIX);
                         continue;
                     }
 
@@ -201,13 +197,9 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
                     }
 
                     dsp->ccso.prep_clf[pl_uv * uv_idx](ccso_lut_idx[pl],
-                                                       64 >> (pl_uv * ss_hor),
-                                                       iptrs[0], f->cur.p.stride[0],
-                                                       lr_bak[bit][0], top, bot,
-                                                       max_band, ext_filter, quant,
-                                                       edge_clf, w >> (pl_uv * ss_hor),
-                                                       8 >> (pl_uv * ss_ver), sb_edges
-                                                       HIGHBD_CALL_SUFFIX);
+                        iptrs[0], f->cur.p.stride[0], lr_bak[bit][0], top, bot,
+                        max_band, ext_filter, quant, edge_clf,
+                        w >> (pl_uv * ss_hor), sb_edges HIGHBD_CALL_SUFFIX);
                 }
             }
 

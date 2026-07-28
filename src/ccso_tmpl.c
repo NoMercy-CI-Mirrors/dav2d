@@ -81,29 +81,28 @@ static inline unsigned ccso_score(int diff, int quant_step, unsigned edge_classi
 }
 
 static NOINLINE void
-ccso_prep_bo_c(uint8_t *dst, const ptrdiff_t dst_stride, const pixel *src,
-               const ptrdiff_t src_stride, unsigned max_band_log2,
-               const int w, const int h, const int ss_hor,
+ccso_prep_bo_c(uint8_t *dst, const pixel *src, const ptrdiff_t src_stride,
+               unsigned max_band_log2, const int w, const int ss_hor,
                const int ss_ver HIGHBD_DECL_SUFFIX)
 {
     const unsigned shift = bitdepth_from_max(bitdepth_max) - max_band_log2;
 
+    const int h = 8 >> ss_ver;
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++)
             dst[x] = src[x << ss_hor] >> shift;
 
         src += PXSTRIDE(src_stride) << ss_ver;
-        dst += dst_stride;
+        dst += 64 >> ss_hor;
     }
 }
 
 static NOINLINE void
-ccso_prep_clf_c(uint8_t *dst, const ptrdiff_t dst_stride, const pixel *src,
-                const ptrdiff_t src_stride, const pixel (*left)[2],
-                const pixel *top, const pixel *bottom,
+ccso_prep_clf_c(uint8_t *dst, const pixel *src, const ptrdiff_t src_stride,
+                const pixel (*left)[2], const pixel *top, const pixel *bottom,
                 unsigned max_band_log2, const unsigned ext_filter,
                 const unsigned quant_step, const int edge_clf,
-                enum CdefEdgeFlags edges, const int w, const int h,
+                enum CdefEdgeFlags edges, const int w,
                 const int ss_hor, const int ss_ver HIGHBD_DECL_SUFFIX)
 {
     const unsigned shift = bitdepth_from_max(bitdepth_max) - max_band_log2;
@@ -113,6 +112,7 @@ ccso_prep_clf_c(uint8_t *dst, const ptrdiff_t dst_stride, const pixel *src,
     const ptrdiff_t luma_offset = dx + dy * tmp_stride;
     pixel tmp_buf[68 * 12]; // 68*12 is the maximum value of tmp_stride * (h + 4)
     pixel *tmp = tmp_buf + 2 * tmp_stride + 2;
+    const int h = 8 >> ss_ver;
     padding(tmp, tmp_stride, src, src_stride, left, top, bottom, w << ss_hor, h << ss_ver, edges);
 
     for (int y = 0; y < h; y++) {
@@ -126,25 +126,22 @@ ccso_prep_clf_c(uint8_t *dst, const ptrdiff_t dst_stride, const pixel *src,
             dst[x] = (cls0 << 5) | (cls1 << 3) | band;
         }
         tmp += tmp_stride << ss_ver;
-        dst += dst_stride;
+        dst += 64 >> ss_hor;
     }
 }
 
 #define ccso_prep_fn(ss_hor, ss_ver, name) \
 static void ccso_prep_##name##_bo_c(uint8_t *const dst, \
-                                    const ptrdiff_t dst_stride, \
                                     const pixel *const src, \
                                     const ptrdiff_t src_stride, \
                                     const unsigned max_band_log2, \
-                                    const int w, \
-                                    const int h HIGHBD_DECL_SUFFIX) \
+                                    const int w HIGHBD_DECL_SUFFIX) \
 { \
-    ccso_prep_bo_c(dst, dst_stride, src, src_stride, max_band_log2, w, h, ss_hor, ss_ver \
+    ccso_prep_bo_c(dst, src, src_stride, max_band_log2, w, ss_hor, ss_ver \
                    HIGHBD_TAIL_SUFFIX); \
 } \
 \
 static void ccso_prep_##name##_clf_c(uint8_t *const dst, \
-                                     const ptrdiff_t dst_stride, \
                                      const pixel *const src, \
                                      const ptrdiff_t src_stride, \
                                      const pixel (*left)[2], \
@@ -155,13 +152,12 @@ static void ccso_prep_##name##_clf_c(uint8_t *const dst, \
                                      const unsigned quant_step, \
                                      const int ccso_edge_clf, \
                                      const int w, \
-                                     const int h, \
                                      const enum CdefEdgeFlags edges \
                                      HIGHBD_DECL_SUFFIX) \
 { \
-    ccso_prep_clf_c(dst, dst_stride, src, src_stride, left, top, bottom, max_band_log2, \
-                    ext_filter, quant_step, ccso_edge_clf, edges, w, h, ss_hor, ss_ver \
-                    HIGHBD_TAIL_SUFFIX); \
+    ccso_prep_clf_c(dst, src, src_stride, left, top, bottom, max_band_log2, \
+                    ext_filter, quant_step, ccso_edge_clf, edges, w, \
+                    ss_hor, ss_ver HIGHBD_TAIL_SUFFIX); \
 }
 
 ccso_prep_fn(1, 1, 420);
@@ -171,8 +167,7 @@ ccso_prep_fn(0, 0, 444);
 static void ccso_add_c(pixel *line, const ptrdiff_t dst_stride,
                        const uint8_t *idx_line, const ptrdiff_t idx_stride,
                        const uint8_t *const offset_idxs,
-                       const int8_t *const offset_lut,
-                       const int w, const int h,
+                       const int8_t *const offset_lut, const int w, const int h,
                        const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
 {
     for (int yy = 0; yy < h; yy += 4, ll_mask++) {

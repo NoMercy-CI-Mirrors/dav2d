@@ -74,9 +74,8 @@ static void check_ccso_prep_bo(const ccso_prep_bo_fn fn, const int ss_hor,
     ALIGN_STK_64(uint8_t, a_dst, 8 * 64,);
     ALIGN_STK_64(pixel, src_buf, 8 * 64,);
 
-    declare_func(void, uint8_t *dst, ptrdiff_t dst_stride, const pixel *src,
-                 ptrdiff_t src_stride, unsigned max_band_log2, int w, int h
-                 HIGHBD_DECL_SUFFIX);
+    declare_func(void, uint8_t *dst, const pixel *src, ptrdiff_t src_stride,
+                 unsigned max_band_log2, int w HIGHBD_DECL_SUFFIX);
 
     const ptrdiff_t src_stride = 64 * sizeof(pixel);
     const ptrdiff_t dst_stride = 64;
@@ -93,9 +92,9 @@ static void check_ccso_prep_bo(const ccso_prep_bo_fn fn, const int ss_hor,
         memset(c_dst, 0x88, sizeof(c_dst));
         memset(a_dst, 0x88, sizeof(a_dst));
 
-        call_ref(c_dst, dst_stride, src, src_stride, max_band_log2, w, h
+        call_ref(c_dst, src, src_stride, max_band_log2, w
                  HIGHBD_TAIL_SUFFIX);
-        call_new(a_dst, dst_stride, src, src_stride, max_band_log2, w, h
+        call_new(a_dst, src, src_stride, max_band_log2, w
                  HIGHBD_TAIL_SUFFIX);
         if (checkasm_check(uint8_t, c_dst, dst_stride, a_dst, dst_stride, w, h,
                            "dst"))
@@ -109,7 +108,7 @@ static void check_ccso_prep_bo(const ccso_prep_bo_fn fn, const int ss_hor,
     const int w = get_rnd_width(ss_hor, 0xf);
     const int bitdepth_max = get_rnd_bitdepth_max();
     init_pixels(src_buf, 8 * 64, bitdepth_max);
-    bench_new(a_dst, dst_stride, src, src_stride, 7, w, h HIGHBD_TAIL_SUFFIX);
+    bench_new(a_dst, src, src_stride, 7, w HIGHBD_TAIL_SUFFIX);
 }
 
 static void check_ccso_prep_clf(const ccso_prep_clf_fn fn, const int ss_hor,
@@ -127,11 +126,10 @@ static void check_ccso_prep_clf(const ccso_prep_clf_fn fn, const int ss_hor,
     ALIGN_STK_64(pixel, bot_buf, 2 * 64 + 128,);
     ALIGN_STK_16(pixel, left, 8, [2]);
 
-    declare_func(void, uint8_t *dst, ptrdiff_t dst_stride, const pixel *src,
-                 ptrdiff_t src_stride, const pixel (*left)[2], const pixel *top,
-                 const pixel *bottom, unsigned max_band_log2,
-                 unsigned ext_filter, unsigned quant_step, int edge_clf, int w,
-                 int h, enum CdefEdgeFlags edges HIGHBD_DECL_SUFFIX);
+    declare_func(void, uint8_t *dst, const pixel *src, ptrdiff_t src_stride,
+                 const pixel (*left)[2], const pixel *top, const pixel *bottom,
+                 unsigned max_band_log2, unsigned ext_filter, unsigned quant_step,
+                 int edge_clf, int w, enum CdefEdgeFlags edges HIGHBD_DECL_SUFFIX);
 
     const ptrdiff_t src_stride = 64 * sizeof(pixel);
     const ptrdiff_t dst_stride = 64;
@@ -165,13 +163,13 @@ static void check_ccso_prep_clf(const ccso_prep_clf_fn fn, const int ss_hor,
                             memset(c_dst, 0x88, sizeof(c_dst));
                             memset(a_dst, 0x88, sizeof(a_dst));
 
-                            call_ref(c_dst, dst_stride, src, src_stride, left,
+                            call_ref(c_dst, src, src_stride, left,
                                      top, bot, max_band_log2, ext_filter,
-                                     quant_step, edge_clf, w, h, edges
+                                     quant_step, edge_clf, w, edges
                                      HIGHBD_TAIL_SUFFIX);
-                            call_new(a_dst, dst_stride, src, src_stride, left,
+                            call_new(a_dst, src, src_stride, left,
                                      top, bot, max_band_log2, ext_filter,
-                                     quant_step, edge_clf, w, h, edges
+                                     quant_step, edge_clf, w, edges
                                      HIGHBD_TAIL_SUFFIX);
                             if (checkasm_check(uint8_t, c_dst, dst_stride,
                                                a_dst, dst_stride, w, h, "dst"))
@@ -194,8 +192,8 @@ static void check_ccso_prep_clf(const ccso_prep_clf_fn fn, const int ss_hor,
         const int bitdepth_max = get_rnd_bitdepth_max(); \
         init_prep_buffers(src_buf, top_buf, bot_buf, left, bitdepth_max); \
 \
-        bench_new(a_dst, dst_stride, src, src_stride, left, top, bot, \
-                  max_band_log2, ext_filter, quant_step, edge_clf, w, h, 0xf \
+        bench_new(a_dst, src, src_stride, left, top, bot, \
+                  max_band_log2, ext_filter, quant_step, edge_clf, w, 0xf \
                   HIGHBD_TAIL_SUFFIX); \
     } while (0)
 
