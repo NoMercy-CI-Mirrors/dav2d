@@ -32,6 +32,7 @@
 
 decl_ccso_prep_bo_fn(BF(dav2d_ccso_prep_444_bo, avx2));
 decl_ccso_prep_bo_fn(BF(dav2d_ccso_prep_420_bo, avx2));
+decl_ccso_prep_clf_fn(BF(dav2d_ccso_prep_444_clf, avx2));
 
 static ALWAYS_INLINE void ccso_dsp_init_x86(Dav2dCcsoDSPContext *const c) {
     const unsigned flags = dav2d_get_cpu_flags();
@@ -41,5 +42,6 @@ static ALWAYS_INLINE void ccso_dsp_init_x86(Dav2dCcsoDSPContext *const c) {
 #if BITDEPTH == 8
     c->prep_bo[0] = BF(dav2d_ccso_prep_444_bo, avx2);
     c->prep_bo[2] = BF(dav2d_ccso_prep_420_bo, avx2);
+    c->prep_clf[0] = BF(dav2d_ccso_prep_444_clf, avx2);
 #endif
 }
