@@ -36,11 +36,11 @@ band_mul:  dw 0x0100, 0x0200, 0x0400, 0x0800, 0x1000, 0x2000, 0x4000, 0x8000
 SECTION .text
 
 INIT_YMM avx2
-cglobal ccso_prep_444_bo_8bpc, 3, 4, 4, dst, src, ss, mbl2
+cglobal ccso_prep_444_bo_8bpc, 3, 5, 4, dst, src, ss, mbl2
     mov               mbl2d, mbl2m
-    lea                  r6, [band_mask]
-    vpbroadcastb         m0, [r6+mbl2q*2+ 0]
-    vpbroadcastw         m1, [r6+mbl2q*2+16]
+    lea                  r4, [band_mask]
+    vpbroadcastb         m0, [r4+mbl2q*2+ 0]
+    vpbroadcastw         m1, [r4+mbl2q*2+16]
     DEFINE_ARGS dst, src, ss, h
     mov                  hd, 8
 .loop_y:
@@ -55,11 +55,11 @@ cglobal ccso_prep_444_bo_8bpc, 3, 4, 4, dst, src, ss, mbl2
     jg .loop_y
     RET
 
-cglobal ccso_prep_420_bo_8bpc, 3, 4, 4, dst, src, ss, mbl2
+cglobal ccso_prep_420_bo_8bpc, 3, 5, 4, dst, src, ss, mbl2
     mov               mbl2d, mbl2m
-    lea                  r6, [band_mask]
-    vpbroadcastw         m0, [r6+mbl2q*2+ 0]
-    vpbroadcastw         m1, [r6+mbl2q*2+16]
+    lea                  r4, [band_mask]
+    vpbroadcastw         m0, [r4+mbl2q*2+ 0]
+    vpbroadcastw         m1, [r4+mbl2q*2+16]
     DEFINE_ARGS dst, src, ss, h
     mov                  hd, 4
 .loop_y:
