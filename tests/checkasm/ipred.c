@@ -346,8 +346,9 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                 const int flags = dir | has_t | has_l | itse;
                                 const int dir_l = dir == CFL_DIR_LEFT;
 
-                                int refw = w - wpad * 4, refh = h - hpad * 4;
-                                int subleft = 0;
+                                int refw = w - wpad * 4 + 2 * !!has_l;
+                                int refh = h - hpad * 4;
+                                int subleft = has_l && !dir_l;
                                 if (has_t && !wpad) {
                                     const int avail = rnd() % (3 - (w == 4));
                                     if (avail == 1) // full
@@ -361,14 +362,12 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                         refh += (rnd() % h) & ~3;
                                     else if (avail == 2)
                                         refh += h;
-                                    refw += 2;
-                                    subleft = !dir_l;
                                 }
                                 if (refw > 128 >> ss_hor) {
                                     refw = 128 >> ss_hor;
                                     subleft = 0;
                                 }
-                                refh = imin(refh, (128 >> ss_ver) - 2 * has_t);
+                                refh = imin(refh, (128 >> ss_ver) - 2 * !!has_t);
 
                                 const int unaligned_offset = imax(w / 4, 4);
                                 pixel *const src = src0 + (unaligned_offset << ss_hor);
