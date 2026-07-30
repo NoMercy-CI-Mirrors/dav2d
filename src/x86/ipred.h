@@ -55,7 +55,8 @@
 
 #define init_cfl_mh_fns(layout, suffix) \
     init_cfl_mh_gen_y(layout, UNIFORM, uniform, suffix); \
-    init_cfl_mh_gen_y(layout, VSTRIP, vstrip, suffix)
+    init_cfl_mh_gen_y(layout, VSTRIP, vstrip, suffix); \
+    init_cfl_mh_gen_y(layout, GAUSS, gauss, suffix)
 
 #define init_cfl_fns(layout, suffix) \
     init_cfl_explicit_fn(layout, suffix); \
@@ -81,6 +82,7 @@ decl_fn(cfl_pred,       cfl_explicit_420);
 decl_fn(cfl_pred,       cfl_implicit_420);
 decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_uniform);
 decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_vstrip);
+decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_gauss);
 
 decl_fn(pal_pred, pal_pred);
 
