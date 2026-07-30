@@ -40,6 +40,7 @@ band_mask: dw 0x0000, 0x0080, 0x00c0, 0x00e0, 0x00f0, 0x00f8, 0x00fc, 0x00fe
 band_mul:  dw 0x0100, 0x0200, 0x0400, 0x0800, 0x1000, 0x2000, 0x4000, 0x8000
 
 pb_1: times 4 db 1
+pw_255: times 2 dw 255
 
 %macro JMP_TABLE 2-*
  %xdefine %1_table %%table
@@ -52,6 +53,9 @@ pb_1: times 4 db 1
 %endmacro
 
 JMP_TABLE ccso_prep_444_clf_8bpc, f0, f1, f2, f3, f4, f5, f6
+JMP_TABLE ccso_prep_420_clf_8bpc, f0, f1, f2, f3, f4, f5, f6
+
+%define m(x) mangle(private_prefix %+ _ %+ x %+ SUFFIX)
 
 SECTION .text
 
@@ -293,26 +297,26 @@ DECLARE_REG_TMP 4, 5
     paddb                m7, m13
     REPX   {psllw     x, 5}, m6, m7
 
-    ; cls1 score
-    psubusb             m12, m8, m10            ; ctr - edge [left]
-    psubusb             m13, m9, m11            ; ctr - edge [right]
-    psubusb             m10, m8                 ; edge - ctr [left]
-    psubusb             m11, m9                 ; edge - ctr [right]
-    REPX   {psubusb  x, m2}, m12, m13
-    REPX   {psubusb  x, m3}, m10, m11
-    REPX   {pcmpeqb  x, m4}, m12, m13, m10, m11 ; +/-diff <= +/-quant_step
-    REPX   {psubb x, m5, x}, m12, m13
-    paddb               m10, m12                ; cls1
-    paddb               m11, m13
-    REPX   {psllw     x, 3}, m10, m11
-    por                  m6, m10
-    por                  m7, m11
-
     pand                m12, m8, m0
     pand                m13, m9, m0
     REPX   {pmulhuw  x, m1}, m12, m13           ; band
     por                  m6, m12
     por                  m7, m13
+
+    ; cls1 score
+    psubusb             m12, m8, m10            ; ctr - edge [left]
+    psubusb             m13, m9, m11            ; ctr - edge [right]
+    psubusb              m8, m10, m8            ; edge - ctr [left]
+    psubusb              m9, m11, m9            ; edge - ctr [right]
+    REPX   {psubusb  x, m2}, m12, m13
+    REPX   {psubusb  x, m3}, m8, m9
+    REPX   {pcmpeqb  x, m4}, m12, m13, m8, m9   ; +/-diff <= +/-quant_step
+    REPX   {psubb x, m5, x}, m12, m13
+    paddb                m8, m12                ; cls1
+    paddb                m9, m13
+    REPX   {psllw     x, 3}, m8, m9
+    por                  m6, m8
+    por                  m7, m9
 
     mova    [dstq+0*mmsize], m6
     mova    [dstq+1*mmsize], m7
@@ -518,7 +522,7 @@ DECLARE_REG_TMP 4, 5
 .f3_post_no_right_init:
     mov                  hd, 7
 
-    ; load top/left
+    ; load top/right
     test             edgesb, 4                  ; have_top
     jz .f3_tl_no_top
     movifnidn          topq, topmp
@@ -819,6 +823,734 @@ DECLARE_REG_TMP 4, 5
     jg .f6e_yloop
 %if UNIX64
     POP                 r10
+    POP                  r9
+%endif
+    RET
+
+cglobal ccso_prep_420_clf_8bpc, 4, 9, 16, dst, src, ss, left, top, bottom, \
+                                          mbl2, flt, qstep, edge_clf, w, edges
+    mov               mbl2d, mbl2m
+    lea                  r7, [band_mask]
+    vpbroadcastb         m0, [r7+mbl2q*2+ 0]
+    vpbroadcastw         m1, [r7+mbl2q*2+16]
+    vpbroadcastw         m2, qstepm             ; value can be 256
+    vpbroadcastb         m3, edge_clfm
+    pxor                xm4, xm4
+    packuswb             m2, m2                 ; clip value to 0..255 range
+    psubb                m3, m4, m3             ; 1 -> -1
+    vpbroadcastd         m5, [r7+pb_1-band_mask]
+    por                  m3, m2
+    vpbroadcastd        m15, [pw_255]
+    mov                 r8d, edgesm
+    lea                 r5q, [ssq*3]
+
+    ; { -1, 0 }, { 0, -1 }, { -1, -1 }, { -1, 1 }, { -1, -2 }, { 1, -2 }, { 0, 2 }
+    mov                 r6d, fltm
+    movsxd               r6, [r7+ccso_prep_420_clf_8bpc_table-band_mask+r6*4]
+    lea                  r7, [r7+ccso_prep_420_clf_8bpc_table-band_mask+r6]
+    jmp                  r7
+
+    DEFINE_ARGS dst, src, ss, left, top, ss3, h, _, edges, _, w
+.f0:
+    mov                  hd, 2
+    pand                 m7, m15, [srcq+ssq*0+mmsize*0]
+    pand                m11, m15, [srcq+ssq*0+mmsize*1]
+    packuswb             m7, m11
+    vpermq               m7, m7, q3120
+    test             edgesb, 4                  ; have_top
+    jz .f0_no_top
+    movifnidn          topq, topmp
+    pand                 m6, m15, [topq+mmsize*0]
+    pand                m11, m15, [topq+mmsize*1]
+    packuswb             m6, m11
+    vpermq               m6, m6, q3120
+    jmp .f0_yloop_noload
+.f0_no_top:
+    mova                 m6, m7
+    jmp .f0_yloop_noload
+.f0_yloop:
+    mova                 m6, m10
+    pand                 m7, m15, [srcq+ssq*0+mmsize*0]
+    pand                m11, m15, [srcq+ssq*0+mmsize*1]
+    packuswb             m7, m11
+    vpermq               m7, m7, q3120
+.f0_yloop_noload:
+    pand                 m8, m15, [srcq+ssq*1+mmsize*0]
+    pand                m11, m15, [srcq+ssq*1+mmsize*1]
+    pand                 m9, m15, [srcq+ssq*2+mmsize*0]
+    pand                m12, m15, [srcq+ssq*2+mmsize*1]
+    pand                m10, m15, [srcq+ss3q+mmsize*0]
+    pand                m13, m15, [srcq+ss3q+mmsize*1]
+    lea                srcq, [srcq+ssq*4]
+    packuswb             m8, m11
+    packuswb             m9, m12
+    packuswb            m10, m13
+    REPX {vpermq x, x, q3120}, m8, m9, m10
+
+    ; cls0 score
+    psubusb             m12, m7, m6             ; ctr - edge [1st line]
+    psubusb             m13, m9, m8             ; ctr - edge [2nd line]
+    psubusb              m6, m7                 ; edge - ctr [1st line]
+    psubusb             m11, m8, m9             ; edge - ctr [2nd line]
+    REPX   {psubusb  x, m2}, m12, m13
+    REPX   {psubusb  x, m3}, m6, m11
+    REPX   {pcmpeqb  x, m4}, m12, m13, m6, m11  ; +/-diff <= +/-quant_step
+    REPX   {psubb x, m5, x}, m12, m13
+    paddb                m6, m12                ; cls0
+    paddb               m11, m13
+    REPX   {psllw     x, 5}, m6, m11
+
+    ; cls1 score
+    psubusb             m12, m7, m8             ; ctr - edge [1st line]
+    psubusb             m13, m9, m10            ; ctr - edge [2nd line]
+    psubusb              m8, m7                 ; edge - ctr [1st line]
+    psubusb             m14, m10, m9            ; edge - ctr [2nd line]
+    REPX   {psubusb  x, m2}, m12, m13
+    REPX   {psubusb  x, m3}, m8, m14
+    REPX   {pcmpeqb  x, m4}, m12, m13, m8, m14  ; +/-diff <= +/-quant_step
+    REPX   {psubb x, m5, x}, m12, m13
+    paddb               m12, m8                 ; cls1
+    paddb               m13, m14
+    REPX   {psllw     x, 3}, m12, m13
+    por                  m6, m12
+    por                 m11, m13
+
+    pand                m12, m7, m0
+    pand                m13, m9, m0
+    REPX   {pmulhuw  x, m1}, m12, m13           ; band
+    por                  m6, m12
+    por                 m11, m13
+
+    mova          [dstq+ 0], m6
+    mova          [dstq+32], m11
+    add                dstq, 64
+
+    dec                  hd
+    jg .f0_yloop
+    RET
+
+%if UNIX64
+DECLARE_REG_TMP 9
+%else
+DECLARE_REG_TMP 4
+%endif
+
+.f1:
+    cmp              edgesd, 0xf                ; have_all_edges
+    jne .f1e
+    mov                  hd, 2
+.f1_yloop:
+    mova                m10, [srcq+ssq*0+mmsize*0]
+    mova                m11, [srcq+ssq*0+mmsize*1]
+    pand                 m8, m10, m15
+    pand                 m9, m11, m15
+    REPX       {psrlw x, 8}, m10, m11
+    packuswb             m8, m9
+    packuswb            m10, m11
+    REPX {vpermq x, x, q3120}, m8, m10
+
+    mova                m11, [srcq+ssq*2+mmsize*0]
+    mova                m12, [srcq+ssq*2+mmsize*1]
+    lea                srcq, [srcq+ssq*4]
+    pand                 m9, m11, m15
+    pand                 m7, m12, m15
+    REPX       {psrlw x, 8}, m11, m12
+    packuswb             m9, m7
+    packuswb            m11, m12
+    REPX {vpermq x, x, q3120}, m9, m11
+
+    vpbroadcastb        xm6, [leftq+1]
+    vpbroadcastb        xm7, [leftq+5]
+    add               leftq, 8
+    vinserti128          m6, xm10, 1
+    vinserti128          m7, xm11, 1
+    palignr              m6, m10, m6, 15
+    palignr              m7, m11, m7, 15
+
+    call m(ccso_prep_444_clf_8bpc).f1_main
+    dec                  hd
+    jg .f1_yloop
+    RET
+.f1e:
+%if UNIX64
+    PUSH                 r9
+%endif
+    test             edgesb, 2                  ; have_right
+    jnz .f1_post_no_right_init
+    mov                 r7d, wm                 ; w
+    lea                 t0d, [r7d-1]
+    call .f1_no_right_init
+.f1_post_no_right_init:
+    mov                  hd, 2
+.f1e_yloop:
+    mova                m10, [srcq+ssq*0+mmsize*0]
+    mova                m11, [srcq+ssq*0+mmsize*1]
+    pand                 m8, m10, m15
+    pand                 m9, m11, m15
+    REPX       {psrlw x, 8}, m10, m11
+    packuswb             m8, m9
+    packuswb            m10, m11
+    REPX {vpermq x, x, q3120}, m8, m10
+
+    mova                m11, [srcq+ssq*2+mmsize*0]
+    mova                m12, [srcq+ssq*2+mmsize*1]
+    pand                 m9, m11, m15
+    pand                 m7, m12, m15
+    REPX       {psrlw x, 8}, m11, m12
+    packuswb             m9, m7
+    packuswb            m11, m12
+    REPX {vpermq x, x, q3120}, m9, m11
+
+    test             edgesb, 2                  ; have_right
+    jnz .f1_post_right
+    lea                  r5, [srcq+ssq*2]
+    vpbroadcastb         m6, [srcq+r7*2-1]      ; src[w-1]
+    vpbroadcastb         m7, [r5+r7*2-1]
+    vpblendvb           m10, m6, m10, m14
+    vpblendvb           m11, m7, m11, m14
+.f1_post_right:
+    lea                srcq, [srcq+ssq*4]
+    test             edgesb, 1                  ; have_left
+    jz .f1_no_left
+    vpbroadcastb        xm6, [leftq+1]
+    vpbroadcastb        xm7, [leftq+5]
+    add               leftq, 8
+    jmp .f1_post_left
+.f1_no_left:
+    vpbroadcastb        xm6, xm8
+    vpbroadcastb        xm7, xm9
+.f1_post_left:
+    vinserti128          m6, xm10, 1
+    vinserti128          m7, xm11, 1
+    palignr              m6, m10, m6, 15
+    palignr              m7, m11, m7, 15
+
+    call m(ccso_prep_444_clf_8bpc).f1_main
+    dec                  hd
+    jg .f1e_yloop
+%if UNIX64
+    POP                  r9
+%endif
+    RET
+.f1_no_right_init:
+    neg                  t0                     ; dx-w
+    add                 t0d, 32                 ; 32+dx-w
+    lea                  r6, [pb_mask]
+    movu                m14, [r6+t0]            ; pb_mask+32+dx-w
+    ret
+
+%macro f24_420 2
+.f%1:
+    cmp              edgesd, 0xf                ; have_all_edges
+    jne .f%1e
+    mov                  hd, 2
+    movifnidn          topq, topmp
+    pand                 m6, m15, [topq+mmsize*0-%2]
+    pand                 m7, m15, [topq+mmsize*1-%2]
+    packuswb             m6, m7
+    vpermq               m6, m6, q3120
+    jmp .f%1_yloop_noload
+.f%1_yloop:
+    vpbroadcastb        xm6, [leftq-%2]
+%if %2 == 2
+    pinsrb              xm6, [srcq+ss3q], 15
+    lea                srcq, [srcq+ssq*4]
+%endif
+    vinserti128          m6, xm11, 1
+    palignr              m6, m11, m6, 16-%2
+.f%1_yloop_noload:
+    pand                 m8, m15, [srcq+mmsize*0]
+    pand                 m9, m15, [srcq+mmsize*1]
+    pand                m10, m15, [srcq+ssq*1+mmsize*0+%2]
+    pand                m11, m15, [srcq+ssq*1+mmsize*1+%2]
+    packuswb             m8, m9
+    packuswb            m10, m11
+    REPX {vpermq x, x, q3120}, m8, m10
+
+    vpbroadcastb        xm7, [leftq+4-%2]
+%if %2 == 2
+    pinsrb              xm7, [srcq+ssq], 15
+%endif
+    add               leftq, 8
+    vinserti128          m7, xm10, 1
+    palignr              m7, m10, m7, 16-%2
+
+    pand                 m9, m15, [srcq+ssq*2+mmsize*0]
+    pand                m12, m15, [srcq+ssq*2+mmsize*1]
+    pand                m11, m15, [srcq+ss3q+mmsize*0+%2]
+    pand                m13, m15, [srcq+ss3q+mmsize*1+%2]
+%if %2 == 1
+    lea                srcq, [srcq+ssq*4]
+%endif
+    packuswb             m9, m12
+    packuswb            m11, m13
+    REPX {vpermq x, x, q3120}, m9, m11
+
+    call m(ccso_prep_444_clf_8bpc).f1_main
+    dec                  hd
+    jg .f%1_yloop
+    RET
+.f%1e:
+%if UNIX64
+    PUSH                 r9
+%endif
+    test             edgesb, 2                  ; have_right
+    jnz .f%1_post_no_right_init
+    mov                 r7d, wm                 ; w
+    lea                 t0d, [r7d-1]
+    call .f1_no_right_init
+.f%1_post_no_right_init:
+    mov                  hd, 2
+
+    ; load top/left
+    test             edgesb, 4                  ; have_top
+    jz .f%1_tl_no_top
+    movifnidn          topq, topmp
+    pand                 m6, m15, [topq+mmsize*0-%2]
+    pand                 m7, m15, [topq+mmsize*1-%2]
+    packuswb             m6, m7
+    vpermq               m6, m6, q3120
+    test             edgesb, 1                  ; have_left
+    jnz .f%1e_yloop_noload
+%if %2 == 1
+    movd                xm7, [topq]
+    movu                 m8, [pb_mask+32-%2]
+    vpblendvb            m6, m7, m8
+%else
+    pshufb               m6, [pb_left_emu_1]
+%endif
+    ; re-use "left" pointer for top/left source
+    lea               leftq, [srcq+ss3q]
+    jmp .f%1e_yloop_noload
+.f%1_tl_no_top:
+    test             edgesb, 1                  ; have_left
+    jz .f%1_tl_no_edges
+    pand                 m6, m15, [srcq+mmsize*0-%2]
+    pand                 m7, m15, [srcq+mmsize*1-%2]
+    packuswb             m6, m7
+    vpermq               m6, m6, q3120
+    movd                xm8, [leftq+2-%2]
+    movu                 m9, [pb_mask+31]       ; -1,31x0
+    vpblendvb            m6, m8, m9
+    jmp .f%1e_yloop_noload
+.f%1_tl_no_edges:
+    pand                 m6, m15, [srcq+mmsize*0+%2]
+    pand                 m7, m15, [srcq+mmsize*1+%2]
+    packuswb             m6, m7
+    vpermq               m6, m6, q3120
+    vpbroadcastb        xm8, [srcq]
+    vinserti128          m8, xm6, 1
+    palignr              m6, m8, 16-%2
+    ; re-use "left" pointer for top/left source
+    lea               leftq, [srcq+ss3q]
+    jmp .f%1e_yloop_noload
+.f%1e_yloop:
+    test             edgesb, 1                  ; have_left
+    jz .f%1e_no_left1
+    vpbroadcastb        xm6, [leftq-%2]
+%if %2 == 2
+    pinsrb              xm6, [srcq+ss3q], 15
+%endif
+    jmp .f%1e_post_left1
+.f%1e_no_left1:
+    vpbroadcastb        xm6, [leftq]
+    lea               leftq, [srcq+ssq*4]
+.f%1e_post_left1:
+%if %2 == 2
+    lea                srcq, [srcq+ssq*4]
+%endif
+    vinserti128          m6, xm11, 1
+    palignr              m6, m11, m6, 16-%2
+.f%1e_yloop_noload:
+    pand                 m8, m15, [srcq+mmsize*0]
+    pand                m10, m15, [srcq+mmsize*1]
+    pand                 m9, m15, [srcq+ssq*2+mmsize*0]
+    pand                m11, m15, [srcq+ssq*2+mmsize*1]
+    packuswb             m8, m10
+    packuswb             m9, m11
+    REPX {vpermq x, x, q3120}, m8, m9
+
+    pand                m10, m15, [srcq+ssq+mmsize*0+%2]
+    pand                m12, m15, [srcq+ssq+mmsize*1+%2]
+    pand                m11, m15, [srcq+ss3q+mmsize*0+%2]
+    pand                m13, m15, [srcq+ss3q+mmsize*1+%2]
+    packuswb            m10, m12
+    packuswb            m11, m13
+    REPX {vpermq x, x, q3120}, m10, m11
+
+    test             edgesb, 2                  ; have_right
+    jnz .f%1e_post_right
+
+    lea                  r4, [srcq+r7*2]
+    vpbroadcastb        m12, [r4+ssq-1]         ; src[w-1]
+    vpbroadcastb        m13, [r4+ss3q-1]        ; src[w-1]
+    vpblendvb           m10, m12, m10, m14
+    vpblendvb           m11, m13, m11, m14
+.f%1e_post_right:
+
+    test             edgesb, 1                  ; have_left
+    jz .f%1e_no_left2
+    vpbroadcastb        xm7, [leftq+4-%2]
+%if %2 == 2
+    pinsrb              xm7, [srcq+ssq], 15
+%endif
+    add               leftq, 8
+    jmp .f%1e_post_left2
+.f%1e_no_left2:
+    vpbroadcastb        xm7, [srcq+ssq]
+.f%1e_post_left2:
+    vinserti128          m7, xm10, 1
+    palignr              m7, m10, m7, 16-%2
+%if %2 == 1
+    lea                srcq, [srcq+ssq*4]
+%endif
+
+    call m(ccso_prep_444_clf_8bpc).f1_main
+    dec                  hd
+    jg .f%1e_yloop
+%if UNIX64
+    POP                  r9
+%endif
+    RET
+%endmacro
+
+    f24_420 2, 1
+
+.f3:
+    cmp              edgesd, 0xf                ; have_all_edges
+    jne .f3e
+    mov                  hd, 2
+    movifnidn          topq, topmp
+    pand                 m6, m15, [topq+mmsize*0+1]
+    pand                 m7, m15, [topq+mmsize*1+1]
+    packuswb             m6, m7
+    vpermq               m6, m6, q3120
+    jmp .f3_yloop_noload
+.f3_yloop:
+    mova                 m6, m14
+.f3_yloop_noload:
+    pand                 m8, m15, [srcq+ssq*0+mmsize*0]
+    pand                m10, m15, [srcq+ssq*0+mmsize*1]
+    pand                 m9, m15, [srcq+ssq*2+mmsize*0]
+    pand                m11, m15, [srcq+ssq*2+mmsize*1]
+    packuswb             m8, m10
+    packuswb             m9, m11
+    REPX {vpermq x, x, q3120}, m8, m9
+
+    pand                 m7, m15, [srcq+ssq*1+mmsize*0+1]
+    pand                m12, m15, [srcq+ssq*1+mmsize*1+1]
+    pand                m14, m15, [srcq+ss3q+mmsize*0+1]
+    pand                m13, m15, [srcq+ss3q+mmsize*1+1]
+    lea                srcq, [srcq+ssq*4]
+    packuswb             m7, m12
+    packuswb            m14, m13
+    REPX {vpermq x, x, q3120}, m7, m14
+
+    vpbroadcastb       xm10, [leftq+3]
+    vpbroadcastb       xm11, [leftq+7]
+    add               leftq, 8
+    vinserti128         m10, xm7, 1
+    vinserti128         m11, xm14, 1
+    palignr             m10, m7, m10, 15
+    palignr             m11, m14, m11, 15
+
+    call m(ccso_prep_444_clf_8bpc).f1_main
+    dec                  hd
+    jg .f3_yloop
+    RET
+.f3e:
+%if UNIX64
+    PUSH                 r9
+%endif
+    test             edgesb, 2                  ; have_right
+    jnz .f3_post_no_right_init
+    mov                 r7d, wm                 ; w
+    lea                 t0d, [r7d-1]
+    call .f1_no_right_init
+.f3_post_no_right_init:
+    mov                  hd, 2
+
+    ; load top/right
+    test             edgesb, 4                  ; have_top
+    jz .f3_no_top
+    movifnidn          topq, topmp
+    pand                 m6, m15, [topq+mmsize*0+1]
+    pand                 m7, m15, [topq+mmsize*1+1]
+    packuswb             m6, m7
+    vpermq               m6, m6, q3120
+    test             edgesb, 2                  ; have_right
+    jnz .f3e_yloop_noload
+    vpbroadcastb        m12, [topq+r7*2-1]      ; top[w-1]
+    vpblendvb            m6, m12, m6, m14
+    jmp .f3e_yloop_noload
+.f3_no_top:
+    pand                 m6, m15, [srcq+mmsize*0+1]
+    pand                 m7, m15, [srcq+mmsize*1+1]
+    packuswb             m6, m7
+    vpermq               m6, m6, q3120
+    test             edgesb, 2                  ; have_right
+    jnz .f3e_yloop_noload
+    vpbroadcastb        m12, [srcq+r7*2-1]      ; src[w-1]
+    vpblendvb            m6, m12, m6, m14
+    jmp .f3e_yloop_noload
+.f3e_yloop:
+    ; perhaps this is not the greatest stack location ever...
+    movu                 m6, r6m
+.f3e_yloop_noload:
+    pand                 m8, m15, [srcq+ssq*0+mmsize*0]
+    pand                m10, m15, [srcq+ssq*0+mmsize*1]
+    pand                 m9, m15, [srcq+ssq*2+mmsize*0]
+    pand                m11, m15, [srcq+ssq*2+mmsize*1]
+    packuswb             m8, m10
+    packuswb             m9, m11
+    REPX {vpermq x, x, q3120}, m8, m9
+
+    pand                 m7, m15, [srcq+ssq*1+mmsize*0+1]
+    pand                m10, m15, [srcq+ssq*1+mmsize*1+1]
+    pand                m14, m15, [srcq+ss3q+mmsize*0+1]
+    pand                m11, m15, [srcq+ss3q+mmsize*1+1]
+    packuswb             m7, m10
+    packuswb            m14, m11
+    REPX {vpermq x, x, q3120}, m7, m14
+    movu                r6m, m14
+
+    test             edgesb, 1                  ; have_left
+    jz .f3_no_left
+    vpbroadcastb       xm10, [leftq+3]
+    vpbroadcastb       xm11, [leftq+7]
+    add               leftq, 8
+    jmp .f3_post_left
+.f3_no_left:
+    vpbroadcastb       xm10, [srcq+ssq]
+    vpbroadcastb       xm11, [srcq+ss3q]
+.f3_post_left:
+    lea                srcq, [srcq+ssq*4]
+    vinserti128         m10, xm7, 1
+    vinserti128         m11, xm14, 1
+    palignr             m10, m7, m10, 15
+    palignr             m11, m14, m11, 15
+
+    call m(ccso_prep_444_clf_8bpc).f1_main
+    dec                  hd
+    jg .f3e_yloop
+%if UNIX64
+    POP                  r9
+%endif
+    RET
+
+    f24_420 4, 2
+
+.f5:
+    cmp              edgesd, 0xf                ; have_all_edges
+    jne .f5e
+    mov                  hd, 2
+    movifnidn          topq, topmp
+    pand                m10, m15, [topq+mmsize*0+2]
+    pand                m11, m15, [topq+mmsize*1+2]
+    packuswb            m10, m11
+    vpermq              m10, m10, q3120
+    jmp .f5_yloop_noload
+.f5_yloop:
+    mova                m10, m14
+.f5_yloop_noload:
+    pand                 m8, m15, [srcq+ssq*0+mmsize*0]
+    pand                m11, m15, [srcq+ssq*0+mmsize*1]
+    pand                 m9, m15, [srcq+ssq*2+mmsize*0]
+    pand                m12, m15, [srcq+ssq*2+mmsize*1]
+    packuswb             m8, m11
+    packuswb             m9, m12
+    REPX {vpermq x, x, q3120}, m8, m9
+
+    pand                m11, m15, [srcq+ssq*1+mmsize*0+2]
+    pand                m12, m15, [srcq+ssq*1+mmsize*1+2]
+    pand                m14, m15, [srcq+ss3q+mmsize*0+2]
+    pand                m13, m15, [srcq+ss3q+mmsize*1+2]
+    packuswb            m11, m12
+    packuswb            m14, m13
+    REPX {vpermq x, x, q3120}, m11, m14
+
+    vpbroadcastb        xm6, [leftq+2]
+    vpbroadcastb        xm7, [leftq+6]
+    add               leftq, 8
+    pinsrb              xm6, [srcq+ssq], 15
+    pinsrb              xm7, [srcq+ss3q], 15
+    lea                srcq, [srcq+ssq*4]
+    vinserti128          m6, xm11, 1
+    vinserti128          m7, xm14, 1
+    palignr              m6, m11, m6, 14
+    palignr              m7, m14, m7, 14
+
+    call m(ccso_prep_444_clf_8bpc).f1_main
+    dec                  hd
+    jg .f5_yloop
+    RET
+.f5e:
+%if UNIX64
+    PUSH                 r9
+%endif
+    test             edgesb, 2                  ; have_right
+    jnz .f5_post_no_right_init
+    mov                 r7d, wm                 ; w
+    lea                 t0d, [r7d-1]
+    call .f1_no_right_init
+.f5_post_no_right_init:
+    mov                  hd, 2
+
+    ; load top/left
+    test             edgesb, 4                  ; have_top
+    jz .f5_no_top
+    movifnidn          topq, topmp
+    pand                m10, m15, [topq+mmsize*0+2]
+    pand                m11, m15, [topq+mmsize*1+2]
+    packuswb            m10, m11
+    vpermq              m10, m10, q3120
+    test             edgesb, 2                  ; have_right
+    jnz .f5e_yloop_noload
+    vpbroadcastb        m12, [topq+r7*2-1]      ; top[w-1]
+    vpblendvb           m10, m12, m10, m14
+    jmp .f5e_yloop_noload
+.f5_no_top:
+    pand                m10, m15, [srcq+mmsize*0+2]
+    pand                m11, m15, [srcq+mmsize*1+2]
+    packuswb            m10, m11
+    vpermq              m10, m10, q3120
+    test             edgesb, 2                  ; have_right
+    jnz .f5e_yloop_noload
+    vpbroadcastb        m12, [srcq+r7*2-1]      ; src[w-1]
+    vpblendvb           m10, m12, m10, m14
+    jmp .f5e_yloop_noload
+.f5e_yloop:
+    movu                m10, r6m
+.f5e_yloop_noload:
+    pand                 m8, m15, [srcq+ssq*0+mmsize*0]
+    pand                m11, m15, [srcq+ssq*0+mmsize*1]
+    pand                 m9, m15, [srcq+ssq*2+mmsize*0]
+    pand                m12, m15, [srcq+ssq*2+mmsize*1]
+    packuswb             m8, m11
+    packuswb             m9, m12
+    REPX {vpermq x, x, q3120}, m8, m9
+
+    pand                m11, m15, [srcq+ssq*1+mmsize*0+2]
+    pand                m12, m15, [srcq+ssq*1+mmsize*1+2]
+    pand                m13, m15, [srcq+ss3q+mmsize*0+2]
+    pand                 m7, m15, [srcq+ss3q+mmsize*1+2]
+    packuswb            m11, m12
+    packuswb            m13, m7
+    REPX {vpermq x, x, q3120}, m11, m13
+
+    test             edgesb, 2                  ; have_right
+    jnz .f5e_post_right
+    lea                  r4, [srcq+r7*2]
+    vpbroadcastb        m12, [r4+ssq-1]         ; top[w-1]
+    vpbroadcastb         m6, [r4+ss3q-1]        ; top[w-1]
+    vpblendvb           m11, m12, m11, m14
+    vpblendvb           m13, m6, m13, m14
+.f5e_post_right:
+    movu                r6m, m13
+    vpbroadcastb        xm6, [srcq+ssq]
+    vpbroadcastb        xm7, [srcq+ss3q]
+    test             edgesb, 1
+    jz .f5e_post_left
+    pinsrb              xm6, [leftq+2], 14
+    pinsrb              xm7, [leftq+6], 14
+    add               leftq, 8
+.f5e_post_left:
+    lea                srcq, [srcq+ssq*4]
+    vinserti128          m6, xm11, 1
+    vinserti128          m7, xm13, 1
+    palignr              m6, m11, m6, 14
+    palignr              m7, m13, m7, 14
+%if 1
+    call m(ccso_prep_444_clf_8bpc).f1_main
+%else
+    mova [dstq+ 0], m10
+    mova [dstq+32], m11
+    add dstq, 64
+%endif
+    dec                  hd
+    jg .f5e_yloop
+%if UNIX64
+    POP                  r9
+%endif
+    RET
+
+.f6:
+    cmp              edgesd, 0xf
+    jne .f6e
+    mov                  hd, 2
+.f6_yloop:
+    pand                 m6, m15, [srcq+ssq*0+mmsize*0+2]
+    pand                 m8, m15, [srcq+ssq*0+mmsize*1+2]
+    pand                 m7, m15, [srcq+ssq*2+mmsize*0+2]
+    pand                 m9, m15, [srcq+ssq*2+mmsize*1+2]
+    packuswb             m6, m8
+    packuswb             m7, m9
+    REPX {vpermq x, x, q3120}, m6, m7
+
+    vpbroadcastb        xm8, [leftq+0]
+    vpbroadcastb        xm9, [leftq+4]
+    add               leftq, 8
+    pinsrb              xm8, [srcq+ssq*0], 15
+    pinsrb              xm9, [srcq+ssq*2], 15
+    lea                srcq, [srcq+ssq*4]
+    vinserti128          m8, xm6, 1
+    vinserti128          m9, xm7, 1
+    palignr             m10, m6, m8, 14
+    palignr             m11, m7, m9, 14
+    palignr              m8, m6, m8, 15
+    palignr              m9, m7, m9, 15
+
+    call m(ccso_prep_444_clf_8bpc).f1_main
+    dec                  hd
+    jg .f6_yloop
+    RET
+.f6e:
+%if UNIX64
+    PUSH                 r9
+%endif
+    test             edgesb, 2                  ; have_right
+    jnz .f6_post_no_right_init
+    mov                 r7d, wm                 ; w
+    lea                 t0d, [r7d-1]
+    call .f1_no_right_init
+.f6_post_no_right_init:
+    mov                  hd, 2
+.f6e_yloop:
+    pand                 m6, m15, [srcq+ssq*0+mmsize*0+2]
+    pand                 m8, m15, [srcq+ssq*0+mmsize*1+2]
+    pand                 m7, m15, [srcq+ssq*2+mmsize*0+2]
+    pand                 m9, m15, [srcq+ssq*2+mmsize*1+2]
+    packuswb             m6, m8
+    packuswb             m7, m9
+    REPX {vpermq x, x, q3120}, m6, m7
+    test             edgesb, 2                  ; have_right
+    jnz .f6_post_right
+.f6_no_right:
+    lea                  r4, [srcq+ssq*2]
+    vpbroadcastb         m8, [srcq+r7*2-1]      ; src[w-1]
+    vpbroadcastb         m9, [r4+r7*2-1]        ; src[w-1]
+    vpblendvb            m6, m8, m6, m14
+    vpblendvb            m7, m9, m7, m14
+.f6_post_right:
+    vpbroadcastb        xm8, [srcq+ssq*0]
+    vpbroadcastb        xm9, [srcq+ssq*2]
+    lea                srcq, [srcq+ssq*4]
+    test             edgesb, 1                  ; have_left
+    jz .f6_no_left
+    pinsrb              xm8, [leftq+0], 14
+    pinsrb              xm9, [leftq+4], 14
+    add               leftq, 8
+.f6_no_left:
+    vinserti128          m8, xm6, 1
+    vinserti128          m9, xm7, 1
+    palignr             m10, m6, m8, 14
+    palignr             m11, m7, m9, 14
+    palignr              m8, m6, m8, 15
+    palignr              m9, m7, m9, 15
+    call m(ccso_prep_444_clf_8bpc).f1_main
+    dec                  hd
+    jg .f6e_yloop
+%if UNIX64
     POP                  r9
 %endif
     RET
