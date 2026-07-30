@@ -88,12 +88,13 @@ static const int8_t pc_wiener_config[12][2] = {
 
 static const uint16_t pc_wiener_normalizer[3] = { 3739, 3273, 3074 };
 
-static void backup_row(pixel *dst, const pixel *src, const pixel *left, const int w,
-                       const int edge_len, const enum LrEdgeFlags edges)
+static void backup_row(pixel *dst, const pixel *src, const pixel *left,
+                       const int w, const int edge_len, const int left_w,
+                       const enum LrEdgeFlags edges)
 {
     if (edges & LR_HAVE_LEFT)
         for (int x = -edge_len; x < 0; x++)
-            dst[x] = left[x + 8];
+            dst[x] = left[x + left_w];
     else
         for (int x = -edge_len; x < 0; x++)
             dst[x] = src[0];
@@ -132,7 +133,9 @@ static void backup_row_lpf(pixel *dst, const pixel *src, const int w,
     }
 }
 
-static void backup_row_luma(pixel *dst, const pixel *src, const ptrdiff_t src_stride,
+static void backup_row_luma(pixel *dst, const pixel *src,
+                            const ptrdiff_t src_stride,
+                            const pixel (*left)[8],
                             const int w, const enum LrEdgeFlags edges,
                             const int ss_hor, const int ss_ver,
                             const int cfl_ds_flt)
@@ -161,22 +164,30 @@ static void backup_row_luma(pixel *dst, const pixel *src, const ptrdiff_t src_st
         break;
     }
 
+    const pixel *left1, *left2;
+    if (left) {
+        left1 = left[0] + 8;
+        left2 = left[1] + 8;
+    } else {
+        left1 = src;
+        left2 = src2;
+    }
     if (edges & LR_HAVE_LEFT) {
         switch (cfl_ds_flt) {
         case 0:
             for (int x = -4; x < 0; x++)
-                dst[x] = (src[x] + src2[x] + src[x + 1] + src2[x + 1]) >> 2;
+                dst[x] = (left1[x] + left2[x] + left1[x + 1] + left2[x + 1]) >> 2;
             break;
         case 1:
             for (int x = -4; x < 0; x++)
-                dst[x] = (src[x] + src2[x]) >> 1;
+                dst[x] = (left1[x] + left2[x]) >> 1;
             break;
         default:
             dav2d_unreachable();
             // fall-through in non-debug mode
         case 2:
             for (int x = -4; x < 0; x++)
-                dst[x] = src[x];
+                dst[x] = left1[x];
             break;
         }
     } else {
@@ -225,7 +236,7 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
     for (int i = 0; i < 9; i++)
         bak_rows[i] = row_buffers[i] + 6;
 
-    backup_row(bak_rows[4], p, left[0], w, 4, edges);
+    backup_row(bak_rows[4], p, left[0], w, 4, 8, edges);
     ptrs[4] = bak_rows[4];
     if (edges & LR_HAVE_TOP_INTEGRATED) {
         for (int i = 0; i < 4; i++) {
@@ -246,17 +257,17 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
         ptrs[0] = ptrs[1] = ptrs[2] = ptrs[3] = ptrs[4];
     }
 
-    backup_row(bak_rows[5], p + PXSTRIDE(stride), left[1], w, 4, edges);
+    backup_row(bak_rows[5], p + PXSTRIDE(stride), left[1], w, 4, 8, edges);
     ptrs[5] = bak_rows[5];
-    backup_row(bak_rows[6], p + 2*PXSTRIDE(stride), left[2], w, 4, edges);
+    backup_row(bak_rows[6], p + 2*PXSTRIDE(stride), left[2], w, 4, 8, edges);
     ptrs[6] = bak_rows[6];
-    backup_row(bak_rows[7], p + 3*PXSTRIDE(stride), left[3], w, 4, edges);
+    backup_row(bak_rows[7], p + 3*PXSTRIDE(stride), left[3], w, 4, 8, edges);
     ptrs[7] = bak_rows[7];
     int bak_idx = 8;
 
     for (int y = 0; y < h; y++) {
         if (y + 4 < h) {
-            backup_row(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), left[y + 4], w, 4, edges);
+            backup_row(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), left[y + 4], w, 4, 8, edges);
             ptrs[8] = bak_rows[bak_idx];
         } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
             backup_row_lpf(bak_rows[bak_idx], p + 4*PXSTRIDE(stride), w, 4, edges);
@@ -294,9 +305,10 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
 }
 
 static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
-                                  const pixel (*left)[8], // FIXME this can be 2
+                                  const pixel (*left)[2],
                                   const pixel *lpf_top, const pixel *lpf_bottom,
-                                  const pixel *luma, const pixel *luma_top, const pixel *luma_bottom,
+                                  const pixel *luma, const pixel (*luma_left)[8],
+                                  const pixel *luma_top, const pixel *luma_bottom,
                                   ptrdiff_t lstride,
                                   const int8_t *filter,
                                   const int w, int h, int ss_ver, int ss_hor, int ds_flt,
@@ -313,8 +325,8 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
         bak_rows[1][i] = row_buffers_l[i] + 6;
     }
 
-    // FIXME we only need 2px edges here (left/right), not 4
-    backup_row(bak_rows[0][2], p, left[0], w, 2, edges);
+    backup_row(bak_rows[0][2], p, *left, w, 2, 2, edges);
+    left++;
     ptrs[0][2] = bak_rows[0][2];
     if (edges & (LR_HAVE_TOP_INTEGRATED | LR_HAVE_TOP)) {
         // y = -2,-1
@@ -327,38 +339,47 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
         ptrs[0][0] = ptrs[0][1] = ptrs[0][2];
     }
 
-    backup_row(bak_rows[0][3], p + PXSTRIDE(stride), left[1], w, 2, edges);
+    backup_row(bak_rows[0][3], p + PXSTRIDE(stride), *left, w, 2, 2, edges);
+    left++;
     ptrs[0][3] = bak_rows[0][3];
     int bak_idx = 4;
 
-    backup_row_luma(bak_rows[1][2], luma, lstride, w << ss_hor, edges,
+    backup_row_luma(bak_rows[1][2], luma, lstride, luma_left, w << ss_hor, edges,
                     ss_hor, ss_ver, ds_flt);
+    luma_left += 1 << ss_ver;
     ptrs[1][2] = bak_rows[1][2];
     if (edges & LR_HAVE_TOP_INTEGRATED) {
-        backup_row_luma(bak_rows[1][0], luma - 4 * PXSTRIDE(lstride),
-                        lstride, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
+        backup_row_luma(bak_rows[1][0], luma_top + 2 * PXSTRIDE(lstride),
+                        lstride, NULL, w << ss_hor, edges, ss_hor, ss_ver,
+                        ds_flt);
         ptrs[1][0] = bak_rows[1][0];
-        backup_row_luma(bak_rows[1][1], luma - 2 * PXSTRIDE(lstride),
-                        lstride, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
+        backup_row_luma(bak_rows[1][1], luma_top + 4 * PXSTRIDE(lstride),
+                        lstride, NULL, w << ss_hor, edges, ss_hor, ss_ver,
+                        ds_flt);
         ptrs[1][1] = bak_rows[1][1];
     } else if (edges & LR_HAVE_TOP) {
-        backup_row_luma(bak_rows[1][0], luma_top,
-                        0, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
+        backup_row_luma(bak_rows[1][0], luma_top, 0, NULL,
+                        w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
         ptrs[1][0] = bak_rows[1][0];
-        backup_row_luma(bak_rows[1][1], luma_top,
-                        lstride, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
+        backup_row_luma(bak_rows[1][1], luma_top, lstride, NULL,
+                        w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
         ptrs[1][1] = bak_rows[1][1];
     } else {
         ptrs[1][0] = ptrs[1][1] = ptrs[1][2];
     }
-    backup_row_luma(bak_rows[1][3], luma + ((size_t) 1 << ss_ver) * PXSTRIDE(lstride),
-                    lstride, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
+    backup_row_luma(bak_rows[1][3],
+                    luma + ((size_t) 1 << ss_ver) * PXSTRIDE(lstride),
+                    lstride, luma_left, w << ss_hor, edges, ss_hor, ss_ver,
+                    ds_flt);
+    luma_left += 1 << ss_ver;
     ptrs[1][3] = bak_rows[1][3];
     int lbak_idx = 4;
 
     for (int y = 0; y < h; y++) {
         if (y + 2 < h) {
-            backup_row(bak_rows[0][bak_idx], p + 2*PXSTRIDE(stride), left[y + 2], w, 2, edges);
+            backup_row(bak_rows[0][bak_idx], p + 2*PXSTRIDE(stride),
+                       *left, w, 2, 2, edges);
+            left++;
             ptrs[0][4] = bak_rows[0][bak_idx];
         } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
             backup_row_lpf(bak_rows[0][bak_idx], p + 2*PXSTRIDE(stride), w, 2, edges);
@@ -373,19 +394,29 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
         }
         if (++bak_idx == 5) bak_idx = 0;
 
-        if (ptrs[0][4] == ptrs[0][3]) {
+        if (y + 2 < h) {
+            backup_row_luma(bak_rows[1][lbak_idx],
+                            luma + (2 << ss_ver) * PXSTRIDE(lstride), lstride,
+                            luma_left, w << ss_hor, edges, ss_hor, ss_ver,
+                            ds_flt);
+            luma_left += 1 << ss_ver;
+            ptrs[1][4] = bak_rows[1][lbak_idx];
+        } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
+            backup_row_luma(bak_rows[1][lbak_idx],
+                            luma + (2 << ss_ver) * PXSTRIDE(lstride), lstride,
+                            NULL, w << ss_hor, edges, ss_hor, ss_ver,
+                            ds_flt);
+            ptrs[1][4] = bak_rows[1][lbak_idx];
+        } else if (!(edges & LR_HAVE_BOTTOM)) {
             ptrs[1][4] = ptrs[1][3];
-        } else if (y + 2 == h && !(edges & LR_HAVE_BOTTOM_INTEGRATED)) {
-            backup_row_luma(bak_rows[1][lbak_idx], luma_bottom,
-                            lstride, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
+        } else if (y + 2 == h) {
+            backup_row_luma(bak_rows[1][lbak_idx], luma_bottom, lstride,
+                            NULL, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
             ptrs[1][4] = bak_rows[1][lbak_idx];
-        } else if (y + 1 == h && !(edges & LR_HAVE_BOTTOM_INTEGRATED)) {
-            backup_row_luma(bak_rows[1][lbak_idx], luma_bottom + PXSTRIDE(lstride),
-                            0, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
-            ptrs[1][4] = bak_rows[1][lbak_idx];
-        } else {
-            backup_row_luma(bak_rows[1][lbak_idx], luma + (2 << ss_ver) * PXSTRIDE(lstride),
-                            lstride, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
+        } else if (y + 1 == h) {
+            backup_row_luma(bak_rows[1][lbak_idx],
+                            luma_bottom + PXSTRIDE(lstride), 0,
+                            NULL, w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
             ptrs[1][4] = bak_rows[1][lbak_idx];
         }
         if (++lbak_idx == 5) lbak_idx = 0;
@@ -542,7 +573,7 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
     for (int y = 0; y < 8; y++)
         ptrs[y] = bak_rows[y];
     for (int y = 0; y < 4; y++)
-        backup_row(ptrs[4+y], p + y*PXSTRIDE(stride), left[y], w, 4, edges);
+        backup_row(ptrs[4+y], p + y*PXSTRIDE(stride), left[y], w, 4, 8, edges);
     if (edges & LR_HAVE_TOP_INTEGRATED) {
         for (int i = 0; i < 4; i++) {
             backup_row_lpf(ptrs[i], lpf, w, 4, edges);
@@ -575,7 +606,8 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
         if (bak_idx == 12) bak_idx = 0;
         if (by + 1 < bh) {
             for (int y = 0; y < 4; y++)
-                backup_row(ptrs[8+y], p + (4+y)*PXSTRIDE(stride), left[(by << 2) + 4+y], w, 4, edges);
+                backup_row(ptrs[8+y], p + (4+y)*PXSTRIDE(stride),
+                           left[(by << 2) + 4+y], w, 4, 8, edges);
         } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
             for (int y = 0; y < 4; y++)
                 backup_row_lpf(ptrs[8+y], p + (4+y)*PXSTRIDE(stride), w, 4, edges);

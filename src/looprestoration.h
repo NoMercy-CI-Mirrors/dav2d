@@ -166,8 +166,10 @@ enum LrEdgeFlags {
 
 #ifdef BITDEPTH
 typedef const pixel (*const_left_pixel_row)[8];
+typedef const pixel (*const_left_pixel_row_uv)[2];
 #else
 typedef const void *const_left_pixel_row;
+typedef const void *const_left_pixel_row_uv;
 #endif
 
 typedef union WienerParams {
@@ -203,9 +205,10 @@ typedef decl_wiener_filter_fn(*wienerfilter_fn);
 
 #define decl_wiener_filter_uv_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, \
-            const_left_pixel_row left, \
+            const_left_pixel_row_uv left, \
             const pixel *top, const pixel *bottom, \
-            const pixel *luma, const pixel *luma_top, const pixel *luma_bottom, \
+            const pixel *luma, const_left_pixel_row luma_left, \
+            const pixel *luma_top, const pixel *luma_bottom, \
             ptrdiff_t luma_stride, \
             const int8_t *filter, \
             int w, int h, int ss_ver, int ss_hor, int ds_flt, \
