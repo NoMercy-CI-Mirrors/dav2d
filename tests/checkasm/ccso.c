@@ -132,7 +132,7 @@ static void check_ccso_prep_clf(const ccso_prep_clf_fn fn, const int ss_hor,
                  int edge_clf, int w, enum CdefEdgeFlags edges HIGHBD_DECL_SUFFIX);
 
     const ptrdiff_t src_stride = 64 * sizeof(pixel);
-    const ptrdiff_t dst_stride = 64;
+    const ptrdiff_t dst_stride = 64 >> ss_ver;
 
     // Adjust pointers to leave space on the left for CDEF_HAVE_LEFT.
     pixel *const src = src_buf + 64;
