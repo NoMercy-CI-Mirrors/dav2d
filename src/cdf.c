@@ -6698,13 +6698,26 @@ static const CdfCoefContext default_coef_cdf[4] = {
 \
     update_mv_cdfs(mv, op)
 
+typedef union {
+    uint16_t cdf;
+    struct {
+#if ENDIANNESS_BIG
+        uint8_t para;
+        uint8_t count;
+#else
+        uint8_t count;
+        uint8_t para;
+#endif
+    };
+} ATTR_ALIAS CdfParaCount;
+
 void dav2d_cdf_reset_count(const Dav2dFrameHeader *const hdr,
                            CdfContext *const dst)
 {
 #define reset_count(n1d, type, name) \
     do { \
-        uint8_t *const count = (uint8_t*)&dst->type.name[n1d]; \
-        *count = (*count * 3) >> 2; \
+        CdfParaCount *const pc = (CdfParaCount*)&dst->type.name[n1d]; \
+        pc->count = (pc->count * 3) >> 2; \
     } while (0)
 
     update_cdfs(reset_count, if (IS_KEY_OR_INTRA(hdr)) return);
@@ -6719,10 +6732,10 @@ void dav2d_cdf_shift(CdfContext *const dst, const CdfContext *const src,
         for (int n = 0; n < n1d; n++) { \
             dst->type.name[n] = src->type.name[n] >> n_tiles_log2; \
         } \
-        uint8_t *const dst_count = (uint8_t*)&dst->type.name[n1d]; \
-        const uint8_t *const src_count = (const uint8_t*)&src->type.name[n1d]; \
-        dst_count[0] = src_count[0] >> n_tiles_log2; \
-        dst_count[1] = src_count[1]; /* don't modify para */ \
+        CdfParaCount *const dst_pc = (CdfParaCount*)&dst->type.name[n1d]; \
+        const CdfParaCount *const src_pc = (const CdfParaCount*)&src->type.name[n1d]; \
+        dst_pc->count = src_pc->count >> n_tiles_log2; \
+        dst_pc->para  = src_pc->para; \
     } while (0)
 
     update_cdfs(shift_store,);
@@ -6737,9 +6750,7 @@ void dav2d_cdf_shift_accumulate(CdfContext *const dst, const CdfContext *const s
         for (int n = 0; n < n1d; n++) { \
             dst->type.name[n] += src->type.name[n] >> n_tiles_log2; \
         } \
-        uint8_t *const dst_count = (uint8_t*)&dst->type.name[n1d]; \
-        const uint8_t *const src_count = (const uint8_t*)&src->type.name[n1d]; \
-        *dst_count += *src_count >> n_tiles_log2; \
+        dst->type.name[n1d] += (src->type.name[n1d] & 0xff) >> n_tiles_log2; \
         /* ignore para beyond first tile */ \
     } while (0)
 
