@@ -37,7 +37,7 @@ static ALWAYS_INLINE void looprestoration_dsp_init_arm(Dav2dLoopRestorationDSPCo
 
     if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
-#if ARCH_AARCH64 && BITDEPTH == 8
+#if ARCH_AARCH64
     c->gdf_add = BF(dav2d_gdf_add, neon);
 #endif
 }
