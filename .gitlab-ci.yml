@@ -199,11 +199,6 @@ build-debian-clang:
 
 build-win:
     extends: .debian-amd64-common
-    # GCC 15.2 miscompiles dav2d when vectorization is enabled (as it is
-    # by default), see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=122793.
-    # This is fixed in future 15.x releases.
-    variables:
-        CFLAGS: '-fno-tree-vectorize'
     script:
         - wineserver -p && wine wineboot
         - meson setup build --buildtype release
@@ -606,11 +601,6 @@ test-win64:
         - docker
         - avx2
         - amd64
-    # GCC 15.2 miscompiles dav2d when vectorization is enabled (as it is
-    # by default), see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=122793.
-    # This is fixed in future 15.x releases.
-    variables:
-        CFLAGS: '-fno-tree-vectorize'
     script:
         - wineserver -p && wine wineboot
         - meson setup build --buildtype release

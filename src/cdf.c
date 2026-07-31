@@ -6747,6 +6747,15 @@ void dav2d_cdf_shift_accumulate(CdfContext *const dst, const CdfContext *const s
 #undef shift_accumulate
 }
 
+// GCC 15.1 and 15.2 have a known bug in their vectorizer that causes the
+// pri_sec_average loop to miscompile, so disable vectorization for these
+// versions. See https://code.videolan.org/videolan/dav2d/-/work_items/56.
+// This is fixed in GCC 15.3.
+#if defined(__GNUC__)
+#if __GNUC__ == 15 && __GNUC_MINOR__ < 3
+__attribute__((optimize("no-tree-loop-vectorize")))
+#endif
+#endif
 void dav2d_cdf_pri_sec_average(CdfContext *const dst,
                                const CdfThreadContext *const src1,
                                const CdfThreadContext *const src2)
