@@ -316,97 +316,98 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                 for (int flt_type = CFL_FLT_TYPE_UNIFORM;
                      flt_type <= CFL_FLT_TYPE_GAUSS; flt_type++)
                 {
+                    for (int itse = 0; itse <= 1; itse++)
 #if BENCH_DIR
-                    if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
-                        "cfl_mh_gen_y_%s_%s_w%d_%c_%dbpc",
-                        layout_names[layout - 1], cfl_luma_filter_names[flt_type],
-                        w, cfl_mh_dir_names[dir], BITDEPTH))
+                        if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
+                            "cfl_mh_gen_y_%s_%s_w%d_tse%d_%c_%dbpc",
+                            layout_names[layout - 1], cfl_luma_filter_names[flt_type],
+                            w, itse, cfl_mh_dir_names[dir], BITDEPTH))
 #else
-                    if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
-                        "cfl_mh_gen_y_%s_%s_w%d_%dbpc",
-                        layout_names[layout - 1], cfl_luma_filter_names[flt_type],
-                        w, BITDEPTH))
+                        if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
+                            "cfl_mh_gen_y_%s_%s_w%d_tse%d_%dbpc",
+                            layout_names[layout - 1], cfl_luma_filter_names[flt_type],
+                            w, itse, BITDEPTH))
 #endif
-                    {
+                        {
 #if !BENCH_DIR
-                        for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++) {
+                            for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++) {
 #endif
-                            for (int h = 4; h <= 32; h <<= 1) {
-                                const int has_t = rnd() & CFL_HAS_TOP;
-                                const int has_l = rnd() & CFL_HAS_LEFT;
-                                const int itse = rnd() & CFL_IS_TOP_SB_EDGE;
-                                const int flags = dir | has_t | has_l | itse;
-                                const int dir_l = dir == CFL_DIR_LEFT;
-                                const int dir_t = dir == CFL_DIR_TOP;
+                                for (int h = 4; h <= 32; h <<= 1) {
+                                    const int has_t = rnd() & CFL_HAS_TOP;
+                                    const int has_l = rnd() & CFL_HAS_LEFT;
+                                    const int flags = dir | has_t | has_l |
+                                        (itse * CFL_IS_TOP_SB_EDGE);
+                                    const int dir_l = dir == CFL_DIR_LEFT;
+                                    const int dir_t = dir == CFL_DIR_TOP;
 
-                                int refw = 0, refh = 0, n_left_cols = 0, n_top_rows = 0;
-                                if (has_t) {
-                                    const int avail = rnd() % (3 - (w == 4));
-                                    refw = w;
-                                    if (avail == 1) // full
-                                        refw += w;
-                                    else if (avail == 2) // partial
-                                        refw += (rnd() % w) & ~3;
-                                    n_top_rows = 1 + dir_t;
-                                }
-                                if (has_l) {
-                                    const int avail = rnd() % 3;
-                                    refh = h;
-                                    if (avail == 1)
-                                        refh += (rnd() % h) & ~3;
-                                    else if (avail == 2)
-                                        refh += h;
-                                    n_left_cols = 1 + dir_l;
-                                }
-                                int needed_top = 0, needed_left = 0;
-                                if (has_t) {
-                                    refw = imin(refw + has_l - 1 - !has_l, (128 >> ss_hor) - 2);
-                                    needed_top = refw + dir_l;
-                                    if (dir_t) {
-                                        const int need_first = !has_l && needed_top > w;
-                                        needed_top = need_first + imax(needed_top, w + n_left_cols);
+                                    int refw = 0, refh = 0, n_left_cols = 0, n_top_rows = 0;
+                                    if (has_t) {
+                                        const int avail = rnd() % (3 - (w == 4));
+                                        refw = w;
+                                        if (avail == 1) // full
+                                            refw += w;
+                                        else if (avail == 2) // partial
+                                            refw += (rnd() % w) & ~3;
+                                        n_top_rows = 1 + dir_t;
                                     }
-                                }
-                                if (has_l) {
-                                    refh = imin(refh + has_t - 1 - !has_t, (128 >> ss_ver) - 2);
-                                    needed_left = refh + dir_t;
-                                    refh -= has_t;
-                                    if (dir_l) {
-                                        const int need_first = !has_t && needed_left > h;
-                                        needed_left = need_first + imax(needed_left, h + n_top_rows);
+                                    if (has_l) {
+                                        const int avail = rnd() % 3;
+                                        refh = h;
+                                        if (avail == 1)
+                                            refh += (rnd() % h) & ~3;
+                                        else if (avail == 2)
+                                            refh += h;
+                                        n_left_cols = 1 + dir_l;
                                     }
+                                    int needed_top = 0, needed_left = 0;
+                                    if (has_t) {
+                                        refw = imin(refw + has_l - 1 - !has_l, (128 >> ss_hor) - 2);
+                                        needed_top = refw + dir_l;
+                                        if (dir_t) {
+                                            const int need_first = !has_l && needed_top > w;
+                                            needed_top = need_first + imax(needed_top, w + n_left_cols);
+                                        }
+                                    }
+                                    if (has_l) {
+                                        refh = imin(refh + has_t - 1 - !has_t, (128 >> ss_ver) - 2);
+                                        needed_left = refh + dir_t;
+                                        refh -= has_t;
+                                        if (dir_l) {
+                                            const int need_first = !has_t && needed_left > h;
+                                            needed_left = need_first + imax(needed_left, h + n_top_rows);
+                                        }
+                                    }
+
+                                    const int unaligned_offset = imax(w / 4, 4);
+                                    pixel *const src = src0 + (unaligned_offset << ss_hor);
+                                    pixel *const top_sb = itse ? top_sb0 + 64 : NULL;
+
+                                    call_ref(c_dst, src, top_sb, src0_stride,
+                                             needed_top, needed_left - n_top_rows, w, h, flags);
+                                    call_new(a_dst, src, top_sb, src0_stride,
+                                             needed_top, needed_left - n_top_rows, w, h, flags);
+
+                                    const int blk_off = n_top_rows * CFL_MH_TOP_STRIDE;
+                                    const pixel *const c_left = c_dst + blk_off + 32 * 32;
+                                    const pixel *const a_left = a_dst + blk_off + 32 * 32;
+                                    const pixel *const c_blk = c_dst + blk_off;
+                                    const pixel *const a_blk = a_dst + blk_off;
+
+                                    checkasm_check_pixel(c_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
+                                                         a_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
+                                                         needed_top, n_top_rows, "top");
+                                    checkasm_check_pixel(c_left, n_left_cols, a_left, n_left_cols,
+                                                         n_left_cols, needed_left - n_top_rows, "left");
+                                    checkasm_check_pixel(c_blk, w, a_blk, w, w, h, "blk");
+
+                                    bench_new(a_dst, src, top_sb, src0_stride,
+                                              needed_top, needed_left - n_top_rows,
+                                              w, h, flags | CFL_HAS_TOP | CFL_HAS_LEFT);
                                 }
-
-                                const int unaligned_offset = imax(w / 4, 4);
-                                pixel *const src = src0 + (unaligned_offset << ss_hor);
-                                pixel *const top_sb = itse ? top_sb0 + 64 : NULL;
-
-                                call_ref(c_dst, src, top_sb, src0_stride,
-                                         needed_top, needed_left - n_top_rows, w, h, flags);
-                                call_new(a_dst, src, top_sb, src0_stride,
-                                         needed_top, needed_left - n_top_rows, w, h, flags);
-
-                                const int blk_off = n_top_rows * CFL_MH_TOP_STRIDE;
-                                const pixel *const c_left = c_dst + blk_off + 32 * 32;
-                                const pixel *const a_left = a_dst + blk_off + 32 * 32;
-                                const pixel *const c_blk = c_dst + blk_off;
-                                const pixel *const a_blk = a_dst + blk_off;
-
-                                checkasm_check_pixel(c_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
-                                                     a_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
-                                                     needed_top, n_top_rows, "top");
-                                checkasm_check_pixel(c_left, n_left_cols, a_left, n_left_cols,
-                                                     n_left_cols, needed_left - n_top_rows, "left");
-                                checkasm_check_pixel(c_blk, w, a_blk, w, w, h, "blk");
-
-                                bench_new(a_dst, src, top_sb, src0_stride,
-                                          needed_top, needed_left - n_top_rows,
-                                          w, h, flags | CFL_HAS_TOP | CFL_HAS_LEFT);
+#if !BENCH_DIR
                             }
-#if !BENCH_DIR
-                        }
 #endif
-                    }
+                        }
                 }
     }
 
