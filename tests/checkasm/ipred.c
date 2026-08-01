@@ -313,50 +313,42 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
 #if BENCH_DIR
             for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++)
 #endif
-            for (int padding = 0; padding <= 1; padding++)
                 for (int flt_type = CFL_FLT_TYPE_UNIFORM;
                      flt_type <= CFL_FLT_TYPE_GAUSS; flt_type++)
                 {
 #if BENCH_DIR
                     if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
-                        "cfl_mh_gen_y_%s_%s_w%d_%c_pad%d_%dbpc",
+                        "cfl_mh_gen_y_%s_%s_w%d_%c_%dbpc",
                         layout_names[layout - 1], cfl_luma_filter_names[flt_type],
-                        w, cfl_mh_dir_names[dir], padding, BITDEPTH))
+                        w, cfl_mh_dir_names[dir], BITDEPTH))
 #else
                     if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
-                        "cfl_mh_gen_y_%s_%s_w%d_pad%d_%dbpc",
+                        "cfl_mh_gen_y_%s_%s_w%d_%dbpc",
                         layout_names[layout - 1], cfl_luma_filter_names[flt_type],
-                        w, padding, BITDEPTH))
+                        w, BITDEPTH))
 #endif
                     {
 #if !BENCH_DIR
                         for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++) {
 #endif
-                            const int h0 = padding && w < 16 ? 16 : 4;
-                            for (int h = h0; h <= 64; h <<= 1) {
-                                int wpad = 0, hpad = 0;
-                                if (padding) {
-                                    wpad = imax(w > 8, rnd() & imax(w / 8 - 1, 0));
-                                    hpad = imax(h > 8, rnd() & imax(h / 8 - 1, 0));
-                                }
-
+                            for (int h = 4; h <= 64; h <<= 1) {
                                 const int has_t = rnd() & CFL_HAS_TOP;
                                 const int has_l = rnd() & CFL_HAS_LEFT;
                                 const int itse = rnd() & CFL_IS_TOP_SB_EDGE;
                                 const int flags = dir | has_t | has_l | itse;
                                 const int dir_l = dir == CFL_DIR_LEFT;
 
-                                int refw = w - wpad * 4 + 2 * !!has_l;
-                                int refh = h - hpad * 4;
+                                int refw = w + 2 * !!has_l;
+                                int refh = h;
                                 int subleft = has_l && !dir_l;
-                                if (has_t && !wpad) {
+                                if (has_t) {
                                     const int avail = rnd() % (3 - (w == 4));
                                     if (avail == 1) // full
                                         refw += w;
                                     else if (avail == 2) // partial
                                         refw += (rnd() % w) & ~3;
                                 }
-                                if (has_l && !hpad) {
+                                if (has_l) {
                                     const int avail = rnd() % 3;
                                     if (avail == 1)
                                         refh += (rnd() % h) & ~3;
