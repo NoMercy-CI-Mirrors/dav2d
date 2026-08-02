@@ -59,7 +59,7 @@ typedef struct refmvs_sngl_mv_block {
         };
         uint32_t n;
     } mv[32];
-    uint8_t ref[32];
+    uint8_t refdist[32];
 } ALIGN(refmvs_sngl_mv_block, 32);
 CHECK_SIZE(refmvs_sngl_mv_block, 32 * 5);
 

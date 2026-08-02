@@ -488,7 +488,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
         tmv = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
         if (tmv.n == INVALID_TMV) return 0;
         mv = tmv_projection(tmv, rf->pocdiff[ref.ref[0]],
-                            rt->rp_proj[off_8x8 >> 5].ref[off_8x8 & 31]);
+                            rt->rp_proj[off_8x8 >> 5].refdist[off_8x8 & 31]);
     } else {
         mv.x = tmv.x;
         mv.y = tmv.y;
@@ -506,7 +506,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
         tmv2 = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
         if (tmv2.n == INVALID_TMV) return 0;
         mv2 = tmv_projection(tmv2, rf->pocdiff[ref.ref[1]],
-                             rt->rp_proj[off_8x8 >> 5].ref[off_8x8 & 31]);
+                             rt->rp_proj[off_8x8 >> 5].refdist[off_8x8 & 31]);
     } else {
         mv2.x = tmv2.x;
         mv2.y = tmv2.y;
@@ -1439,8 +1439,8 @@ static void tip_projection_c(refmvs_sngl_mv_block *const rp_proj,
             for (int x = 0; x < xend; x += tmvp_sample_step) {
                 const ptrdiff_t pos = bx8 + x;
                 const union tmv mv = rp_proj_ptr->mv[pos];
-                const int ref_delta = rp_proj_ptr->ref[pos];
-                rp_proj_ptr->ref[pos] = tip_delta;
+                const int ref_delta = rp_proj_ptr->refdist[pos];
+                rp_proj_ptr->refdist[pos] = tip_delta;
                 if (mv.n == INVALID_TMV) continue;
                 rp_proj_ptr->mv[pos] = tmv2_projection(mv, tip_delta, ref_delta);
             }
@@ -1470,7 +1470,7 @@ static void tip_fill_holes_c(refmvs_sngl_mv_block *const rp_proj,
 #define copy(dx, dy) do { \
                 if (rp_proj_ptr[dy * stride >> 5].mv[pos + dx].n == INVALID_TMV) { \
                     rp_proj_ptr[dy * stride >> 5].mv[pos + dx] = mv; \
-                    assert(rp_proj_ptr[dy * stride >> 5].ref[pos + dx] == tip_delta); \
+                    assert(rp_proj_ptr[dy * stride >> 5].refdist[pos + dx] == tip_delta); \
                 } \
             } while (0)
                 if (x - tmvp_sample_step >= 0)
@@ -1529,7 +1529,7 @@ static void tip_smoothen_c(refmvs_sngl_mv_block *const rp_proj,
 #undef add
                 if (!first_line) {
                     rp_proj_ptr[-tmvp_sample_step * stride >> 5].mv[pos] = mv_line[x];
-                    assert(rp_proj_ptr[-tmvp_sample_step * stride >> 5].ref[pos] == tip_delta);
+                    assert(rp_proj_ptr[-tmvp_sample_step * stride >> 5].refdist[pos] == tip_delta);
                 }
                 if (sum_n) {
                     mv_line[x].y = (sum_y * idiv[sum_n - 1] +
@@ -1548,7 +1548,7 @@ static void tip_smoothen_c(refmvs_sngl_mv_block *const rp_proj,
             for (int x = 0; x < xend; x += tmvp_sample_step) {
                 const ptrdiff_t pos = bx8 + x;
                 rp_proj_ptr->mv[pos] = mv_line[x];
-                assert(rp_proj_ptr->ref[pos] == tip_delta);
+                assert(rp_proj_ptr->refdist[pos] == tip_delta);
             }
         }
     }
@@ -1573,12 +1573,12 @@ static void fill_gap_proj_c(refmvs_sngl_mv_block *const rp_proj,
                 const union tmv mv = rp_proj_ptr->mv[pos];
                 if (mv.n == INVALID_TMV) continue;
                 int mvy = mv.y, mvx = mv.x, sum_y = mvy, sum_x = mvx, sum_n = 1;
-                int ref_off = rp_proj_ptr->ref[pos];
+                int ref_off = rp_proj_ptr->refdist[pos];
 
                 // right
                 const int have_right = x + 2 < xend;
                 if (have_right && rp_proj_ptr->mv[pos + 2].n != INVALID_TMV) {
-                    const int right_ref_off = rp_proj_ptr->ref[pos + 2];
+                    const int right_ref_off = rp_proj_ptr->refdist[pos + 2];
                     const union tmv right_mv =
                         tmv2_projection(rp_proj_ptr->mv[pos + 2],
                                         ref_off, right_ref_off);
@@ -1586,17 +1586,17 @@ static void fill_gap_proj_c(refmvs_sngl_mv_block *const rp_proj,
                     sum_y += right_mv.y;
                     rp_proj_ptr->mv[pos + 1].y = (sum_y + (sum_y > 0)) >> 1;
                     rp_proj_ptr->mv[pos + 1].x = (sum_x + (sum_x > 0)) >> 1;
-                    rp_proj_ptr->ref[pos + 1] = ref_off;
+                    rp_proj_ptr->refdist[pos + 1] = ref_off;
                     sum_n++;
                 } else {
                     rp_proj_ptr->mv[pos + 1] = rp_proj_ptr->mv[pos];
-                    rp_proj_ptr->ref[pos + 1] = rp_proj_ptr->ref[pos];
+                    rp_proj_ptr->refdist[pos + 1] = rp_proj_ptr->refdist[pos];
                 }
 
                 // bottom
                 const int have_bottom = y + 2 < yend;
                 if (have_bottom && rp_proj_ptr[2 * stride >> 5].mv[pos].n != INVALID_TMV) {
-                    const int bottom_ref_off = rp_proj_ptr[2 * stride >> 5].ref[pos];
+                    const int bottom_ref_off = rp_proj_ptr[2 * stride >> 5].refdist[pos];
                     const union tmv bottom_mv =
                         tmv2_projection(rp_proj_ptr[2 * stride >> 5].mv[pos],
                                         ref_off, bottom_ref_off);
@@ -1606,11 +1606,11 @@ static void fill_gap_proj_c(refmvs_sngl_mv_block *const rp_proj,
                     const int my = mvy + bottom_mv.y;
                     rp_proj_ptr[1 * stride >> 5].mv[pos].y = (my + (my > 0)) >> 1;
                     rp_proj_ptr[1 * stride >> 5].mv[pos].x = (mx + (mx > 0)) >> 1;
-                    rp_proj_ptr[1 * stride >> 5].ref[pos] = ref_off;
+                    rp_proj_ptr[1 * stride >> 5].refdist[pos] = ref_off;
                     sum_n++;
                 } else {
                     rp_proj_ptr[1 * stride >> 5].mv[pos] = rp_proj_ptr->mv[pos];
-                    rp_proj_ptr[1 * stride >> 5].ref[pos] = rp_proj_ptr->ref[pos];
+                    rp_proj_ptr[1 * stride >> 5].refdist[pos] = rp_proj_ptr->refdist[pos];
                 }
 
                 // bottom/right
@@ -1618,7 +1618,7 @@ static void fill_gap_proj_c(refmvs_sngl_mv_block *const rp_proj,
                     union tmv bottom_right_mv = rp_proj_ptr[2 * stride >> 5].mv[pos + 2];
                     if (bottom_right_mv.n != INVALID_TMV) {
                         const int bottom_right_ref_off =
-                            rp_proj_ptr[2 * stride >> 5].ref[pos + 2];
+                            rp_proj_ptr[2 * stride >> 5].refdist[pos + 2];
                         bottom_right_mv = tmv2_projection(bottom_right_mv, ref_off,
                                                           bottom_right_ref_off);
                         sum_x += bottom_right_mv.x;
@@ -1645,7 +1645,7 @@ static void fill_gap_proj_c(refmvs_sngl_mv_block *const rp_proj,
                     dst_mv->x = (sum_x + 1 + (sum_x > 0)) >> 2;
                     break;
                 }
-                rp_proj_ptr[1 * stride >> 5].ref[pos + 1] = ref_off;
+                rp_proj_ptr[1 * stride >> 5].refdist[pos + 1] = ref_off;
             }
         }
     }
@@ -1918,7 +1918,7 @@ static void load_tmvs_refs_c(const refmvs_frame *const rf,
                 const ptrdiff_t pos1 = (y1 & (sbsz8 - 1)) * stride + x1;
                 if (rp_proj[pos1 >> 5].mv[pos1 & 31].n != INVALID_TMV &&
                     (tgt == -1 || ref2idx != tgt ||
-                     rp_proj[pos1 >> 5].ref[pos1 & 31] == abs(ref2ref)))
+                     rp_proj[pos1 >> 5].refdist[pos1 & 31] == abs(ref2ref)))
                 {
                     continue;
                 }
@@ -1957,7 +1957,7 @@ static void load_tmvs_refs_c(const refmvs_frame *const rf,
                     b_mv.x = -b_mv.x;
                 }
                 rp_proj[pos1 >> 5].mv[pos1 & 31] = b_mv;
-                rp_proj[pos1 >> 5].ref[pos1 & 31] = abs(ref2ref);
+                rp_proj[pos1 >> 5].refdist[pos1 & 31] = abs(ref2ref);
             }
         }
     }
@@ -1991,13 +1991,13 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
             memcpy(&rp_proj[(x - 2 * stride) >> 5].mv[bx8],
                    &rp_proj[(x + (sbsz8 - 2) * stride) >> 5].mv[bx8],
                    w * sizeof(mv));
-            memcpy(&rp_proj[(x - 2 * stride) >> 5].ref[bx8],
-                   &rp_proj[(x + (sbsz8 - 2) * stride) >> 5].ref[bx8], w);
+            memcpy(&rp_proj[(x - 2 * stride) >> 5].refdist[bx8],
+                   &rp_proj[(x + (sbsz8 - 2) * stride) >> 5].refdist[bx8], w);
             memcpy(&rp_proj[(x - 1 * stride) >> 5].mv[bx8],
                    &rp_proj[(x + (sbsz8 - 1) * stride) >> 5].mv[bx8],
                    w * sizeof(mv));
-            memcpy(&rp_proj[(x - 1 * stride) >> 5].ref[bx8],
-                   &rp_proj[(x + (sbsz8 - 1) * stride) >> 5].ref[bx8], w);
+            memcpy(&rp_proj[(x - 1 * stride) >> 5].refdist[bx8],
+                   &rp_proj[(x + (sbsz8 - 1) * stride) >> 5].refdist[bx8], w);
             x += w;
         }
         const int w = (col_end8 & ~31) - x;
@@ -2016,13 +2016,13 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
             memcpy(rp_proj[(x - 2 * stride) >> 5].mv,
                    rp_proj[(x + (sbsz8 - 2) * stride) >> 5].mv,
                    w * sizeof(mv));
-            memcpy(rp_proj[(x - 2 * stride) >> 5].ref,
-                   rp_proj[(x + (sbsz8 - 2) * stride) >> 5].ref, w);
+            memcpy(rp_proj[(x - 2 * stride) >> 5].refdist,
+                   rp_proj[(x + (sbsz8 - 2) * stride) >> 5].refdist, w);
             memcpy(rp_proj[(x - 1 * stride) >> 5].mv,
                    rp_proj[(x + (sbsz8 - 1) * stride) >> 5].mv,
                    w * sizeof(mv));
-            memcpy(rp_proj[(x - 1 * stride) >> 5].ref,
-                   rp_proj[(x + (sbsz8 - 1) * stride) >> 5].ref, w);
+            memcpy(rp_proj[(x - 1 * stride) >> 5].refdist,
+                   rp_proj[(x + (sbsz8 - 1) * stride) >> 5].refdist, w);
         }
     }
     union tmv *rp_traj[7];
