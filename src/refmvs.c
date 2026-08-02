@@ -1439,10 +1439,10 @@ static void tip_projection_c(refmvs_sngl_mv_block *const rp_proj,
             for (int x = 0; x < xend; x += tmvp_sample_step) {
                 const ptrdiff_t pos = bx8 + x;
                 const union tmv mv = rp_proj_ptr->mv[pos];
-                if (mv.n == INVALID_TMV) continue;
-                rp_proj_ptr->mv[pos] = tmv2_projection(mv, tip_delta,
-                                                       rp_proj_ptr->ref[pos]);
+                const int ref_delta = rp_proj_ptr->ref[pos];
                 rp_proj_ptr->ref[pos] = tip_delta;
+                if (mv.n == INVALID_TMV) continue;
+                rp_proj_ptr->mv[pos] = tmv2_projection(mv, tip_delta, ref_delta);
             }
         }
     }
@@ -1470,7 +1470,7 @@ static void tip_fill_holes_c(refmvs_sngl_mv_block *const rp_proj,
 #define copy(dx, dy) do { \
                 if (rp_proj_ptr[dy * stride >> 5].mv[pos + dx].n == INVALID_TMV) { \
                     rp_proj_ptr[dy * stride >> 5].mv[pos + dx] = mv; \
-                    rp_proj_ptr[dy * stride >> 5].ref[pos + dx] = tip_delta; \
+                    assert(rp_proj_ptr[dy * stride >> 5].ref[pos + dx] == tip_delta); \
                 } \
             } while (0)
                 if (x - tmvp_sample_step >= 0)
@@ -1529,7 +1529,7 @@ static void tip_smoothen_c(refmvs_sngl_mv_block *const rp_proj,
 #undef add
                 if (!first_line) {
                     rp_proj_ptr[-tmvp_sample_step * stride >> 5].mv[pos] = mv_line[x];
-                    rp_proj_ptr[-tmvp_sample_step * stride >> 5].ref[pos] = tip_delta;
+                    assert(rp_proj_ptr[-tmvp_sample_step * stride >> 5].ref[pos] == tip_delta);
                 }
                 if (sum_n) {
                     mv_line[x].y = (sum_y * idiv[sum_n - 1] +
@@ -1548,7 +1548,7 @@ static void tip_smoothen_c(refmvs_sngl_mv_block *const rp_proj,
             for (int x = 0; x < xend; x += tmvp_sample_step) {
                 const ptrdiff_t pos = bx8 + x;
                 rp_proj_ptr->mv[pos] = mv_line[x];
-                rp_proj_ptr->ref[pos] = tip_delta;
+                assert(rp_proj_ptr->ref[pos] == tip_delta);
             }
         }
     }
