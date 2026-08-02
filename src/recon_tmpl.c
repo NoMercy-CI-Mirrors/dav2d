@@ -2107,12 +2107,12 @@ static int tip_pred(Dav2dTaskContext *const t,
         const struct refmvs_sngl_mv_block *const mvr = &t->rt.rp_proj[off_y8];
         for (int x = 0; x < w4; x += step) {
             const ptrdiff_t off_x8 = (bx4 + x) >> 1;
-            mv tmv = mvr->mv[off_x8];
-            if (tmv.n == INVALID_MV) tmv.n = 0;
+            union tmv tmv = mvr->mv[off_x8];
+            if (tmv.n == INVALID_TMV) tmv.n = 0;
             union mv (*const rmv)[2] = rmv_line[x >> 1], *const cmv = rmv[0];
             int left[2], top[2];
             for (int i = 0; i <= is_bidir; i++) {
-                const mv tipmv = scale_mv(tmv, f->rf.tip.sf[i]);
+                const mv tipmv = scale_tmv(tmv, f->rf.tip.sf[i]);
                 rmv[1][i].y = cmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
                 rmv[1][i].x = cmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
                 top[i] = t->by * 4 + y * 4 + (cmv[i].y >> 3) - 3;

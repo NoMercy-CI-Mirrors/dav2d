@@ -50,11 +50,18 @@ PACKED(typedef union refmvs_traj_map {
 }) ALIGN(refmvs_traj_map, 2);
 CHECK_SIZE(refmvs_traj_map, 2);
 
+#define INVALID_TMV 0x2000
+
 typedef struct refmvs_sngl_mv_block {
-    mv mv[32];
+    union tmv {
+        struct {
+            int16_t x, y;
+        };
+        uint32_t n;
+    } mv[32];
     uint8_t ref[32];
 } ALIGN(refmvs_sngl_mv_block, 32);
-CHECK_SIZE(refmvs_sngl_mv_block, 32 * 9);
+CHECK_SIZE(refmvs_sngl_mv_block, 32 * 5);
 
 PACKED(typedef struct refmvs_temporal_block {
     union {
@@ -117,7 +124,7 @@ typedef struct refmvs_frame {
     ptrdiff_t rp_stride;
     /*const*/ refmvs_temporal_block *const *rp_ref;
     refmvs_sngl_mv_block *rp_proj;
-    mv *rp_traj[7]; // FIXME we may not need 7?
+    union tmv *rp_traj[7]; // FIXME we may not need 7?
     refmvs_traj_map *rp_map[3][7];
     refmvs_block *ra;
     int have_threading, have_frame_threading;
@@ -126,7 +133,7 @@ typedef struct refmvs_frame {
 typedef struct refmvs_tile {
     const refmvs_frame *rf;
     refmvs_sngl_mv_block *rp_proj;
-    mv *rp_traj[7];
+    union tmv *rp_traj[7];
     refmvs_block *ra, ra_tl;
     refmvs_block r[64 * 64 * 2]; // one sb may be enough? smaller sb sizes than 256x256?
     struct {
@@ -183,7 +190,7 @@ typedef decl_splat_comp_wedgemv_fn(*splat_comp_wedgemv_fn);
 #define decl_load_tmvs_refs_fn(name) \
 void (name)(const refmvs_frame *rf, \
             refmvs_sngl_mv_block *rp_proj, \
-            const ptrdiff_t stride, mv *rp_traj[7], \
+            const ptrdiff_t stride, union tmv *rp_traj[7], \
             refmvs_traj_map *rp_map[3][7], int col_start8, int col_end8, \
             int row_start8, int row_end8, int sbsz8, int sample_step)
 typedef decl_load_tmvs_refs_fn(*load_tmvs_refs_fn);
@@ -201,7 +208,7 @@ void (name)(refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride, \
 typedef decl_fill_gap_proj_fn(*fill_gap_proj_fn);
 
 #define decl_fill_gap_traj_fn(name) \
-void (name)(union mv *rp_traj, ptrdiff_t stride, int col_start8, int col_end8, \
+void (name)(union tmv *rp_traj, ptrdiff_t stride, int col_start8, int col_end8, \
             int row_start8, int row_end8, int mfmv_sbsz8, int sbsz8)
 typedef decl_fill_gap_traj_fn(*fill_gap_traj_fn);
 
@@ -245,11 +252,11 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
                             const int row_start8, int row_end8);
 
 mv dav2d_mv_projection(mv in, int num, int den, int min, int max);
-static ALWAYS_INLINE mv scale_mv(const mv in, const int sf) {
-    const int64_t y = in.y * (int64_t) sf, x = in.x * (int64_t) sf;
+static ALWAYS_INLINE mv scale_tmv(const union tmv in, const int sf) {
+    const int y = in.y * sf, x = in.x * sf;
     return (mv) {
-        .y = iclip((int)((y + 0x2000 - (y < 0)) >> 14), -0xffff, 0xffff),
-        .x = iclip((int)((x + 0x2000 - (x < 0)) >> 14), -0xffff, 0xffff),
+        .y = iclip((y + 0x2000 - (y < 0)) >> 14, -0xffff, 0xffff),
+        .x = iclip((x + 0x2000 - (x < 0)) >> 14, -0xffff, 0xffff),
     };
 }
 

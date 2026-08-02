@@ -863,11 +863,11 @@ static void derive_lowest_px(Dav2dTaskContext *const t,
         for (int y = 0; y < h4; y += step) {
             const ptrdiff_t off_y8 =
                 (((t->by + y) & (f->sb_step - 1)) >> 1) * (t_stride >> 5) + x4e;
-            const union mv *const mvr = t->rt.rp_proj[off_y8].mv;
+            const union tmv *const mvr = t->rt.rp_proj[off_y8].mv;
             for (int x = 0; x < w4; x += step) {
                 const int off_x8 = (bx4 + x) >> 1;
-                mv tmv = mvr[off_x8];
-                if (tmv.n == INVALID_MV) tmv.n = 0;
+                union tmv tmv = mvr[off_x8];
+                if (tmv.n == INVALID_TMV) tmv.n = 0;
                 for (int i = 0; i < 2; i++) {
                     const int64_t tmpy = tmv.y * (int64_t) f->rf.tip.sf[i];
                     const int tipmvy = iclip((int)((tmpy + 0x2000 - (tmpy < 0)) >> 14),
