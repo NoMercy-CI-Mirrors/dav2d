@@ -1587,8 +1587,8 @@ static void fill_gap_proj_c(refmvs_sngl_mv_block *const rp_proj,
                     rp_proj_ptr->refdist[pos + 1] = ref_off;
                     sum_n++;
                 } else {
-                    rp_proj_ptr->mv[pos + 1] = rp_proj_ptr->mv[pos];
-                    rp_proj_ptr->refdist[pos + 1] = rp_proj_ptr->refdist[pos];
+                    rp_proj_ptr->mv[pos + 1] = mv;
+                    rp_proj_ptr->refdist[pos + 1] = ref_off;
                 }
 
                 // bottom
@@ -1607,8 +1607,8 @@ static void fill_gap_proj_c(refmvs_sngl_mv_block *const rp_proj,
                     rp_proj_ptr[1 * stride >> 5].refdist[pos] = ref_off;
                     sum_n++;
                 } else {
-                    rp_proj_ptr[1 * stride >> 5].mv[pos] = rp_proj_ptr->mv[pos];
-                    rp_proj_ptr[1 * stride >> 5].refdist[pos] = rp_proj_ptr->refdist[pos];
+                    rp_proj_ptr[1 * stride >> 5].mv[pos] = mv;
+                    rp_proj_ptr[1 * stride >> 5].refdist[pos] = ref_off;
                 }
 
                 // bottom/right
