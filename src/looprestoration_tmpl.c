@@ -901,58 +901,79 @@ static void gdf_prep_c(int8_t *dst, const pixel *p, const ptrdiff_t stride,
         }
 
         for (int x1 = 0; x1 < (w >> 1); x1++) {
-            const int bias2 = bias[x1];
-            const int cls1 = cls[x1] & 1;
-            const int cls2 = cls[x1] >> 1;
-
+            const int filter_class = cls[x1];
             for (int x2 = 0; x2 < 2; x2++) {
-                int idx_vals[3] = { params->bias[0], params->bias[1], bias2 };
+                int idx_vals[3] = { params->bias[0], params->bias[1], bias[x1] };
                 const int x = x1 * 2 + x2;
                 const int m = ptrs[6][x];
 
-                // { 1, 0 }, { 0, 1 }, { 2, 0 }, { 0, 2 }
-                for (int k = 0; k < 2; k++) {
-                    const int sum_v = gdf_sum(ptrs[5 - k][x], ptrs[7 + k][x],
-                                              params->alpha[k][cls1 ^ 0], m);
-                    const int sum_h = gdf_sum(ptrs[6][x - k - 1],  ptrs[6][x + k + 1],
-                                              params->alpha[k][cls1 ^ 1], m);
-                    for (int idx = 0; idx < 3; idx++)
-                        idx_vals[idx] += sum_v * params->weight1[k * 3 + idx][cls1 ^ 0] +
-                                         sum_h * params->weight1[k * 3 + idx][cls1 ^ 1];
-                }
+                #define SWAP_PAIR_IF_CLS(c, a0, a1, b0, b1) \
+                do {                                        \
+                    if (filter_class & c) {                 \
+                        int tmp = a0; a0 = b0; b0 = tmp;    \
+                            tmp = a1; a1 = b1; b1 = tmp;    \
+                    }                                       \
+                } while (0)
 
-                // { 3, 0 }, { 0, 3 }, { 4, 0 }, { 0, 4 },
-                // { 5, 0 }, { 0, 5 }, { 6, 0 }, { 0, 6 }
-                for (int k = 0; k < 4; k++) {
-                    const int sum_v = gdf_sum(ptrs[3 - k][x], ptrs[9 + k][x],
-                                              params->alpha[2 + k][cls1 ^ 0], m);
-                    const int sum_h = gdf_sum(ptrs[6][x - k - 3],  ptrs[6][x + k + 3],
-                                              params->alpha[2 + k][cls1 ^ 1], m);
-                    idx_vals[0] += (cls1 ? sum_h : sum_v) * params->weight2[0][k];
-                    idx_vals[1] += (cls1 ? sum_v : sum_h) * params->weight2[1][k];
-                    if (!k)
-                        idx_vals[2] += sum_v * params->weight1[6][cls1 ^ 0] +
-                                       sum_h * params->weight1[6][cls1 ^ 1];
+                // { 1, 0 }, { 0, 1 } .. { 6, 0 }, { 0, 6 }
+                for (int k = 0; k < 6; k++) {
+                    int above = ptrs[5 - k][x];
+                    int below = ptrs[7 + k][x];
+                    int left  = ptrs[6][x - k - 1];
+                    int right = ptrs[6][x + k + 1];
+                    SWAP_PAIR_IF_CLS(1, above, below, left, right);
+                    const int sum_v = gdf_sum(above, below, params->alpha[k][0], m);
+                    const int sum_h = gdf_sum(left,  right, params->alpha[k][1], m);
+                    if (k < 2) {
+                        for (int idx = 0; idx < 3; idx++)
+                            idx_vals[idx] += sum_v * params->weight1[k * 3 + idx][0] +
+                                             sum_h * params->weight1[k * 3 + idx][1];
+                    } else {
+                        idx_vals[0] += sum_v * params->weight2[0][k - 2];
+                        idx_vals[1] += sum_h * params->weight2[1][k - 2];
+                        if (k == 2)
+                            idx_vals[2] += sum_v * params->weight1[6][0] +
+                                           sum_h * params->weight1[6][1];
+                    }
                 }
 
                 // { 1, 1 }, { 1, -1 }
-                for (int k = 0; k < 2; k++) {
-                    const int dx = k ? -1 : 1;
-                    const int sum = gdf_sum(ptrs[5][x - dx], ptrs[7][x + dx],
-                                            params->alpha[6][cls2 ^ k], m);
-                    idx_vals[0] += sum * params->weight3[0][cls2 ^ k];
-                    idx_vals[1] += sum * params->weight3[1][cls2 ^ k];
+                {
+                    int tl = ptrs[5][x - 1];
+                    int br = ptrs[7][x + 1];
+                    int tr = ptrs[5][x + 1];
+                    int bl = ptrs[7][x - 1];
+                    SWAP_PAIR_IF_CLS(2, tl, br, tr, bl);
+                    const int sum_dr = gdf_sum(tl, br, params->alpha[6][0], m);
+                    const int sum_dl = gdf_sum(tr, bl, params->alpha[6][1], m);
+                    idx_vals[0] += sum_dr * params->weight3[0][0] +
+                                   sum_dl * params->weight3[0][1];
+                    idx_vals[1] += sum_dr * params->weight3[1][0] +
+                                   sum_dl * params->weight3[1][1];
                 }
 
                 // { 1, 2 }, { 1, -2 }, { 2, 1 }, { 2, -1 }
-                for (int k = 0; k < 2; k++) {
-                    const int dx = k ? -1 : 1;
-                    const int sum_v = gdf_sum(ptrs[4][x - dx * 1], ptrs[8][x + dx * 1],
-                                              params->alpha[7 + cls1][cls2 ^ k], m);
-                    const int sum_h = gdf_sum(ptrs[5][x - dx * 2], ptrs[7][x + dx * 2],
-                                              params->alpha[8 - cls1][cls2 ^ k], m);
-                    idx_vals[0] += (cls1 ? sum_h : sum_v) * params->weight4[0][cls2 ^ k];
-                    idx_vals[1] += (cls1 ? sum_v : sum_h) * params->weight4[1][cls2 ^ k];
+                {
+                    int ttl = ptrs[4][x - 1];
+                    int bbr = ptrs[8][x + 1];
+                    int tll = ptrs[5][x - 2];
+                    int brr = ptrs[7][x + 2];
+                    int ttr = ptrs[4][x + 1];
+                    int bbl = ptrs[8][x - 1];
+                    int trr = ptrs[5][x + 2];
+                    int bll = ptrs[7][x - 2];
+                    SWAP_PAIR_IF_CLS(1, ttl, bbr, tll, brr);
+                    SWAP_PAIR_IF_CLS(1, ttr, bbl, trr, bll);
+                    SWAP_PAIR_IF_CLS(2, ttl, bbr, ttr, bbl);
+                    SWAP_PAIR_IF_CLS(2, tll, brr, trr, bll);
+                    const int sum_ddr = gdf_sum(ttl, bbr, params->alpha[7][0], m);
+                    const int sum_ddl = gdf_sum(ttr, bbl, params->alpha[7][1], m);
+                    const int sum_drr = gdf_sum(tll, brr, params->alpha[8][0], m);
+                    const int sum_dll = gdf_sum(trr, bll, params->alpha[8][1], m);
+                    idx_vals[0] += sum_ddr * params->weight4[0][0] +
+                                   sum_ddl * params->weight4[0][1];
+                    idx_vals[1] += sum_drr * params->weight4[1][0] +
+                                   sum_dll * params->weight4[1][1];
                 }
 
                 int full_idx = 0;
