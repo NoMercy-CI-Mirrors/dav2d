@@ -3487,3 +3487,194 @@ L(morph_4xh):
         cbnz            w5,  L(morph_4xh)
         ret
 endfunc
+
+.macro SAD8xN_16bpc
+        mov             x14, x12
+        mov             x15, x13
+        add             x16, x12, #16
+        add             x17, x13, #16
+        sub             w9,  w5,  #4
+        ldr             q0,  [x14]
+        ldr             q1,  [x15]
+        ldr             d2,  [x16]
+        ldr             d3,  [x17]
+        uabd            v0.8h,  v0.8h,  v1.8h
+        uabdl           v17.4s, v2.4h,  v3.4h
+        uaddlp          v16.4s, v0.8h
+        ldr             q4,  [x14, x1]
+        ldr             q5,  [x15, x3]
+        ldr             d6,  [x16, x1]
+        ldr             d7,  [x17, x3]
+        add             x14, x14, x1, lsl #1
+        add             x15, x15, x3, lsl #1
+        add             x16, x16, x1, lsl #1
+        add             x17, x17, x3, lsl #1
+        uabd            v4.8h,  v4.8h,  v5.8h
+        uabal           v17.4s, v6.4h,  v7.4h
+        uadalp          v16.4s, v4.8h
+
+7:
+        ldr             q0,  [x14]                      // load 12 pixel of the line h for p0 and p1
+        ldr             q1,  [x15]
+        ldr             d2,  [x16]
+        ldr             d3,  [x17]
+        uabd            v0.8h,  v0.8h,  v1.8h           // abs diff of the line h
+        uabal           v17.4s, v2.4h,  v3.4h
+        uadalp          v16.4s, v0.8h
+        ldr             q4,  [x14, x1]                  // load 12 pixel of the line h + 2 for p0 and p1
+        ldr             q5,  [x15, x3]
+        ldr             d6,  [x16, x1]
+        ldr             d7,  [x17, x3]
+        add             x14, x14, x1, lsl #1
+        add             x15, x15, x3, lsl #1
+        add             x16, x16, x1, lsl #1
+        add             x17, x17, x3, lsl #1
+        uabd            v4.8h,  v4.8h,  v5.8h           // abs diff of the line h + 2
+        uabal           v17.4s, v6.4h,  v7.4h
+        uadalp          v16.4s, v4.8h
+        sub             w9,  w9,  #4
+        cbnz            w9,  7b
+
+        add             v16.4s, v16.4s, v17.4s
+        uaddlv          d16, v16.4s
+        fmov            x15, d16
+        lsr             x15, x15, x19
+.endm
+
+.macro SAD16xN_16bpc
+        mov             x14, x12
+        mov             x15, x13
+        add             x16, x12, #32
+        add             x17, x13, #32
+        sub             w9,  w5,  #4
+        ldp             q0,  q2,  [x14]
+        ldp             q1,  q3,  [x15]
+        ldr             d4,       [x16]
+        ldr             d5,       [x17]
+        add             x14, x14, x1
+        add             x15, x15, x3
+        uabd            v0.8h,  v0.8h,  v1.8h
+        uabd            v2.8h,  v2.8h,  v3.8h
+        uabdl           v17.4s, v4.4h,  v5.4h
+        add             v0.8h,  v0.8h,  v2.8h
+        uaddlp          v16.4s, v0.8h
+        ldp             q18, q20, [x14]
+        ldp             q19, q21, [x15]
+        ldr             d22,      [x16, x1]
+        ldr             d23,      [x17, x3]
+        add             x14, x14, x1
+        add             x15, x15, x3
+        add             x16, x16, x1, lsl #1
+        add             x17, x17, x3, lsl #1
+        uabd            v18.8h, v18.8h, v19.8h
+        uabd            v20.8h, v20.8h, v21.8h
+        uabal           v17.4s, v22.4h, v23.4h
+        add             v18.8h, v18.8h, v20.8h
+        uadalp          v16.4s, v18.8h
+7:
+        ldp             q0,  q2,  [x14]                 // load 20 pixel of the line h for p0 and p1
+        ldp             q1,  q3,  [x15]
+        ldr             d4,       [x16]
+        ldr             d5,       [x17]
+        add             x14, x14, x1
+        add             x15, x15, x3
+        uabd            v0.8h,  v0.8h,  v1.8h           // abs diff of the line h
+        uabd            v2.8h,  v2.8h,  v3.8h
+        uabal           v17.4s, v4.4h,  v5.4h
+        add             v0.8h,  v0.8h,  v2.8h
+        uadalp          v16.4s, v0.8h
+        ldp             q18, q20, [x14]                 // load 20 pixel of the line h + 2 for p0 and p1
+        ldp             q19, q21, [x15]
+        ldr             d22,      [x16, x1]
+        ldr             d23,      [x17, x3]
+        add             x14, x14, x1
+        add             x15, x15, x3
+        add             x16, x16, x1, lsl #1
+        add             x17, x17, x3, lsl #1
+        uabd            v18.8h, v18.8h, v19.8h          // abs diff of the line h + 2
+        uabd            v20.8h, v20.8h, v21.8h
+        uabal           v17.4s, v22.4h, v23.4h
+        add             v18.8h, v18.8h, v20.8h
+        uadalp          v16.4s, v18.8h
+        sub             w9,  w9,  #4
+        cbnz            w9,  7b
+
+        add             v16.4s, v16.4s, v17.4s
+        uaddlv          d16, v16.4s
+        fmov            x15, d16
+        lsr             x15, x15, x19
+.endm
+
+.macro sad_refine_mv_16bpc_w width
+        ldr             w19,  [sp, #16]         // bitdepth_max
+        add             w4,  w4,  #4            // w + 4
+        add             w5,  w5,  #4            // h + 4
+        mul             w8,  w4,  w5
+        mov             x10, #0                 // best_dx
+        clz             w19, w19
+        mov             x11, #0                 // best_dy
+        sub             w19, w19, #24           // (clz(bitdepth_max) - 32) + 8
+        lsl             w8,  w8,  #1            // sad_thr
+        neg             w19, w19                // bd_min8
+        mov             x15, #0xffffffff        // best_sad
+        cbz             w6,  2f                 // is_implicit
+        // is_implicit = 1
+        add             x12, x0,  x1
+        add             x13, x2,  x3
+        add             x12, x12, #4            // 2 * p0_stride + 2
+        add             x13, x13, #4            // 2 * p1_stride + 2
+        SAD\width\()xN_16bpc
+        sub             x15, x15, x15, lsr #3   // (best_sad * 7 + 7) >> 3
+        cmp             x15, x8                 // if best_sad < sad_thr
+        b.lt            6f
+2:      // is_implicit = 0
+        add             x2,  x2,  x3,  lsl #1   // p1_start = p1 + 4 * p1_stride
+        mov             x6,  x15                // best_sad
+        add             x2,  x2,  #8            // p1_start = p1 + 4 * p1_stride + 4
+        mov             x4,  #-2                // y_off
+3:
+        mov             x12, x0                 // p0_ptr = p0_start
+        mov             x13, x2                 // p1_ptr = p1_start
+        mov             x8,  #-2                // x_off
+4:
+        orr             x9,  x4,  x8
+        cbz             x9,  5f                 // skip if both are 0
+        SAD\width\()xN_16bpc
+        cmp             x6,  x15                // if (sad >= best_sad)
+        b.ls            5f
+
+        mov             x6,  x15                // best_sad = sad
+        mov             x10, x8                 // best_dx = x_off
+        mov             x11, x4                 // best_dy = y_off
+5:
+        add             x8,  x8,  #1            // x_off++
+        add             x12, x12, #2            // p0++
+        sub             x13, x13, #2            // p1--
+        cmp             x8,  #2
+        b.le            4b
+
+        add             x4,  x4,  #1            // y_off++
+        add             x0,  x0,  x1,  lsr #1   // p0 += p0_stride
+        sub             x2,  x2,  x3,  lsr #1   // p1 -= p1_stride
+        cmp             x4,  #2
+        b.le            3b
+6:
+        strb            w11, [x7]               // o->y
+        strb            w10, [x7, #1]           // o->x
+        ldr             x19, [sp], #16
+        ret
+.endm
+
+// void dav2d_sad_refine_mv_16bpc_neon(const pixel *const p0, const ptrdiff_t p0_stride,
+//                                    const pixel *const p1, const ptrdiff_t p1_stride,
+//                                    const int w, const int h, const int is_implicit,
+//                                    struct OpflOffset *const o, int bitdepth_max)
+function sad_refine_mv_16bpc_neon, export=1
+        str             x19, [sp, #-16]!
+        cmp             w4,  #8
+        lsl             x1,  x1,  #1
+        lsl             x3,  x3,  #1
+        b.eq            1f
+        sad_refine_mv_16bpc_w 16
+1:      sad_refine_mv_16bpc_w 8
+endfunc

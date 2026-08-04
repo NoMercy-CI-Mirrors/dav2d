@@ -85,8 +85,8 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
     c->emu_edge = BF(dav2d_emu_edge, neon);
 #if ARCH_AARCH64
     c->morph = BF(dav2d_morph, neon);
-#if BITDEPTH == 8
     c->sad_refine_mv = BF(dav2d_sad_refine_mv, neon);
+#if BITDEPTH == 8
     c->sad8x8 = BF(dav2d_sad8x8, neon);
 #endif
 #endif
