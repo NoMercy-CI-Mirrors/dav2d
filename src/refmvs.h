@@ -197,24 +197,23 @@ typedef decl_load_tmvs_refs_fn(*load_tmvs_refs_fn);
 
 #define decl_tip_proj_fn(name) \
 void (name)(refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride, \
-            int col_start8, int col_end8, int row_start8, int row_end8, \
+            int col_start8, int col_end8, int h8, \
             int tmvp_sample_step, int tip_delta)
 typedef decl_tip_proj_fn(*tip_proj_fn);
 
 #define decl_tip_fn(name) \
 void (name)(refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride, \
-            int col_start8, int col_end8, int row_start8, int row_end8, \
-            int tmvp_sample_step)
+            int col_start8, int col_end8, int h8, int tmvp_sample_step)
 typedef decl_tip_fn(*tip_fn);
 
 #define decl_fill_gap_proj_fn(name) \
 void (name)(refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride, \
-            int col_start8, int col_end8, int row_start8, int row_end8)
+            int col_start8, int col_end8, int h8)
 typedef decl_fill_gap_proj_fn(*fill_gap_proj_fn);
 
 #define decl_fill_gap_traj_fn(name) \
 void (name)(union tmv *rp_traj, ptrdiff_t stride, \
-            int col_start8, int col_end8, int row_start8, int row_end8)
+            int col_start8, int col_end8, int h8)
 typedef decl_fill_gap_traj_fn(*fill_gap_traj_fn);
 
 typedef struct Dav2dRefmvsDSPContext {
