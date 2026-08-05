@@ -100,7 +100,7 @@ static inline int tile_log2(const int sz, const int tgt) {
     return k;
 }
 
-static NOINLINE void parse_tile_info(struct Dav2dTileInfo *const thdr,
+static NOINLINE void parse_tile_info(Dav2dTileInfo *const thdr,
                                      GetBits *const gb, const int sbmul,
                                      const int sb128, const int seq_sb128,
                                      const int w, const int h,

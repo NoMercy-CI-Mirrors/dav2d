@@ -5108,7 +5108,7 @@ error:
 }
 
 void dav2d_decode_tip_frame_init(Dav2dFrameContext *const f) {
-    const struct Dav2dTileInfo *const ti = &f->frame_hdr->tiling.t;
+    const Dav2dTileInfo *const ti = &f->frame_hdr->tiling.t;
     const int sb_shift = f->sb_shift;
     for (int tile_row = 0, tile = 0; tile_row < ti->rows; tile_row++) {
         for (int tile_col = 0; tile_col < ti->cols; tile_col++, tile++) {

@@ -296,6 +296,14 @@ typedef struct Dav2dSegmentationDataSet {
     uint16_t delta_q_mask, skip_mask, globalmv_mask;
 } Dav2dSegmentationDataSet;
 
+typedef struct Dav2dTileInfo {
+    uint8_t uniform;
+    uint8_t min_log2_cols, max_log2_cols, log2_cols, cols;
+    uint8_t min_log2_rows, max_log2_rows, log2_rows, rows;
+    uint16_t col_start_sb[DAV2D_MAX_TILE_COLS + 1];
+    uint16_t row_start_sb[DAV2D_MAX_TILE_ROWS + 1];
+} Dav2dTileInfo;
+
 typedef struct Dav2dSequenceHeader {
     uint8_t id;
     /**
@@ -423,13 +431,7 @@ typedef struct Dav2dSequenceHeader {
 
     struct {
         uint8_t /*enum Dav2dAdaptiveBoolean*/ present;
-        struct Dav2dTileInfo {
-            uint8_t uniform;
-            uint8_t min_log2_cols, max_log2_cols, log2_cols, cols;
-            uint8_t min_log2_rows, max_log2_rows, log2_rows, rows;
-            uint16_t col_start_sb[DAV2D_MAX_TILE_COLS + 1];
-            uint16_t row_start_sb[DAV2D_MAX_TILE_ROWS + 1];
-        } t;
+        Dav2dTileInfo t;
     } tiling;
 
     uint8_t film_grain_present;
@@ -497,7 +499,7 @@ typedef struct Dav2dFrameHeader {
     } tip;
     uint8_t sb128; // not literally coded, but derived from seqhdr/frame_type
     struct {
-        struct Dav2dTileInfo t;
+        Dav2dTileInfo t;
         uint8_t n_bytes;
         uint16_t update;
     } tiling;
