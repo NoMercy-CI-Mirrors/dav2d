@@ -63,8 +63,8 @@ typedef struct refmvs_sngl_mv_block {
 } ALIGN(refmvs_sngl_mv_block, 32);
 CHECK_SIZE(refmvs_sngl_mv_block, 32 * 5);
 
-PACKED(typedef struct refmvs_temporal_block {
-    union {
+typedef struct refmvs_temporal_block {
+    union qmvpair {
         union qmv {
             struct {
                 int8_t x, y;
@@ -72,10 +72,10 @@ PACKED(typedef struct refmvs_temporal_block {
             uint16_t n;
         } mv[2];
         uint32_t n;
-    } mv;
-    union refpair ref;
-}) ALIGN(refmvs_temporal_block, 2);
-CHECK_SIZE(refmvs_temporal_block, 6);
+    } mv[32];
+    union refpair ref[32];
+} ALIGN(refmvs_temporal_block, 64);
+CHECK_SIZE(refmvs_temporal_block, 32 * 6);
 
 // FIXME the size of this array can be reduced if we generate mv on-the-fly
 // from the (separately stored) warp matrix.
@@ -161,29 +161,31 @@ typedef struct refmvs_candidate {
 
 #define decl_splat_mv_fn(name) \
 void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
-            refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
-            refmvs_temporal_block *t_src, int bw4, int bh4)
+            refmvs_temporal_block *t_dst, ptrdiff_t off_x8, \
+            ptrdiff_t t_stride, int bw4, int bh4, \
+            union qmvpair t_mv, union refpair t_ref)
 typedef decl_splat_mv_fn(*splat_mv_fn);
 
 #define decl_splat_warpmv_fn(name) \
 void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
-            refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
-            refmvs_temporal_block *t_src, int bw4, int bh4, \
-            const int32_t *const matrix)
+            refmvs_temporal_block *t_dst, ptrdiff_t off_x8, \
+            ptrdiff_t t_stride, int bw4, int bh4, \
+            union refpair t_ref, const int32_t *const matrix)
 typedef decl_splat_warpmv_fn(*splat_warpmv_fn);
 
 #define decl_splat_comp_warpmv_fn(name) \
 void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
-            refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
-            refmvs_temporal_block *t_src, int bw4, int bh4, \
+            refmvs_temporal_block *t_dst, ptrdiff_t off_x8, \
+            ptrdiff_t t_stride, int bw4, int bh4, union refpair t_ref, \
             const int32_t *const matrix1, const int32_t *const matrix2, \
 intptr_t t_swap, const uint8_t *wedge, intptr_t w_mask)
 typedef decl_splat_comp_warpmv_fn(*splat_comp_warpmv_fn);
 
 #define decl_splat_comp_wedgemv_fn(name) \
 void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
-            refmvs_temporal_block *t_dst, ptrdiff_t t_stride, \
-            refmvs_temporal_block *t_src, int bw4, int bh4, \
+            refmvs_temporal_block *t_dst, ptrdiff_t off_x8, \
+            ptrdiff_t t_stride, int bw4, int bh4, \
+            union qmvpair t_mv, union refpair t_ref, \
             const uint8_t *wedge, intptr_t w_mask)
 typedef decl_splat_comp_wedgemv_fn(*splat_comp_wedgemv_fn);
 

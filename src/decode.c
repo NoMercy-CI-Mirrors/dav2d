@@ -565,16 +565,17 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
                                    Dav2dTaskContext *const t,
                                    const enum BlockSize bs,
                                    const Av2Block *const b,
-                                   const int by4, const int bw4, const int bh4)
+                                   const int by4, const int bx4,
+                                   const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block s_src;
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *const t_dst =
         f->seq_hdr->ref_frame_mvs && b->ref.ref[0] != TIP_FRAME ?
-        &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)] : NULL;
-    refmvs_temporal_block t_src;
-    t_src.ref.ref[0] = t_src.ref.ref[1] = s_src.ref.ref[0] = b->ref.ref[0];
+        &f->rf.rp[(t->by >> 1) * (t_stride >> 5) + (t->bx >> 6)] : NULL;
+    s_src.ref.ref[0] = b->ref.ref[0];
+    union refpair t_ref = { .pair = 0x101 * b->ref.ref[0] };
     s_src.ref.ref[1] = -1;
     s_src.mv[1].n = INVALID_MV;
     s_src.bs = bs;
@@ -597,15 +598,17 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
             s_src.mf = 1;
             mat = f->frame_hdr->gmv.m[b->ref.ref[0]].matrix;
         }
-        f->c->refmvs_dsp.splat_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
-                                      bw4, bh4, mat);
+        f->c->refmvs_dsp.splat_warpmv(s_dst, &s_src, t_dst, bx4 >> 1, t_stride,
+                                      bw4, bh4, t_ref, mat);
     } else {
         s_src.mv[0] = b->mv[0];
         s_src.mf = b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1;
         // this is invalid for TIP, but that will be overwritten in tip_pred()
-        t_src.mv.mv[0] = t_src.mv.mv[1] = quantize_mv(b->mv[0]);
-        if (t_src.mv.mv[0].n == INVALID_TRAJ) t_src.ref.pair = -1;
-        f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
+        union qmvpair t_mv;
+        t_mv.mv[0] = t_mv.mv[1] = quantize_mv(b->mv[0]);
+        if (t_mv.mv[0].n == INVALID_TRAJ) t_ref.pair = -1;
+        f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, bx4 >> 1, t_stride,
+                                  bw4, bh4, t_mv, t_ref);
     }
 }
 
@@ -614,7 +617,8 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
                                     Dav2dTaskContext *const t,
                                     const enum BlockSize bs,
                                     const Av2Block *const b,
-                                    const int by4, const int bw4, const int bh4)
+                                    const int by4, const int bx4,
+                                    const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block s_src = (refmvs_block) {
@@ -628,12 +632,10 @@ static inline void splat_intrabc_mv(DB_ONLY(const int depth)
     };
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *const t_dst = f->seq_hdr->ref_frame_mvs ?
-        &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)] : NULL;
-    refmvs_temporal_block t_src = {
-        .ref.pair = -1,
-        .mv.n = INVALID_TRAJ * 0x10001U,
-    };
-    f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
+        &f->rf.rp[(t->by >> 1) * (t_stride >> 5) + (t->bx >> 6)] : NULL;
+    f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, bx4 >> 1, t_stride, bw4, bh4,
+                              (union qmvpair) { .n = INVALID_TRAJ * 0x10001U },
+                              (union refpair) { .pair = -1 });
 
     if (t->f->seq_hdr->refmv_bank)
         dav2d_refmvs_bank_add(&t->rt, bs, t->by, t->bx, b);
@@ -644,7 +646,8 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
                                    Dav2dTaskContext *const t,
                                    const enum BlockSize bs,
                                    const Av2Block *const b,
-                                   const int by4, const int bw4, const int bh4)
+                                   const int by4, const int bx4,
+                                   const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block s_src;
@@ -654,10 +657,10 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     const int refinemv = b->refine_mv && b->comp_type == COMP_INTER_AVG;
     refmvs_temporal_block *t_dst =
         f->seq_hdr->ref_frame_mvs && (!opfl || !refinemv) ?
-        &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)] : NULL;
-    refmvs_temporal_block t_src;
-    s_src.ref.ref[0] = t_src.ref.ref[t_swap] = b->ref.ref[0];
-    s_src.ref.ref[1] = t_src.ref.ref[!t_swap] = b->ref.ref[1];
+        &f->rf.rp[(t->by >> 1) * (t_stride >> 5) + (t->bx >> 6)] : NULL;
+    union refpair t_ref;
+    s_src.ref.ref[0] = t_ref.ref[t_swap] = b->ref.ref[0];
+    s_src.ref.ref[1] = t_ref.ref[!t_swap] = b->ref.ref[1];
     s_src.bs = bs;
     s_src.by4 = t->by;
     s_src.bx4 = t->bx;
@@ -683,30 +686,34 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
             mat1 = f->frame_hdr->gmv.m[b->ref.ref[0]].matrix;
             mat2 = f->frame_hdr->gmv.m[b->ref.ref[1]].matrix;
         }
-        f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, t_stride, &t_src,
-                                           bw4, bh4, mat1, mat2, t_swap, mask,
+        f->c->refmvs_dsp.splat_comp_warpmv(s_dst, &s_src, t_dst, bx4 >> 1,
+                                           t_stride, bw4, bh4, t_ref,
+                                           mat1, mat2, t_swap, mask,
                                            mask ? b->wedge_sign ^ t_swap : 0);
     } else {
         COPY2MV(s_src.mv, b->mv);
         s_src.mf |= b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1;
-        t_src.mv.mv[0] = quantize_mv(b->mv[t_swap]);
-        t_src.mv.mv[1] = quantize_mv(b->mv[!t_swap]);
+        union qmvpair t_mv;
+        t_mv.mv[0] = quantize_mv(b->mv[t_swap]);
+        t_mv.mv[1] = quantize_mv(b->mv[!t_swap]);
         if (!mask) {
-            if (t_src.mv.mv[0].n == INVALID_TRAJ) {
-                if (t_src.mv.mv[1].n == INVALID_TRAJ) {
-                    t_src.ref.pair = -1;
+            if (t_mv.mv[0].n == INVALID_TRAJ) {
+                if (t_mv.mv[1].n == INVALID_TRAJ) {
+                    t_ref.pair = -1;
                 } else {
-                    t_src.mv.mv[0] = t_src.mv.mv[1];
-                    t_src.ref.ref[0] = t_src.ref.ref[1];
+                    t_mv.mv[0] = t_mv.mv[1];
+                    t_ref.ref[0] = t_ref.ref[1];
                 }
-            } else if (t_src.mv.mv[1].n == INVALID_TRAJ) {
-                t_src.mv.mv[1] = t_src.mv.mv[0];
-                t_src.ref.ref[1] = t_src.ref.ref[0];
+            } else if (t_mv.mv[1].n == INVALID_TRAJ) {
+                t_mv.mv[1] = t_mv.mv[0];
+                t_ref.ref[1] = t_ref.ref[0];
             }
-            f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
+            f->c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, bx4 >> 1, t_stride,
+                                      bw4, bh4, t_mv, t_ref);
         } else {
-            f->c->refmvs_dsp.splat_comp_wedgemv(s_dst, &s_src, t_dst, t_stride,
-                                                &t_src, bw4, bh4, mask,
+            f->c->refmvs_dsp.splat_comp_wedgemv(s_dst, &s_src, t_dst, bx4 >> 1,
+                                                t_stride, bw4, bh4, t_mv, t_ref,
+                                                mask,
                                                 mask ? b->wedge_sign ^ t_swap : 0);
         }
     }
@@ -716,7 +723,8 @@ static inline void splat_intraref(const Dav2dContext *const c,
                                   const Dav2dFrameContext *const f,
                                   Dav2dTaskContext *const t,
                                   const enum BlockSize bs,
-                                  const int by4, const int bw4, const int bh4)
+                                  const int by4, const int bx4,
+                                  const int bw4, const int bh4)
 {
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block s_src = (refmvs_block) {
@@ -729,13 +737,10 @@ static inline void splat_intraref(const Dav2dContext *const c,
     };
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *const t_dst = f->seq_hdr->ref_frame_mvs ?
-        &f->rf.rp[(t->by >> 1) * t_stride + (t->bx >> 1)] : NULL;
-    refmvs_temporal_block t_src = {
-        .ref.pair = -1,
-        .mv.n = INVALID_TRAJ * 0x10001U,
-    };
-    c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, t_stride, &t_src, bw4, bh4);
-
+        &f->rf.rp[(t->by >> 1) * (t_stride >> 5) + (t->bx >> 6)] : NULL;
+    c->refmvs_dsp.splat_mv(s_dst, &s_src, t_dst, bx4 >> 1, t_stride, bw4, bh4,
+                           (union qmvpair) { .n = INVALID_TRAJ * 0x10001U },
+                           (union refpair) { .pair = -1 });
     if (t->f->seq_hdr->refmv_bank)
         dav2d_refmvs_bank_update(&t->rt, bs, t->by, t->bx);
 }
@@ -976,7 +981,7 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     const uint8_t *const b_dim = dav2d_block_dimensions[bs];
     const int bw4 = b_dim[0], bh4 = b_dim[1];
     const int w4 = imin(bw4, f->bw - t->bx), h4 = imin(bh4, f->bh - t->by);
-    const int by4 = t->by & 63;
+    const int by4 = t->by & 63, bx4 = t->bx & 63;
     const int has_luma = lbs != BS_INVALID;
 
     // resolve motion vector and/or warp matrix
@@ -1072,7 +1077,7 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
         DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d\n",
                            depth, "", b->mv[0].y, b->mv[0].x);
-        splat_intrabc_mv(DB_ONLY(depth) f, t, bs, b, by4, bw4, bh4);
+        splat_intrabc_mv(DB_ONLY(depth) f, t, bs, b, by4, bx4, bw4, bh4);
     } else if (!b->intra) {
         assert(has_luma);
         if (b->ref.ref[1] == -1) {
@@ -1328,14 +1333,14 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                       DB_ONLY(t->by, t->bx) b->ref.ref[1]);
         }
         if (b->ref.ref[1] != -1) {
-            splat_tworef_mv(DB_ONLY(depth) f, t, bs, b, by4, bw4, bh4);
+            splat_tworef_mv(DB_ONLY(depth) f, t, bs, b, by4, bx4, bw4, bh4);
         } else {
-            splat_oneref_mv(DB_ONLY(depth) f, t, bs, b, by4, bw4, bh4);
+            splat_oneref_mv(DB_ONLY(depth) f, t, bs, b, by4, bx4, bw4, bh4);
         }
     } else if (has_luma &&
                (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))
     {
-        splat_intraref(f->c, f, t, bs, by4, bw4, bh4);
+        splat_intraref(f->c, f, t, bs, by4, bx4, bw4, bh4);
     }
 
     if (t->task_thread.pass == PASS_MVRES) {
@@ -5572,7 +5577,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
         if (f->seq_hdr->ref_frame_mvs) {
             f->mvs_ref = dav2d_ref_create_using_pool(c->refmvs_pool,
-                sizeof(*f->mvs) * f->sb256h * 32 * (f->b4_stride >> 1));
+                sizeof(*f->mvs) * f->sb256h * 32 * (f->b4_stride >> 6));
             if (!f->mvs_ref) {
                 res = DAV2D_ERR(ENOMEM);
                 goto error;

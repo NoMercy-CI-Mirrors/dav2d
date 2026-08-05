@@ -88,11 +88,13 @@ static int check_spatial_mv(const refmvs_block *a, const ptrdiff_t as,
 }
 
 static void dump_temporal_mv(const char *const tag,
-                             const refmvs_temporal_block *const a)
+                             const refmvs_temporal_block *const a,
+                             const ptrdiff_t sub_pos)
 {
     fprintf(stderr, "%s: mv0=y:%d,x:%d|mv1=y:%d,x:%d|ref=%d,%d\n",
-            tag, a->mv.mv[0].y, a->mv.mv[0].x, a->mv.mv[1].y, a->mv.mv[1].x,
-            a->ref.ref[0], a->ref.ref[1]);
+            tag, a->mv[sub_pos].mv[0].y, a->mv[sub_pos].mv[0].x,
+            a->mv[sub_pos].mv[1].y, a->mv[sub_pos].mv[1].x,
+            a->ref[sub_pos].ref[0], a->ref[sub_pos].ref[1]);
 }
 
 static int check_temporal_mv(const refmvs_temporal_block *a, const ptrdiff_t as,
@@ -101,17 +103,20 @@ static int check_temporal_mv(const refmvs_temporal_block *a, const ptrdiff_t as,
 {
     const int th = (h + 1) >> 1, tw = (w + 1) >> 1;
     for (int y = 0; y < th; y++) {
-        for (int x = 0; x < tw; x++)
-            if (memcmp(&a[x], &b[x], sizeof(refmvs_temporal_block))) {
+        for (int x = 0; x < tw; x++) {
+            if (a[x >> 5].mv[x & 31].n != b[x >> 5].mv[x & 31].n ||
+                a[x >> 5].ref[x & 31].pair != b[x >> 5].ref[x & 31].pair)
+            {
                 if (fail()) {
                     fprintf(stderr, "temporal %dx%d,y8=%d,x8=%d\n", w * 4, h * 4, y, x);
-                    dump_temporal_mv("c", &a[x]);
-                    dump_temporal_mv("s", &b[x]);
+                    dump_temporal_mv("c", &a[x >> 5], x & 31);
+                    dump_temporal_mv("s", &b[x >> 5], x & 31);
                 }
                 return 1;
             }
-        a += as;
-        b += bs;
+        }
+        a += as >> 5;
+        b += bs >> 5;
     }
     return 0;
 }
@@ -302,16 +307,14 @@ static void check_load_tmvs(const Dav2dRefmvsDSPContext *const c) {
 #endif
 
 static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
-    ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
+    refmvs_block s_dst[64 * 128], s_src;
     refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
-    ALIGN_STK_64(refmvs_block, s_src, 1,);
-    ALIGN_STK_64(refmvs_temporal_block, c_t_dst, 32 * 32,);
-    ALIGN_STK_64(refmvs_temporal_block, a_t_dst, 32 * 32,);
-    refmvs_temporal_block t_src;
+    refmvs_temporal_block c_t_dst[32], a_t_dst[32];
 
     declare_func(void, refmvs_block *s_dst, refmvs_block *s_src,
-                 refmvs_temporal_block *t_dst, ptrdiff_t t_stride,
-                 refmvs_temporal_block *t_src, int bw4, int bh4);
+                 refmvs_temporal_block *t_dst, ptrdiff_t off_x8,
+                 ptrdiff_t t_stride, int bw4, int bh4,
+                 union qmvpair mv, union refpair ref);
 
     for (int t = 0; t < 2; t++) {
         for (int w = 1; w <= 64; w *= 2) {
@@ -321,51 +324,55 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
                 const int h_min = w <= 16 ? 1 : w >> 1;
                 const int h_max = w < 16 ? 16 : imin(w * 2, 64);
                 for (int h = h_min; h <= h_max; h *= 2) {
-                    s_src[0].ref.ref[0] = (rnd() & 7) - 1;
-                    s_src[0].ref.ref[1] = s_src[0].ref.ref[0] == -1 ? -1 : (rnd() & 7) - 1;
+                    s_src.ref.ref[0] = (rnd() & 7) - 1;
+                    s_src.ref.ref[1] = s_src.ref.ref[0] == -1 ? -1 : (rnd() & 7) - 1;
                     for (int n = 0; n < 2; n++) {
-                        if (s_src[0].ref.ref[n] == -1) {
-                            s_src[0].mv[n].n = INVALID_MV;
+                        if (s_src.ref.ref[n] == -1) {
+                            s_src.mv[n].n = INVALID_MV;
                         } else {
-                            s_src[0].mv[n].y = gen_mv(17, 3);
-                            s_src[0].mv[n].x = gen_mv(17, 3);
+                            s_src.mv[n].y = gen_mv(17, 3);
+                            s_src.mv[n].x = gen_mv(17, 3);
                         }
                     }
-                    s_src[0].mf = rnd() & 0xfd;
-                    s_src[0].bs = bs_from_bwh4(w, h);
-                    s_src[0].bx4 = rnd() % (0x4000 - w);
-                    s_src[0].by4 = rnd() % (0x4000 - h);
+                    s_src.mf = rnd() & 0xfd;
+                    s_src.bs = bs_from_bwh4(w, h);
+                    s_src.bx4 = rnd() % (0x4000 - w);
+                    s_src.by4 = rnd() % (0x4000 - h);
 
-                    t_src.mv.mv[0] = quantize_mv(s_src[0].mv[0]);
-                    t_src.mv.mv[1] = quantize_mv(s_src[0].mv[1]);
-                    if (t_src.mv.mv[0].n == INVALID_TRAJ) {
-                        if (t_src.mv.mv[1].n == INVALID_TRAJ) {
-                            t_src.ref.pair = -1;
+                    union qmvpair t_mv;
+                    t_mv.mv[0] = quantize_mv(s_src.mv[0]);
+                    t_mv.mv[1] = quantize_mv(s_src.mv[1]);
+                    union refpair t_ref;
+                    if (t_mv.mv[0].n == INVALID_TRAJ) {
+                        if (t_mv.mv[1].n == INVALID_TRAJ) {
+                            t_ref.pair = -1;
                         } else {
-                            t_src.mv.mv[0] = t_src.mv.mv[1];
-                            t_src.ref.ref[0] = t_src.ref.ref[1];
+                            t_mv.mv[0] = t_mv.mv[1];
+                            t_ref.pair = s_src.ref.ref[1] * 0x101;
                         }
-                    } else if (t_src.mv.mv[1].n == INVALID_TRAJ) {
-                        t_src.mv.mv[1] = t_src.mv.mv[0];
-                        t_src.ref.ref[1] = t_src.ref.ref[0];
+                    } else if (t_mv.mv[1].n == INVALID_TRAJ) {
+                        t_mv.mv[1] = t_mv.mv[0];
+                        t_ref.pair = s_src.ref.ref[0] * 0x101;
                     } else {
-                        t_src.ref.pair = s_src[0].ref.pair;
+                        t_ref.pair = s_src.ref.pair;
                     }
                     const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
                     memset(s_dst, -1, sizeof(*s_dst) * 64 * 128);
-                    memset(c_t_dst, -1, sizeof(*c_t_dst) * 32 * 32);
-                    memset(a_t_dst, -1, sizeof(*a_t_dst) * 32 * 32);
-                    call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src, w, h);
-                    call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src, w, h);
+                    memset(c_t_dst, -1, sizeof(*c_t_dst) * 32);
+                    memset(a_t_dst, -1, sizeof(*a_t_dst) * 32);
+                    call_ref(c_s_dst, &s_src, t ? c_t_dst : NULL, t_off, 32,
+                             w, h, t_mv, t_ref);
+                    call_new(a_s_dst, &s_src, t ? a_t_dst : NULL, t_off, 32,
+                             w, h, t_mv, t_ref);
 
                     if (!check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, 0) && t) {
-                        check_temporal_mv(&c_t_dst[t_off], 32,
-                                          &a_t_dst[t_off], 32, w, h);
+                        check_temporal_mv(c_t_dst, 32, a_t_dst, 32, w, h);
                     }
 
                     if (w == h) {
-                        bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 32, &t_src, w, h);
+                        bench_new(a_s_dst, &s_src, t ? a_t_dst : NULL, 0, 32,
+                                  w, h, t_mv, t_ref);
                     }
                 }
             }
@@ -375,17 +382,14 @@ static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
 }
 
 static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
-    ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
+    refmvs_block s_dst[64 * 128], s_src;
     refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
-    ALIGN_STK_64(refmvs_block, s_src, 1,);
-    ALIGN_STK_64(refmvs_temporal_block, c_t_dst, 32 * 32,);
-    ALIGN_STK_64(refmvs_temporal_block, a_t_dst, 32 * 32,);
-    refmvs_temporal_block t_src;
+    refmvs_temporal_block c_t_dst[32], a_t_dst[32];
 
     declare_func(void, refmvs_block *s_dst, refmvs_block *s_src,
-                 refmvs_temporal_block *t_dst, ptrdiff_t t_stride,
-                 refmvs_temporal_block *t_src, int bw4, int bh4,
-                 const int32_t *matrix);
+                 refmvs_temporal_block *t_dst, ptrdiff_t off_x8,
+                 ptrdiff_t t_stride, int bw4, int bh4,
+                 union refpair ref, const int32_t *matrix);
 
     for (int g = 0; g < 2; g++)
         for (int t = 0; t < 2; t++) {
@@ -398,23 +402,24 @@ static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
                     const int h_max = w < 16 ? 16 : imin(w * 2, 64);
                     for (int h = h_min; h <= h_max; h *= 2) {
                         const int wide = rnd() & 1;
-                        s_src[0].ref.ref[0] = rnd() % 7;
-                        t_src.ref.pair = 0x101 * s_src[0].ref.ref[0];
-                        s_src[0].ref.ref[1] = -1;
+                        s_src.ref.ref[0] = rnd() % 7;
+                        union refpair t_ref;
+                        t_ref.pair = 0x101 * s_src.ref.ref[0];
+                        s_src.ref.ref[1] = -1;
                         // increase chance that quantized temporal MV is invalid
-                        s_src[0].mv[0].y = wide ? gen_mv(8, 12) : gen_mv(17, 3);
-                        s_src[0].mv[0].x = gen_mv(17, 3);
-                        s_src[0].mv[1].n = INVALID_MV;
+                        s_src.mv[0].y = wide ? gen_mv(8, 12) : gen_mv(17, 3);
+                        s_src.mv[0].x = gen_mv(17, 3);
+                        s_src.mv[1].n = INVALID_MV;
                         if (!g) {
-                            COPY2MV(s_src[0].lmv, s_src[0].mv);
+                            COPY2MV(s_src.lmv, s_src.mv);
                         }
-                        s_src[0].mf = (rnd() & 0xfc) | (!g << 1) | g;
-                        s_src[0].bs = bs_from_bwh4(w, h);
-                        s_src[0].bx4 = rnd() % ((0x4000 >> (!wide * 7)) - w);
-                        s_src[0].by4 = rnd() % ((0x4000 >> (!wide * 7)) - h);
-                        int32_t gmv_mat[6], *const mat = g ? gmv_mat : s_src[0].m;
-                        mat[0] = s_src[0].mv[0].x * (1 << 13);
-                        mat[1] = s_src[0].mv[0].y * (1 << 13);
+                        s_src.mf = (rnd() & 0xfc) | (!g << 1) | g;
+                        s_src.bs = bs_from_bwh4(w, h);
+                        s_src.bx4 = rnd() % ((0x4000 >> (!wide * 7)) - w);
+                        s_src.by4 = rnd() % ((0x4000 >> (!wide * 7)) - h);
+                        int32_t gmv_mat[6], *const mat = g ? gmv_mat : s_src.m;
+                        mat[0] = s_src.mv[0].x * (1 << 13);
+                        mat[1] = s_src.mv[0].y * (1 << 13);
                         const int range = 0x3ff >> (!wide * 4);
                         const int bias = 0x1ff >> (!wide * 4);
                         mat[2] = (((rnd() % range) - bias) * (1 << 6)) + 0x10000;
@@ -425,21 +430,20 @@ static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
                         const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
                         memset(s_dst, -1, sizeof(*s_dst) * 64 * 128);
-                        memset(c_t_dst, -1, sizeof(*c_t_dst) * 32 * 32);
-                        memset(a_t_dst, -1, sizeof(*a_t_dst) * 32 * 32);
-                        call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src,
-                                 w, h, mat);
-                        call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src,
-                                 w, h, mat);
+                        memset(c_t_dst, -1, sizeof(*c_t_dst) * 32);
+                        memset(a_t_dst, -1, sizeof(*a_t_dst) * 32);
+                        call_ref(c_s_dst, &s_src, t ? c_t_dst : NULL, t_off, 32,
+                                 w, h, t_ref, mat);
+                        call_new(a_s_dst, &s_src, t ? a_t_dst : NULL, t_off, 32,
+                                 w, h, t_ref, mat);
 
                         if (!check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, !g) && t) {
-                            check_temporal_mv(&c_t_dst[t_off], 32,
-                                              &a_t_dst[t_off], 32, w, h);
+                            check_temporal_mv(c_t_dst, 32, a_t_dst, 32, w, h);
                         }
 
                         if (w == h) {
-                            bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 32, &t_src,
-                                      w, h, mat);
+                            bench_new(a_s_dst, &s_src, t ? a_t_dst : NULL, 0, 32,
+                                      w, h, t_ref, mat);
                         }
                     }
                 }
@@ -449,16 +453,13 @@ static void check_splat_warpmv(const Dav2dRefmvsDSPContext *const c) {
 }
 
 static void check_splat_comp_warpmv(const Dav2dRefmvsDSPContext *const c) {
-    ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
+    refmvs_block s_dst[64 * 128], s_src;
     refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
-    ALIGN_STK_64(refmvs_block, s_src, 1,);
-    ALIGN_STK_64(refmvs_temporal_block, c_t_dst, 32 * 32,);
-    ALIGN_STK_64(refmvs_temporal_block, a_t_dst, 32 * 32,);
-    refmvs_temporal_block t_src;
+    refmvs_temporal_block c_t_dst[32], a_t_dst[32];
 
     declare_func(void, refmvs_block *s_dst, refmvs_block *s_src,
-                 refmvs_temporal_block *t_dst, ptrdiff_t t_stride,
-                 refmvs_temporal_block *t_src, int bw4, int bh4,
+                 refmvs_temporal_block *t_dst, ptrdiff_t off_x8,
+                 ptrdiff_t t_stride, int bw4, int bh4, union refpair ref,
                  const int32_t *matrix1, const int32_t *matrix2,
                  intptr_t t_swap, const uint8_t *wedge, intptr_t w_mask);
 
@@ -475,31 +476,32 @@ static void check_splat_comp_warpmv(const Dav2dRefmvsDSPContext *const c) {
                         const int t_swap = rnd() & 1;
                         const int wide = rnd() & 1;
 
-                        s_src[0].ref.ref[0] = t_src.ref.ref[t_swap] = rnd() % 7;
-                        s_src[0].ref.ref[1] = t_src.ref.ref[!t_swap] = rnd() % 7;
+                        union refpair t_ref;
+                        s_src.ref.ref[0] = t_ref.ref[t_swap] = rnd() % 7;
+                        s_src.ref.ref[1] = t_ref.ref[!t_swap] = rnd() % 7;
                         for (int n = 0; n < 2; n++) {
                             // increase chance that quantized temporal MV is invalid
-                            s_src[0].mv[n].y = wide ? gen_mv(8, 12) : gen_mv(17, 3);
-                            s_src[0].mv[n].x = gen_mv(17, 3);
+                            s_src.mv[n].y = wide ? gen_mv(8, 12) : gen_mv(17, 3);
+                            s_src.mv[n].x = gen_mv(17, 3);
                         }
                         if (!g) {
-                            COPY2MV(s_src[0].lmv, s_src[0].mv);
+                            COPY2MV(s_src.lmv, s_src.mv);
                         }
-                        s_src[0].mf = (rnd() & 0xfc) | (!g << 1) | g;
-                        s_src[0].bs = bs_from_bwh4(w, h);
-                        s_src[0].bx4 = rnd() % ((0x4000 >> (!wide * 7)) - w);
-                        s_src[0].by4 = rnd() % ((0x4000 >> (!wide * 7)) - h);
+                        s_src.mf = (rnd() & 0xfc) | (!g << 1) | g;
+                        s_src.bs = bs_from_bwh4(w, h);
+                        s_src.bx4 = rnd() % ((0x4000 >> (!wide * 7)) - w);
+                        s_src.by4 = rnd() % ((0x4000 >> (!wide * 7)) - h);
                         const int widx = rnd() % 68;
                         const uint8_t *const mask = w <= 16 && h <= 16 && rnd() & 1 ?
-                            WEDGE_TMVP(s_src[0].bs, w, h, widx) : NULL;
+                            WEDGE_TMVP(s_src.bs, w, h, widx) : NULL;
                         const int w_swap = mask && rnd() & 1;
 
-                        int32_t gmv_mat[2][6], *const mat[2] = { g ? gmv_mat[0] : s_src[0].m, gmv_mat[g] };
+                        int32_t gmv_mat[2][6], *const mat[2] = { g ? gmv_mat[0] : s_src.m, gmv_mat[g] };
                         const int range = 0x3ff >> (!wide * 4);
                         const int bias = 0x1ff >> (!wide * 4);
                         for (int n = 0; n < 2; n++) {
-                            mat[n][0] = s_src[0].mv[n].x * (1 << 13);
-                            mat[n][1] = s_src[0].mv[n].y * (1 << 13);
+                            mat[n][0] = s_src.mv[n].x * (1 << 13);
+                            mat[n][1] = s_src.mv[n].y * (1 << 13);
                             mat[n][2] = (((rnd() % range) - bias) * (1 << 6)) + 0x10000;
                             mat[n][3] =  ((rnd() % range) - bias) * (1 << 6);
                             mat[n][4] =  ((rnd() % range) - bias) * (1 << 6);
@@ -509,21 +511,21 @@ static void check_splat_comp_warpmv(const Dav2dRefmvsDSPContext *const c) {
                         const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
                         memset(s_dst, -1, sizeof(*s_dst) * 64 * 128);
-                        memset(c_t_dst, -1, sizeof(*c_t_dst) * 32 * 32);
-                        memset(a_t_dst, -1, sizeof(*a_t_dst) * 32 * 32);
-                        call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src,
-                                 w, h, mat[0], mat[1], t_swap, mask, w_swap);
-                        call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src,
-                                 w, h, mat[0], mat[1], t_swap, mask, w_swap);
+                        memset(c_t_dst, -1, sizeof(*c_t_dst) * 32);
+                        memset(a_t_dst, -1, sizeof(*a_t_dst) * 32);
+                        call_ref(c_s_dst, &s_src, t ? c_t_dst : NULL, t_off, 32,
+                                 w, h, t_ref, mat[0], mat[1], t_swap, mask, w_swap);
+                        call_new(a_s_dst, &s_src, t ? a_t_dst : NULL, t_off, 32,
+                                 w, h, t_ref, mat[0], mat[1], t_swap, mask, w_swap);
 
                         if (!check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, !g) && t) {
-                            check_temporal_mv(&c_t_dst[t_off], 32,
-                                              &a_t_dst[t_off], 32, w, h);
+                            check_temporal_mv(c_t_dst, 32, a_t_dst, 32, w, h);
                         }
 
                         if (w == h) {
-                            bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 32, &t_src,
-                                      w, h, mat[0], mat[1], t_swap, mask, w_swap);
+                            bench_new(a_s_dst, &s_src, t ? a_t_dst : NULL, 0, 32,
+                                      w, h, t_ref, mat[0], mat[1], t_swap,
+                                      mask, w_swap);
                         }
                     }
                 }
@@ -533,16 +535,14 @@ static void check_splat_comp_warpmv(const Dav2dRefmvsDSPContext *const c) {
 }
 
 static void check_splat_comp_wedgemv(const Dav2dRefmvsDSPContext *const c) {
-    ALIGN_STK_64(refmvs_block, s_dst, 64 * 128,);
+    refmvs_block s_dst[64 * 128], s_src;
     refmvs_block *const c_s_dst = s_dst, *const a_s_dst = &s_dst[64];
-    ALIGN_STK_64(refmvs_block, s_src, 1,);
-    ALIGN_STK_64(refmvs_temporal_block, c_t_dst, 32 * 32,);
-    ALIGN_STK_64(refmvs_temporal_block, a_t_dst, 32 * 32,);
-    refmvs_temporal_block t_src;
+    refmvs_temporal_block c_t_dst[32], a_t_dst[32];
 
     declare_func(void, refmvs_block *s_dst, refmvs_block *s_src,
-                 refmvs_temporal_block *t_dst, ptrdiff_t t_stride,
-                 refmvs_temporal_block *t_src, int bw4, int bh4,
+                 refmvs_temporal_block *t_dst, ptrdiff_t off_x8,
+                 ptrdiff_t t_stride, int bw4, int bh4,
+                 union qmvpair mv, union refpair ref,
                  const uint8_t *wedge, intptr_t w_mask);
 
     for (int t = 0; t < 2; t++) {
@@ -551,42 +551,43 @@ static void check_splat_comp_wedgemv(const Dav2dRefmvsDSPContext *const c) {
                            t ? "spatialtemporal" : "spatial", w * 4))
             {
                 for (int h = 2; h <= 16; h *= 2) {
-                    s_src[0].ref.ref[0] = rnd() % 7;
-                    s_src[0].ref.ref[1] = rnd() % 7;
+                    s_src.ref.ref[0] = rnd() % 7;
+                    s_src.ref.ref[1] = rnd() % 7;
                     for (int n = 0; n < 2; n++) {
                         // increase chance that quantized temporal MV is invalid
-                        s_src[0].mv[n].y = rnd() & 1 ? gen_mv(8, 12) : gen_mv(17, 3);
-                        s_src[0].mv[n].x = gen_mv(17, 3);
+                        s_src.mv[n].y = rnd() & 1 ? gen_mv(8, 12) : gen_mv(17, 3);
+                        s_src.mv[n].x = gen_mv(17, 3);
                     }
-                    s_src[0].mf = rnd() & 0xfd;
-                    s_src[0].bs = bs_from_bwh4(w, h);
-                    s_src[0].bx4 = rnd() % (0x4000 - w);
-                    s_src[0].by4 = rnd() % (0x4000 - h);
+                    s_src.mf = rnd() & 0xfd;
+                    s_src.bs = bs_from_bwh4(w, h);
+                    s_src.bx4 = rnd() % (0x4000 - w);
+                    s_src.by4 = rnd() % (0x4000 - h);
                     const int widx = rnd() % 68;
-                    const uint8_t *const mask = WEDGE_TMVP(s_src[0].bs, w, h, widx);
+                    const uint8_t *const mask = WEDGE_TMVP(s_src.bs, w, h, widx);
                     const int w_swap = rnd() & 1;
 
-                    t_src.ref.pair = s_src[0].ref.pair;
-                    t_src.mv.mv[0] = quantize_mv(s_src[0].mv[0]);
-                    t_src.mv.mv[1] = quantize_mv(s_src[0].mv[1]);
+                    union refpair t_ref;
+                    t_ref.pair = s_src.ref.pair;
+                    union qmvpair t_mv;
+                    t_mv.mv[0] = quantize_mv(s_src.mv[0]);
+                    t_mv.mv[1] = quantize_mv(s_src.mv[1]);
                     const ptrdiff_t t_off = w >= 16 ? (w >> 1) & 31 : 1;
 
                     memset(s_dst, -1, sizeof(*s_dst) * 64 * 128);
-                    memset(c_t_dst, -1, sizeof(*c_t_dst) * 32 * 32);
-                    memset(a_t_dst, -1, sizeof(*a_t_dst) * 32 * 32);
-                    call_ref(c_s_dst, s_src, t ? &c_t_dst[t_off] : NULL, 32, &t_src,
-                             w, h, mask, w_swap);
-                    call_new(a_s_dst, s_src, t ? &a_t_dst[t_off] : NULL, 32, &t_src,
-                             w, h, mask, w_swap);
+                    memset(c_t_dst, -1, sizeof(*c_t_dst) * 32);
+                    memset(a_t_dst, -1, sizeof(*a_t_dst) * 32);
+                    call_ref(c_s_dst, &s_src, t ? c_t_dst : NULL, t_off, 32,
+                             w, h, t_mv, t_ref, mask, w_swap);
+                    call_new(a_s_dst, &s_src, t ? a_t_dst : NULL, t_off, 32,
+                             w, h, t_mv, t_ref, mask, w_swap);
 
                     if (!check_spatial_mv(c_s_dst, 128, a_s_dst, 128, w, h, 0) && t) {
-                        check_temporal_mv(&c_t_dst[t_off], 32,
-                                          &a_t_dst[t_off], 32, w, h);
+                        check_temporal_mv(c_t_dst, 32, a_t_dst, 32, w, h);
                     }
 
                     if (w == h) {
-                        bench_new(a_s_dst, s_src, t ? a_t_dst : NULL, 32, &t_src,
-                                  w, h, mask, w_swap);
+                        bench_new(a_s_dst, &s_src, t ? a_t_dst : NULL, 0, 32,
+                                  w, h, t_mv, t_ref, mask, w_swap);
                     }
                 }
             }
