@@ -27,13 +27,9 @@
 #include "src/arm/asm.S"
 #include "util.S"
 
-// static void gdf_add_c(pixel *p_line,
-//                       const ptrdiff_t stride,
-//                       const int8_t *err_line,
-//                       const uint16_t (*const ll_mask)[4],
-//                       const int w,
-//                       const int h,
-//                       const int scale)
+// void gdf_add_8bpc_neon(pixel *p_line, const ptrdiff_t stride,
+//                        const int8_t *err_line, const uint16_t (*const ll_mask)[4],
+//                        const int w, const int h, const int scale)
 function gdf_add_8bpc_neon, export=1
         dup             v6.16b,  w6                     // scale
 
