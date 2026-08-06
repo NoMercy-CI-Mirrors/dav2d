@@ -1169,6 +1169,19 @@ static enum IntraPredMode wide_angle_remap(const TxfmInfo *const t_dim,
     return mode;
 }
 
+/* In 8-bit mode with 2-pass decoding the coefficient buffer
+ * can end up misaligned due to skips here. Work around
+ * the issue by explicitly realigning the buffer. */
+#if ARCH_X86_64 && BITDEPTH == 8
+#define align_cf_buffer(p, t_dim) do { \
+    if (t_dim->min) \
+        ts->frame_thread[p].cf = \
+            (void*)(((uintptr_t)ts->frame_thread[p].cf + 63) & ~63); \
+} while (0)
+#else
+#define align_cf_buffer(...)
+#endif
+
 static int read_luma_tx_cf(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                            const enum RectTxfmSize tx, Av2Block *const b)
 {
@@ -1186,6 +1199,7 @@ static int read_luma_tx_cf(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     // decode coefficients
     uint8_t cf_ctx;
     enum TxfmType txtp;
+    align_cf_buffer(0, t_dim);
     coef *cf = ts->frame_thread[0].cf;
     ts->frame_thread[0].cf += imin(tw, 32) * imin(th, 32);
     struct CodedBlockInfo *const cbi =
@@ -1529,6 +1543,7 @@ chroma: {}
 
     Dav2dTileState *const ts = t->ts;
     enum TxfmType y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+    align_cf_buffer(0, uv_t_dim);
     coef *cf[2] = { ts->frame_thread[0].cf };
     ts->frame_thread[0].cf += cbw4ss * cbh4ss * 16 * 2;
     cf[1] = &cf[0][cbw4ss * cbh4ss * 16];
@@ -2502,6 +2517,7 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             dav2d_memset_pow2[t_dim->lh](&t->l.lcoef[by4], cf_ctx);
         }
     } else if (!(t->task_thread.pass & PASS_ENTROPY)) {
+        align_cf_buffer(1, t_dim);
         cf = ts->frame_thread[1].cf;
         ts->frame_thread[1].cf += imin(tw, 32) * imin(th, 32);
         const struct CodedBlockInfo *const cbi =
