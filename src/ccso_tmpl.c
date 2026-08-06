@@ -167,8 +167,8 @@ ccso_prep_fn(0, 0, 444);
 static void ccso_add_c(pixel *line, const ptrdiff_t dst_stride,
                        const uint8_t *idx_line, const ptrdiff_t idx_stride,
                        const uint8_t *const offset_idxs,
-                       const int8_t *const offset_lut, const int w, const int h,
-                       const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
+                       const int8_t *const offset_lut, const uint16_t (*ll_mask)[4],
+                       const int w, const int h HIGHBD_DECL_SUFFIX)
 {
     for (int yy = 0; yy < h; yy += 4, ll_mask++) {
         for (int xx = 0, bx = 0; xx < w; xx += 4, bx++) {

@@ -367,8 +367,8 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
                                       ccso_lut_idx[pl], 64 >> (!!pl * ss_hor),
                                       f->frame_hdr->ccso.p[pl].filter_off,
                                       dav2d_ccso_offset[f->frame_hdr->ccso.p[pl].scale_idx],
-                                      w >> (!!pl * ss_hor), 8 >> (!!pl * ss_ver),
-                                      pl ? uv_ll_mask : y_ll_mask HIGHBD_CALL_SUFFIX);
+                                      pl ? uv_ll_mask : y_ll_mask,
+                                      w >> (!!pl * ss_hor), 8 >> (!!pl * ss_ver) HIGHBD_CALL_SUFFIX);
                     }
             }
             iptrs[0] += 64;

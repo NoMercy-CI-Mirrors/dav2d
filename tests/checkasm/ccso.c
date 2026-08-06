@@ -249,8 +249,8 @@ static void check_ccso_add(const ccso_add_fn fn, int ss_hor, int ss_ver,
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const uint8_t *idx,
                  ptrdiff_t idx_stride, const uint8_t *offset_idxs,
-                 const int8_t *offset_lut, int w, int h,
-                 const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX);
+                 const int8_t *offset_lut, const uint16_t (*ll_mask)[4],
+                 int w, int h HIGHBD_DECL_SUFFIX);
 
     const ptrdiff_t dst_stride = 64 * sizeof(pixel);
     const ptrdiff_t idx_stride = 64;
@@ -265,10 +265,10 @@ static void check_ccso_add(const ccso_add_fn fn, int ss_hor, int ss_ver,
         init_ll_mask(ll_mask, w, h);
 
         call_ref(c_dst, dst_stride, idx, idx_stride, offset_idxs,
-                 dav2d_ccso_offset[scale_idx], w, h, ll_mask
+                 dav2d_ccso_offset[scale_idx], ll_mask, w, h
                  HIGHBD_TAIL_SUFFIX);
         call_new(a_dst, dst_stride, idx, idx_stride, offset_idxs,
-                 dav2d_ccso_offset[scale_idx], w, h, ll_mask
+                 dav2d_ccso_offset[scale_idx], ll_mask, w, h
                  HIGHBD_TAIL_SUFFIX);
         if (checkasm_check_pixel(c_dst, dst_stride, a_dst, dst_stride, w, h,
                                  "dst"))
@@ -287,7 +287,7 @@ static void check_ccso_add(const ccso_add_fn fn, int ss_hor, int ss_ver,
     memset(ll_mask, 0, sizeof(ll_mask));
 
     bench_new(a_dst, dst_stride, idx, idx_stride, offset_idxs,
-              dav2d_ccso_offset[0], w, h, ll_mask HIGHBD_TAIL_SUFFIX);
+              dav2d_ccso_offset[0], ll_mask, w, h HIGHBD_TAIL_SUFFIX);
 }
 
 void bitfn(checkasm_check_ccso)(void)

@@ -89,8 +89,8 @@ SECTION .text
 %endmacro
 
 INIT_YMM avx2
-cglobal ccso_add_8bpc, 9, 11, 13, line, dst_stride, idx_line, idx_stride, \
-                                  offset_idxs, offset_lut, w, h, ll_mask
+cglobal ccso_add_8bpc, 7, 11, 13, line, dst_stride, idx_line, idx_stride, \
+                                  offset_idxs, offset_lut, ll_mask, w, h
     mova              m12, [ccso_llm_mul]
     mov                hd, hm
     movifnidn          wd, wm
