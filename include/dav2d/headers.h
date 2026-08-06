@@ -145,6 +145,7 @@ enum Dav2dColorDescription {
     DAV2D_COLOR_DESC_BT2100HLG = 3,  // CP=9, TC=14, MC=9
     DAV2D_COLOR_DESC_SRGB = 4,       // CP=1, TC=13, MC=0
     DAV2D_COLOR_DESC_SRGBSYCC = 5,   // CP=1, TC=13, MC=5
+    DAV2D_COLOR_DESC_RESERVED = 255,
 };
 
 enum Dav2dColorPrimaries {
@@ -213,6 +214,7 @@ enum Dav2dChromaSamplePosition {
     DAV2D_CHR_BOTTOMLEFT = 4,
     DAV2D_CHR_BOTTOM = 5,
     DAV2D_CHR_UNKNOWN = 6,
+    DAV2D_CHR_RESERVED = 255,
 };
 
 enum Dav2dAspectRatio {
