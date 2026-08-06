@@ -537,6 +537,7 @@ typedef struct Dav2dFrameHeader {
     struct {
         enum Dav2dAdaptiveBoolean enabled;
         uint8_t qp_idx, scale;
+        uint8_t b64size;
     } gdf;
     struct {
         uint8_t enabled;
@@ -566,6 +567,7 @@ typedef struct Dav2dFrameHeader {
             uint8_t ext_filter_support, edge_clf, max_band_log2;
             uint8_t filter_off[64 /* nibbles. if bo_only { [band:128] } else { [d0:4][d1:4][band:8] } */];
         } p[3];
+        uint8_t b64size;
     } ccso;
     enum Dav2dTxfmMode txfm_mode;
     uint8_t switchable_comp_refs;

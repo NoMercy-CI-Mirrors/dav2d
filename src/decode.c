@@ -1535,6 +1535,18 @@ static inline void jmvd_scale(union mv *const mv, const int amvd,
     }
 }
 
+static void splat2d(uint8_t *ptr, const ptrdiff_t stride,
+                    const int log2w, const int h, const int v)
+{
+#define set_ctx(rep_macro) \
+    for (int y = 0; y < h; y++) { \
+        rep_macro(ptr, 0, v); \
+        ptr += stride; \
+    }
+    case_set(log2w);
+#undef set_ctx
+}
+
 static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     const enum BlockSize lbs, const enum BlockSize cbs)
 {
@@ -1797,16 +1809,12 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     if (has_luma) {
-        // FIXME some of these can be pre-calculated at the start of a frame
-        // FIXME gdf block size can be 64 pixels when tiles are split at odd places
-        const int gdf_sz_log2 = f->frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY ?
-                                1 : imax(1, f->frame_hdr->sb128);
-        const int gdf_bs = 16 << gdf_sz_log2;
-        if (!((t->bx | t->by) & (gdf_bs - 1))) {
+        const int gdf_bs = f->frame_hdr->gdf.b64size;
+        if (!((t->bx | t->by) & (16 * gdf_bs - 1))) {
             int idx = ((t->by & 48) >> 2) + ((t->bx & 48) >> 4);
             int flag;
             if (f->frame_hdr->gdf.enabled == DAV2D_ADAPTIVE &&
-                imax(f->cur.p.p.w, f->cur.p.p.h) > 4 * gdf_bs)
+                imax(f->cur.p.p.w, f->cur.p.p.h) > 64 * gdf_bs)
             {
                 flag = dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.gdf);
                 DEBUG_BLOCK_printf("%*sPost-gdf[y=%d,x=%d,gdf=%d]: r=%d\n",
@@ -1814,14 +1822,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                    flag, ts->msac.rng);
             } else
                 flag = !!f->frame_hdr->gdf.enabled;
-            dav2d_memset_pow2[gdf_sz_log2](&t->lf_mask->gdf[idx], flag);
-            if (gdf_bs >= 32) {
-                dav2d_memset_pow2[gdf_sz_log2](&t->lf_mask->gdf[idx+4], flag);
-                if (gdf_bs == 64) {
-                    dav2d_memset_pow2[gdf_sz_log2](&t->lf_mask->gdf[idx+8], flag);
-                    dav2d_memset_pow2[gdf_sz_log2](&t->lf_mask->gdf[idx+12], flag);
-                }
-            }
+            splat2d(&t->lf_mask->gdf[idx], 4, ulog2(gdf_bs), gdf_bs, flag);
         }
     }
 
@@ -1886,28 +1887,36 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // ccso
-    if (has_luma && !((t->bx | t->by) & 63)) {
-        const ptrdiff_t ccso_idx = 3 * ((t->bx >> 6) + (t->by >> 6) * f->sb256w);
+    const int ccso_bs = f->frame_hdr->ccso.b64size;
+    if (has_luma && !((t->bx | t->by) & (16 * ccso_bs - 1))) {
+        const ptrdiff_t ccso_fidx = (t->bx >> 4) + (t->by >> 4) * f->sb256w * 4;
+        const int ccso_bidx = ((t->by & 48) >> 2) + ((t->bx & 48) >> 4);
         for (int p = 0; p < 3; p++) {
+            int flag;
             if (!f->frame_hdr->ccso.p[p].enabled) continue;
             if (f->frame_hdr->ccso.p[p].sb_reuse) {
-                t->lf_mask->ccso[p] = f->prev_ccsomap[p][ccso_idx + p];
+                flag = f->prev_ccsomap[p][ccso_fidx];
             } else {
                 // for left/left-bottom [if no overhang] context:
                 // ctx=0: --/--, false/--, --/false, false/false
                 // ctx=1: false/true, true/false
                 // ctx=2: true/--, --/true, true/true [same coded block]
                 // ctx=3: true/true [different coded block]
-                const int ctx = t->bx - 64 >= ts->tiling.col_start ?
-                                t->lf_mask[-1].ccso[p] * 2 : 0;
-                t->lf_mask->ccso[p] =
-                    dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.ccso[p][ctx]);
+                const int ccso_l = t->bx == ts->tiling.col_start ? 0 :
+                    bx4 > 0 ? t->lf_mask->ccso[p][ccso_bidx - ccso_bs] :
+                    t->lf_mask[-1].ccso[p][(ccso_bidx | 3) & ~(ccso_bs - 1)];
+                const int ctx = ccso_l * 2;
+                flag = dav2d_msac_decode_bool_adapt(&ts->msac,
+                           ts->cdf.m.ccso[p][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-ccso[pl=%c,ctx=%d,%d]: r=%d\n",
-                                   depth, "", "yuv"[p], ctx,
-                                   t->lf_mask->ccso[p], ts->msac.rng);
+                                   depth, "", "yuv"[p], ctx, flag, ts->msac.rng);
             }
+            const int ccso_bs_log2 = ulog2(ccso_bs);
+            splat2d(&t->lf_mask->ccso[p][ccso_bidx], 4,
+                    ccso_bs_log2, ccso_bs, flag);
             if (f->cur_ccsomap)
-                f->cur_ccsomap[ccso_idx + p] = t->lf_mask->ccso[p];
+                splat2d(&f->cur_ccsomap[p * f->sb256w * f->sb256h * 16 + ccso_fidx],
+                        f->sb256w * 4, ccso_bs_log2, ccso_bs, flag);
         }
     }
 
@@ -3328,28 +3337,16 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         int seg_id = b->seg_id;
         if (has_luma) {
             const ptrdiff_t seg_stride = f->b4_stride;
-            uint8_t *seg_ptr = &f->cur_segmap[t->by * seg_stride + t->bx];
-#define set_ctx(rep_macro) \
-            for (int y = 0; y < bh4; y++) { \
-                rep_macro(seg_ptr, 0, seg_id); \
-                seg_ptr += seg_stride; \
-            }
-            case_set(b_dim[2]);
-#undef set_ctx
+            splat2d(&f->cur_segmap[t->by * seg_stride + t->bx], seg_stride,
+                    b_dim[2], bh4, seg_id);
         }
         if (has_chroma &&
             (f->frame_hdr->deblock.level_u || f->frame_hdr->deblock.level_v))
         {
             const ptrdiff_t seg_stride = f->lf.uv_segmap_stride;
-            uint8_t *seg_ptr =
-                &f->lf.segmap_uv[(t->cby >> ss_ver) * seg_stride + (t->cbx >> ss_hor)];
-#define set_ctx(rep_macro) \
-            for (int y = 0; y < cbh4; y++) { \
-                rep_macro(seg_ptr, 0, seg_id); \
-                seg_ptr += seg_stride; \
-            }
-            case_set(ulog2(cbw4));
-#undef set_ctx
+            splat2d(&f->lf.segmap_uv[(t->cby >> ss_ver) * seg_stride +
+                                     (t->cbx >> ss_hor)], seg_stride,
+                    ulog2(cbw4), cbh4, seg_id);
         }
 
         if (f->frame_hdr->segmentation.lossless[seg_id]) {
@@ -5656,6 +5653,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             f->prev_ccsomap_ref[p] = c->refs[f->frame_hdr->refidx[ref]].ccsomap;
             dav2d_ref_inc(f->prev_ccsomap_ref[p]);
             f->prev_ccsomap[p] = f->prev_ccsomap_ref[p]->data;
+            f->prev_ccsomap[p] += p * f->sb256w * f->sb256h * 16;
         }
 
         if (f->frame_hdr->ccso.p[0].sb_reuse &&
@@ -5668,7 +5666,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             dav2d_ref_inc(f->cur_ccsomap_ref);
             f->cur_ccsomap = NULL;
         } else {
-            const size_t ccsomap_size = sizeof(*f->cur_ccsomap) * 3 * f->sb256w * f->sb256h;
+            const size_t ccsomap_size = sizeof(*f->cur_ccsomap) * 3 * f->sb256w * f->sb256h * 4 * 4;
             f->cur_ccsomap_ref = dav2d_ref_create_using_pool(c->ccsomap_pool, ccsomap_size);
             if (!f->cur_ccsomap_ref) {
                 res = DAV2D_ERR(ENOMEM);

@@ -46,7 +46,7 @@ typedef struct Av2Filter {
     uint16_t qidx[16];
     uint8_t gdf[16];
     int8_t cdef_idx[16]; // -1 means "unset"
-    uint8_t ccso[3];
+    uint8_t ccso[3 /* plane */][16];
     uint16_t noskip_mask[32][4]; // for 8x8 blocks, but stored on a 4x8 basis
     uint16_t lr_noskip_mask[64][4]; // for 4x4 blocks
     uint16_t lossless_mask_y[64][4];

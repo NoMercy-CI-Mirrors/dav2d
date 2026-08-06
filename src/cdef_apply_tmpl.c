@@ -144,8 +144,9 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
             const int cdef_idx = lflvl[sb256x].cdef_idx[sb64_idx];
 
             if (f->c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) {
-                const enum Backup2x8Flags flag = lflvl[sb256x].ccso[0] |
-                    lflvl[sb256x].ccso[1] | lflvl[sb256x].ccso[2];
+                const enum Backup2x8Flags flag = lflvl[sb256x].ccso[0][sb64_idx] |
+                    lflvl[sb256x].ccso[1][sb64_idx] |
+                    lflvl[sb256x].ccso[2][sb64_idx];
                 const enum Backup2x8Flags do_left = flag & ~prev_flag;
                 prev_flag |= flag;
                 if (do_left && edges & CDEF_HAVE_LEFT) {
@@ -155,7 +156,7 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
                 }
 
                 for (int pl = 0; pl < 3; pl++) {
-                    if (!lflvl[sb256x].ccso[pl]) continue;
+                    if (!lflvl[sb256x].ccso[pl][sb64_idx]) continue;
 
                     const Dav2dFrameHeader *const hdr = f->frame_hdr;
                     const int pl_uv = !!pl;
@@ -343,8 +344,9 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
 
         next_sb:
             if (f->c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) {
-                const enum Backup2x8Flags flag = lflvl[sb256x].ccso[0] |
-                    ((lflvl[sb256x].ccso[1] | lflvl[sb256x].ccso[2]) << 1);
+                const enum Backup2x8Flags flag = lflvl[sb256x].ccso[0][sb64_idx] |
+                    ((lflvl[sb256x].ccso[1][sb64_idx] |
+                      lflvl[sb256x].ccso[2][sb64_idx]) << 1);
                 // XXX could improve the (actual) backups prior to running filter
                 // (so the right side ones) by checking whether next sb/b needs
                 // it (if has_cdef or has_ccso)
@@ -355,7 +357,7 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
                     prev_flag |= do_right;
                 }
                 for (int pl = 0; pl < 3; pl++)
-                    if (lflvl[sb256x].ccso[pl]) {
+                    if (lflvl[sb256x].ccso[pl][sb64_idx]) {
                         const int w = imin(16, f->bw - sb64x * 16) * 4;
                         dsp->ccso.add(iptrs[pl], f->cur.p.stride[!!pl],
                                       ccso_lut_idx[pl], 64 >> (!!pl * ss_hor),

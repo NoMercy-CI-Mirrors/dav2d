@@ -1625,6 +1625,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     }
+    hdr->gdf.b64size = 1 << imax(!seqhdr->gdf_unit_matches_sbsz, hdr->sb128);
 
     // cdef
     if (!hdr->all_lossless && seqhdr->cdef) {
@@ -1926,6 +1927,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     }
+    hdr->ccso.b64size = 1 << (seqhdr->ccso_unit_matches_sbsz ? hdr->sb128 : 2);
 
     if (!hdr->all_lossless)
         hdr->txfm_mode = dav2d_get_bit(gb) ? DAV2D_TX_SWITCHABLE : DAV2D_TX_LARGEST;
