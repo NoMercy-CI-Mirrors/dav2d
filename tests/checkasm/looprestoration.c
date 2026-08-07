@@ -387,6 +387,7 @@ static void check_gdf_prep(Dav2dLoopRestorationDSPContext *const c) {
             params = ref_dst_idx ? &dav2d_gdf_inter_params[ref_dst_idx - 1][qp_idx].p
                                  : &dav2d_gdf_intra_params[qp_idx].p;
 
+            memset(c_dst, 0xaa, 64 * 64);
             memset(a_dst, 0xaa, 64 * 64);
 
             call_ref(c_dst, p, p_stride, left, top, bottom,
