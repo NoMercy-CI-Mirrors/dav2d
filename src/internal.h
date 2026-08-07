@@ -341,7 +341,7 @@ struct Dav2dFrameContext {
         Av2Filter *mask;
         Av2Restoration *lr_mask;
         uint8_t *segmap_uv;
-        int mask_sz /* w*h */, lr_mask_sz, uv_segmap_sz;
+        int mask_sz /* w*h */;
         ptrdiff_t uv_segmap_stride;
         /* 0-1: (stride*sbh*4) << sb128 if n_tc > 1, else stride*4;
          * 2-3: stride*(n_tile_rows-1)*4 if n_tc==1, double that otherwise */

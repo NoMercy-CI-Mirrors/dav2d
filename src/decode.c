@@ -4912,19 +4912,15 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
             f->lf.mask_sz = 0;
             goto error;
         }
-        f->lf.mask_sz = num_sb256;
-    }
-    memset(f->lf.mask, 0, sizeof(*f->lf.mask) * num_sb256);
-
-    if (num_sb256 != f->lf.lr_mask_sz) {
         dav2d_free(f->lf.lr_mask);
         f->lf.lr_mask = dav2d_malloc(ALLOC_LR, sizeof(*f->lf.lr_mask) * num_sb256);
         if (!f->lf.lr_mask) {
-            f->lf.lr_mask_sz = 0;
+            f->lf.mask_sz = 0;
             goto error;
         }
-        f->lf.lr_mask_sz = num_sb256;
+        f->lf.mask_sz = num_sb256;
     }
+    memset(f->lf.mask, 0, sizeof(*f->lf.mask) * num_sb256);
     memset(f->lf.lr_mask, 0, sizeof(*f->lf.lr_mask) * num_sb256);
 
     init_wiener(f);
