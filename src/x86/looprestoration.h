@@ -32,6 +32,7 @@
 decl_wiener_filter_fn(BF(dav2d_wiener_multi, ext)); \
 decl_wiener_filter_fn(BF(dav2d_wiener_pretrained, ext));
 
+decl_gdf_prep_fn(BF(dav2d_gdf_prep, avx2));
 decl_gdf_add_fn(BF(dav2d_gdf_add, avx2));
 
 decl_wiener_filter_fns(avx2);
@@ -71,6 +72,7 @@ static ALWAYS_INLINE void loop_restoration_dsp_init_x86(Dav2dLoopRestorationDSPC
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
 #if BITDEPTH == 8
+    c->gdf_prep = BF(dav2d_gdf_prep, avx2);
     c->gdf_add = BF(dav2d_gdf_add, avx2);
     c->pc_wiener = BF(dav2d_wiener_pretrained, avx2);
     c->ns_wiener_multi = BF(dav2d_wiener_multi, avx2);
