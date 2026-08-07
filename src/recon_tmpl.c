@@ -2083,13 +2083,15 @@ static int tip_pred(Dav2dTaskContext *const t,
     pixel *p[2];
     ptrdiff_t p_stride;
     union aliasi16 d;
-    if (opfl) {
+    if (opfl || refine) {
         p[0] = bitfn(t->scratch.p)[0];
         p[1] = bitfn(t->scratch.p)[1];
         p_stride = ((step + 2) * 4 * sizeof(pixel) + 63) & ~63;
-        const int d0 = f->absrefdist[ref.ref[0]], d1 = f->absrefdist[ref.ref[1]];
-        d.i8[0] = apply_sign(1 + (d0 > d1), -f->refdist[ref.ref[0]]);
-        d.i8[1] = apply_sign(1 + (d1 > d0), +f->refdist[ref.ref[1]]);
+        if (opfl) {
+            const int d0 = f->absrefdist[ref.ref[0]], d1 = f->absrefdist[ref.ref[1]];
+            d.i8[0] = apply_sign(1 + (d0 > d1), -f->refdist[ref.ref[0]]);
+            d.i8[1] = apply_sign(1 + (d1 > d0), +f->refdist[ref.ref[1]]);
+        }
     }
 
     union mv (*rmv_line)[2][2] = &t->rmv[((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1)];
@@ -2117,7 +2119,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                 cmv[1] = cmv[0];
             }
             scaleup_8pel_mv_for_chroma(rmv[1], f->cur.p.p.layout);
-            if (opfl) {
+            if (opfl || refine) {
                 // refinement
                 for (int i = 0; i < 2; i++)
                     mc(t, p[i], NULL, p_stride,
@@ -2140,12 +2142,13 @@ static int tip_pred(Dav2dTaskContext *const t,
                     cmv[1].x -= 8 * dx;
                 } else dy = dx = 0;
                 union OpflMvDeltaBlock dd;
-                const unsigned sad = b->bs == BS_256x256 && f->frame_hdr->tip.frame_mode == 1 ? 0 :
-                                     f->dsp->mc.sad8x8(&p[0][(4 + dy) * PXSTRIDE(p_stride) +
-                                                             (4 + dx)], p_stride,
-                                                       &p[1][(4 - dy) * PXSTRIDE(p_stride) +
-                                                             (4 - dx)], p_stride
-                                                       HIGHBD_CALL_SUFFIX);
+                const unsigned sad = !opfl ||
+                    (b->bs == BS_256x256 && f->frame_hdr->tip.frame_mode == 1) ? 0 :
+                    f->dsp->mc.sad8x8(&p[0][(4 + dy) * PXSTRIDE(p_stride) +
+                                            (4 + dx)], p_stride,
+                                      &p[1][(4 - dy) * PXSTRIDE(p_stride) +
+                                            (4 - dx)], p_stride
+                                      HIGHBD_CALL_SUFFIX);
                 if (sad >= sad8x8_thr) {
                     struct OpflRegressionData res[4];
                     f->dsp->mc.opfl_refine_mv(res,
