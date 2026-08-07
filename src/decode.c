@@ -4900,8 +4900,6 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     if (num_sb256 != f->lf.mask_sz) {
         dav2d_free(f->lf.mask);
         f->lf.mask = dav2d_malloc(ALLOC_LF, sizeof(*f->lf.mask) * num_sb256);
-        // over-allocate by 3 bytes since some of the SIMD implementations
-        // index this from the level type and can thus over-read by up to 3
         if (!f->lf.mask) {
             f->lf.mask_sz = 0;
             goto error;
