@@ -2147,8 +2147,9 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
             };
             ref_done[rf->tip.ref.ref[!o]][dir] = 1;
         }
+        int mfmv_lim = rf->seq_hdr->reduced_ref_frame_mvs_mode ? 1 : 3;
         // adjacent refs
-        for (int n = 0; n < 2; n++) {
+        if (rf->n_mfmvs < mfmv_lim) for (int n = 0; n < 2; n++) {
             int ref1 = -1, ref2 = -1;
             if (first_fut - n > 0) {
                 ref1 = order[first_fut - n - 1];
@@ -2174,7 +2175,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                     .dir = 1,
                 };
                 ref_done[ref1][1] = 1;
-                if (rf->n_mfmvs == 3) break;
+                if (rf->n_mfmvs == mfmv_lim) break;
             }
             if (ref2 >= 0 && !ref_done[ref2][0]) {
                 rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
@@ -2183,7 +2184,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                     .dir = 0,
                 };
                 ref_done[ref2][0] = 1;
-                if (rf->n_mfmvs == 3) break;
+                if (rf->n_mfmvs == mfmv_lim) break;
             }
             if (!order && ref1 >= 0 && !ref_done[ref1][1]) {
                 rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
@@ -2192,11 +2193,11 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                     .dir = 1,
                 };
                 ref_done[ref1][1] = 1;
-                if (rf->n_mfmvs == 3) break;
+                if (rf->n_mfmvs == mfmv_lim) break;
             }
         }
         // bwd adjacent refs, opposite direction
-        if (rf->n_mfmvs < 3 && first_fut > 0) {
+        if (rf->n_mfmvs < mfmv_lim && first_fut > 0) {
             const int ref = order[first_fut - 1];
             if (!ref_done[ref][0]) {
                 rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
@@ -2206,7 +2207,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                 };
                 ref_done[ref][0] = 1;
             }
-            if (rf->n_mfmvs < 3 && first_fut > 1) {
+            if (rf->n_mfmvs < mfmv_lim && first_fut > 1) {
                 const int ref2 = order[first_fut - 2];
                 if (!ref_done[ref2][0]) {
                     rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
@@ -2218,7 +2219,8 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                 }
             }
         }
-        for (int n = topo_cnt - 1; n >= 0; n--) {
+        mfmv_lim = rf->seq_hdr->reduced_ref_frame_mvs_mode ? 1 : 4;
+        if (rf->n_mfmvs < mfmv_lim) for (int n = topo_cnt - 1; n >= 0; n--) {
             const int ref = topo_order[n];
             const int dir = rf->pocdiff[ref] >= 0;
             if (!ref_done[ref][dir]) {
@@ -2228,7 +2230,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                     .dir = dir,
                 };
                 ref_done[ref][dir] = 1;
-                if (rf->n_mfmvs == 4) break;
+                if (rf->n_mfmvs == mfmv_lim) break;
             }
             if (!ref_done[ref][!dir]) {
                 rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
@@ -2237,7 +2239,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                     .dir = !dir,
                 };
                 ref_done[ref][!dir] = 1;
-                if (rf->n_mfmvs == 4) break;
+                if (rf->n_mfmvs == mfmv_lim) break;
             }
         }
         for (int n = 0; n < 7; n++)
