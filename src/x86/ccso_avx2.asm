@@ -62,35 +62,9 @@ JMP_TABLE ccso_prep_420_clf_8bpc, f0, f1, f2, f3, f4, f5, f6
 
 SECTION .text
 
-%macro CCSO_ADD 2 ; lineq_p, idx_lineq_p
-    mova               m4, %2
-    psrlw              m3, m4, 1
-    pand               m3, m5      ; byte_idx
-    paddb              m0, m4, m4  ; byte_idx & 32
-    pshufb             m1, m6, m3
-    pshufb             m2, m8, m3
-    pblendvb           m1, m2, m0
-    pshufb             m2, m7, m3
-    pshufb             m3, m9, m3
-    pblendvb           m2, m3, m0
-    mova               m3, %1
-    paddb              m0, m0      ; byte_idx & 16
-    pblendvb           m1, m2, m0  ; offset_idxs[byte_idx]
-    psllw              m4, 7       ; half_idx
-    psrlw              m2, m1, 4
-    pblendvb           m1, m2, m4
-    pshufb             m1, m10, m1 ; offset_lut[offset_idx]
-    pabsb              m2, m1
-    paddusb            m0, m3, m1
-    psubusb            m2, m3, m2
-    pblendvb           m0, m2, m1
-    vblendvps          m0, m3, m11 ; ll_mask
-    mova               %1, m0
-%endmacro
-
 INIT_YMM avx2
-cglobal ccso_add_8bpc, 7, 11, 13, line, dst_stride, idx_line, idx_stride, \
-                                  offset_idxs, offset_lut, ll_mask, w, h
+cglobal ccso_add_8bpc, 7, 10, 13, line, dst_stride, idx_line, idx_stride, \
+                                  offset_idxs, offset_lut, ll_mask, w, h, line_p
     mova              m12, [ccso_llm_mul]
     mov                hd, hm
     movifnidn          wd, wm
@@ -102,28 +76,70 @@ cglobal ccso_add_8bpc, 7, 11, 13, line, dst_stride, idx_line, idx_stride, \
     vbroadcasti128     m8, [offset_idxsq+16*2]
     vbroadcasti128     m9, [offset_idxsq+16*3]
     vpbroadcastq      m10, [offset_lutq]
-    lea                r9, [idx_strideq*3]
-    lea               r10, [dst_strideq*3]
+DEFINE_ARGS line, dst_stride, idx_line, idx_stride, \
+            idx_stride3, dst_stride3, ll_mask, w, h, line_p
+    lea      idx_stride3q, [idx_strideq*3]
+    lea      dst_stride3q, [dst_strideq*3]
 .loop:
     vpbroadcastw      m11, [ll_maskq+hq*2]
     pmullw            m11, m12
-    CCSO_ADD [lineq+dst_strideq*0+32*0], [idx_lineq+idx_strideq*0+32*0]
-    CCSO_ADD [lineq+dst_strideq*1+32*0], [idx_lineq+idx_strideq*1+32*0]
-    CCSO_ADD [lineq+dst_strideq*2+32*0], [idx_lineq+idx_strideq*2+32*0]
-    CCSO_ADD [lineq+r10          +32*0], [idx_lineq+r9           +32*0]
+    mova               m4, [idx_lineq+idx_strideq*0+32*0]
+    lea           line_pq, [lineq+dst_strideq*0+32*0]
+    call .main
+    mova               m4, [idx_lineq+idx_strideq*1+32*0]
+    lea           line_pq, [lineq+dst_strideq*1+32*0]
+    call .main
+    mova               m4, [idx_lineq+idx_strideq*2+32*0]
+    lea           line_pq, [lineq+dst_strideq*2+32*0]
+    call .main
+    mova               m4, [idx_lineq+idx_stride3q+32*0]
+    lea           line_pq, [lineq+dst_stride3q+32*0]
+    call .main
     cmp                wd, 32
     jle .loop_end
     pslld             m11, 16
-    CCSO_ADD [lineq+dst_strideq*0+32*1], [idx_lineq+idx_strideq*0+32*1]
-    CCSO_ADD [lineq+dst_strideq*1+32*1], [idx_lineq+idx_strideq*1+32*1]
-    CCSO_ADD [lineq+dst_strideq*2+32*1], [idx_lineq+idx_strideq*2+32*1]
-    CCSO_ADD [lineq+r10          +32*1], [idx_lineq+r9           +32*1]
+    mova               m4, [idx_lineq+idx_strideq*0+32*1]
+    lea           line_pq, [lineq+dst_strideq*0+32*1]
+    call .main
+    mova               m4, [idx_lineq+idx_strideq*1+32*1]
+    lea           line_pq, [lineq+dst_strideq*1+32*1]
+    call .main
+    mova               m4, [idx_lineq+idx_strideq*2+32*1]
+    lea           line_pq, [lineq+dst_strideq*2+32*1]
+    call .main
+    mova               m4, [idx_lineq+idx_stride3q+32*1]
+    lea           line_pq, [lineq+dst_stride3q+32*1]
+    call .main
 .loop_end:
     lea             lineq, [lineq+dst_strideq*4]
     lea         idx_lineq, [idx_lineq+idx_strideq*4]
     add                hq, 4
     jl .loop
     RET
+.main:
+    psrlw              m3, m4, 1
+    pand               m3, m5      ; byte_idx
+    paddb              m0, m4, m4  ; byte_idx & 32
+    pshufb             m1, m6, m3
+    pshufb             m2, m8, m3
+    pblendvb           m1, m2, m0
+    pshufb             m2, m7, m3
+    pshufb             m3, m9, m3
+    pblendvb           m2, m3, m0
+    mova               m3, [line_pq]
+    paddb              m0, m0      ; byte_idx & 16
+    pblendvb           m1, m2, m0  ; offset_idxs[byte_idx]
+    psllw              m4, 7       ; half_idx
+    psrlw              m2, m1, 4
+    pblendvb           m1, m2, m4
+    pshufb             m1, m10, m1 ; offset_lut[offset_idx]
+    pabsb              m2, m1
+    paddusb            m0, m3, m1
+    psubusb            m2, m3, m2
+    pblendvb           m0, m2, m1
+    vblendvps          m0, m3, m11 ; ll_mask
+    mova        [line_pq], m0
+    ret
 
 INIT_YMM avx2
 cglobal ccso_prep_444_bo_8bpc, 3, 5, 4, dst, src, ss, mbl2
