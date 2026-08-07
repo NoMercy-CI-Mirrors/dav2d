@@ -353,8 +353,13 @@ struct Dav2dFrameContext {
         const int8_t (*pc_filters)[13];
         uint8_t *tx_db_right_edge[2];
         uint8_t *lr_line_buf;
+        // backup of post-deblock, pre-cdef/ccso data, 2 lines before & after
+        // each slice (64px) boundary, starting at y=56, for use in all
+        // postfilters after deblock (cdef/ccso/wiener/gdf)
         pixel *lr_db_line[3 /* plane */];
         int top_lr_db_toggle;
+        // backup of post-cdef/ccso, pre-wiener/gdf data, 2 lines before & after
+        // each tile row boundary, for use in wiener/gdf processing
         pixel *lr_cdef_line[3 /* plane */];
 
         // in-loop filter per-frame state keeping
@@ -518,6 +523,9 @@ struct Dav2dTaskContext {
     };
     Av2Filter *lf_mask;
     struct {
+        // backup of post-deblock, pre-cdef/ccso data, 2 lines before & after
+        // each 8px row boundary (except these handled by the slice boundary
+        // buffer), for use in cdef processing
         pixel *cdef_line[2][3];
         pixel *cdef_line_buf;
         size_t cdef_line_sz;
