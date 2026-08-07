@@ -366,7 +366,10 @@ struct Dav2dFrameContext {
         uint8_t *start_of_tile_row;
         int start_of_tile_row_sz;
         pixel *p[3];
+        // whether to run loop restoration (per plane) or gdf (for y only)
         int restore_planes; // enum LrRestorePlanes
+        // whether to run ccso (per plane) or cdef (for all planes)
+        int cdef_planes; // enum LrRestorePlanes
     } lf;
 
     struct {

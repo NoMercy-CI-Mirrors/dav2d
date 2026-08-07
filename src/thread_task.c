@@ -218,7 +218,7 @@ static int create_filter_sbrow(Dav2dFrameContext *const f,
 {
     const int has_deblock = f->frame_hdr->deblock.level_y[0] ||
                             f->frame_hdr->deblock.level_y[1];
-    const int has_cdef = f->seq_hdr->cdef;
+    const int has_cdef = f->lf.cdef_planes;
     const int has_lr = f->lf.restore_planes;
 
     Dav2dTask *tasks = f->task_thread.tasks;
@@ -920,7 +920,7 @@ void *dav2d_worker_task(void *data) {
                 reset_task_cur_async(ttd, t->frame_idx, c->n_fc);
                 if (!atomic_fetch_or(&ttd->cond_signaled, 1))
                     pthread_cond_signal(&ttd->cond);
-            } else if (f->seq_hdr->cdef || f->lf.restore_planes) {
+            } else if (f->lf.cdef_planes || f->lf.restore_planes) {
                 atomic_fetch_or(&f->frame_thread.copy_db_progress[by64 >> 5],
                                 1U << (by64 & 31));
                 // CDEF needs the top buffer to be saved by lr_copy_lpf of the
@@ -938,7 +938,7 @@ void *dav2d_worker_task(void *data) {
             }
             // fall-through
         case DAV2D_TASK_TYPE_CDEF:
-            if (f->seq_hdr->cdef) {
+            if (f->lf.cdef_planes) {
                 if (!atomic_load(&f->task_thread.error))
                     f->bd_fn.filter_slice_cdef(tc, by64);
                 reset_task_cur_async(ttd, t->frame_idx, c->n_fc);

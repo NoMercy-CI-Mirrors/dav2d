@@ -115,22 +115,21 @@ void bytefn(dav2d_copy_db_slice)(Dav2dFrameContext *const f,
     };
 
     // TODO Also check block level restore type to reduce copying.
-    const int restore_planes = f->lf.restore_planes;
+    const int backup_planes = f->lf.restore_planes | f->lf.cdef_planes;
 
-    if (f->seq_hdr->cdef || restore_planes & LR_RESTORE_Y) {
+    if (backup_planes & LR_RESTORE_Y) {
         const int w = f->bw << 2;
         backup_db(f, dst[0], src[0], stride[0], 0, y64, w);
     }
-    if ((f->seq_hdr->cdef || restore_planes & (LR_RESTORE_U | LR_RESTORE_V)) &&
-        f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400)
-    {
+    if (backup_planes & (LR_RESTORE_U | LR_RESTORE_V)) {
+        assert(f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400);
         const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
         const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
         const int w = f->bw << (2 - ss_hor);
-        if (f->seq_hdr->cdef || restore_planes & LR_RESTORE_U) {
+        if (backup_planes & LR_RESTORE_U) {
             backup_db(f, dst[1], src[1], stride[1], ss_ver, y64, w);
         }
-        if (f->seq_hdr->cdef || restore_planes & LR_RESTORE_V) {
+        if (backup_planes & LR_RESTORE_V) {
             backup_db(f, dst[2],  src[2], stride[1], ss_ver, y64, w);
         }
     }

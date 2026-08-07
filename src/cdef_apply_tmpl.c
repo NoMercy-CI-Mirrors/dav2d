@@ -156,7 +156,11 @@ void bytefn(dav2d_cdef_slice)(Dav2dTaskContext *const tc,
                 }
 
                 for (int pl = 0; pl < 3; pl++) {
-                    if (!lflvl[sb256x].ccso[pl][sb64_idx]) continue;
+                    if (!lflvl[sb256x].ccso[pl][sb64_idx] ||
+                        !(c->inloop_filters & DAV2D_INLOOPFILTER_CCSO))
+                    {
+                        continue;
+                    }
 
                     const Dav2dFrameHeader *const hdr = f->frame_hdr;
                     const int pl_uv = !!pl;

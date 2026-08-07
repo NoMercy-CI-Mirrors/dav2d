@@ -4928,10 +4928,24 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
 
     init_wiener(f);
     f->lf.restore_planes =
-        ((f->frame_hdr->restoration.p[0].type != DAV2D_RESTORATION_NONE ||
-          f->frame_hdr->gdf.enabled) << 0) +
-        ((f->frame_hdr->restoration.p[1].type != DAV2D_RESTORATION_NONE) << 1) +
-        ((f->frame_hdr->restoration.p[2].type != DAV2D_RESTORATION_NONE) << 2);
+        (((f->frame_hdr->restoration.p[0].type != DAV2D_RESTORATION_NONE &&
+           c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) ||
+          (f->frame_hdr->gdf.enabled &&
+           c->inloop_filters & DAV2D_INLOOPFILTER_GDF)) << 0) +
+        ((f->frame_hdr->restoration.p[1].type != DAV2D_RESTORATION_NONE &&
+          c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) << 1) +
+        ((f->frame_hdr->restoration.p[2].type != DAV2D_RESTORATION_NONE &&
+          c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) << 2);
+    f->lf.cdef_planes =
+        (f->frame_hdr->cdef.enabled &&
+         c->inloop_filters & DAV2D_INLOOPFILTER_CDEF) ?
+            f->seq_hdr->layout == DAV2D_PIXEL_LAYOUT_I400 ? 1 : 7 :
+        ((f->frame_hdr->ccso.p[0].enabled &&
+          c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) << 0) +
+        ((f->frame_hdr->ccso.p[1].enabled &&
+          c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) << 1) +
+        ((f->frame_hdr->ccso.p[2].enabled &&
+          c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) << 2);
 
     if (f->frame_hdr->gdf.enabled) {
         const int qp_idx = f->frame_hdr->gdf.qp_idx;

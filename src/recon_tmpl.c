@@ -3998,11 +3998,7 @@ void bytefn(dav2d_filter_slice_deblock_rows)(Dav2dFrameContext *const f, const i
     {
         bytefn(dav2d_deblock_slice_rows)(f, p, mask, by64);
     }
-    if ((f->seq_hdr->cdef &&
-         f->c->inloop_filters & DAV2D_INLOOPFILTER_CDEF) ||
-        (f->lf.restore_planes &&
-         f->c->inloop_filters & (DAV2D_INLOOPFILTER_WIENER | DAV2D_INLOOPFILTER_GDF)))
-    {
+    if (f->lf.restore_planes || f->lf.cdef_planes) {
         // Store deblocked pixels required by CDEF / LR
         bytefn(dav2d_copy_db_slice)(f, p, by64);
     }
@@ -4068,7 +4064,7 @@ void bytefn(dav2d_filter_slice_lr)(Dav2dFrameContext *const f, const int by64) {
 void bytefn(dav2d_filter_slice)(Dav2dFrameContext *const f, const int by64) {
     bytefn(dav2d_filter_slice_deblock_cols)(f, by64);
     bytefn(dav2d_filter_slice_deblock_rows)(f, by64);
-    if (f->seq_hdr->cdef)
+    if (f->lf.cdef_planes)
         bytefn(dav2d_filter_slice_cdef)(f->c->tc, by64);
     if (f->lf.restore_planes)
         bytefn(dav2d_filter_slice_lr)(f, by64);
