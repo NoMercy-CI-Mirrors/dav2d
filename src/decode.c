@@ -5444,7 +5444,9 @@ int dav2d_submit_frame(Dav2dContext *const c) {
 
     // setup entropy
     const int p_ref_idx = f->frame_hdr->primary_ref_frame;
-    if (p_ref_idx == DAV2D_PRIMARY_REF_NONE) {
+    if (p_ref_idx == DAV2D_PRIMARY_REF_NONE ||
+        f->frame_hdr->no_cross_frame_context)
+    {
         dav2d_cdf_thread_init_static(&f->in_cdf, f->frame_hdr->quant.yac,
                                      f->seq_hdr->reduced_tx_part_set);
         f->use_pri_sec_cdf = 0;

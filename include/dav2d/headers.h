@@ -470,7 +470,7 @@ typedef struct Dav2dFrameHeader {
     uint32_t frame_presentation_delay;
     uint8_t show_immediate;
     uint8_t show_implicit;
-    uint8_t cross_frame_context;
+    uint8_t no_cross_frame_context;
     uint8_t disable_cdf_update;
     uint8_t allow_screen_content_tools;
     uint8_t force_integer_mv;

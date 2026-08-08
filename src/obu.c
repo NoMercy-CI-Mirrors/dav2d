@@ -1138,7 +1138,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER) {
             hdr->primary_ref_signaled = did_signal_pri_ref = dav2d_get_bit(gb);
             if (obu_type != DAV2D_OBU_LEADING_TIP && obu_type != DAV2D_OBU_TIP)
-                hdr->cross_frame_context = dav2d_get_bit(gb);
+                hdr->no_cross_frame_context = dav2d_get_bit(gb);
             if (did_signal_pri_ref)
                 hdr->primary_ref_frame = dav2d_get_bits(gb, 3);
         }
