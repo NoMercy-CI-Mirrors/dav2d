@@ -4931,21 +4931,21 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         (((f->frame_hdr->restoration.p[0].type != DAV2D_RESTORATION_NONE &&
            c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) ||
           (f->frame_hdr->gdf.enabled &&
-           c->inloop_filters & DAV2D_INLOOPFILTER_GDF)) << 0) +
+           c->inloop_filters & DAV2D_INLOOPFILTER_GDF)) << 0) |
+        // chroma wiener requires luma input as well
         ((f->frame_hdr->restoration.p[1].type != DAV2D_RESTORATION_NONE &&
-          c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) << 1) +
+          c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) * 3) |
         ((f->frame_hdr->restoration.p[2].type != DAV2D_RESTORATION_NONE &&
-          c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) << 2);
+          c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) * 5);
     f->lf.cdef_planes =
         (f->frame_hdr->cdef.enabled &&
          c->inloop_filters & DAV2D_INLOOPFILTER_CDEF) ?
             f->seq_hdr->layout == DAV2D_PIXEL_LAYOUT_I400 ? 1 : 7 :
-        ((f->frame_hdr->ccso.p[0].enabled &&
-          c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) << 0) +
-        ((f->frame_hdr->ccso.p[1].enabled &&
-          c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) << 1) +
-        ((f->frame_hdr->ccso.p[2].enabled &&
-          c->inloop_filters & DAV2D_INLOOPFILTER_CCSO) << 2);
+        // ccso_prep relies on luma input/edges for all planes
+        ((f->frame_hdr->ccso.p[0].enabled ||
+          f->frame_hdr->ccso.p[1].enabled ||
+          f->frame_hdr->ccso.p[2].enabled) &&
+         c->inloop_filters & DAV2D_INLOOPFILTER_CCSO);
 
     if (f->frame_hdr->gdf.enabled) {
         const int qp_idx = f->frame_hdr->gdf.qp_idx;
