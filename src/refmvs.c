@@ -2081,10 +2081,12 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     // tip setup
     memcpy(rf->tip.ref.ref, frm_hdr->tip.ref, 2);
     if (rf->frm_hdr->tip.frame_mode) {
+        const int bothsiderefs = rf->frm_hdr->has_bothside_refs;
         const unsigned tip0poc = ref_poc[rf->tip.ref.ref[0]];
         const unsigned tip1poc = ref_poc[rf->tip.ref.ref[1]];
         const int d2 = get_poc_diff(seq_hdr->order_hint_n_bits,
-                                    tip1poc, tip0poc);
+                                    bothsiderefs ? tip1poc : tip0poc,
+                                    bothsiderefs ? tip0poc : tip1poc);
         rf->tip.delta = abs(d2);
         const int d1 = rf->pocdiff[rf->tip.ref.ref[0]];
         const int dv = div_mult[imin(abs(d2), 31)];
