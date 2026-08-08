@@ -2626,6 +2626,7 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         const int intra_flags = ANGLE_IS_LUMA | is_sm_flag |
             (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
             (apply_ibp ? ANGLE_IBP_FLAG : 0) |
+            (f->seq_hdr->ibp ? ANGLE_SEQHDR_IBP_FLAG : 0) |
             (mrl_idx << ANGLE_MRL_IDX_SHIFT) |
             (mrl_mul ? ANGLE_MULTI_MRL_FLAG : 0) |
             ((t->bx > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
@@ -3875,6 +3876,7 @@ chroma: {}
                     apply_ibp &= b->uv_mode == DC_PRED;
                     int intra_flags = is_sm_flag |
                         (apply_ibp ? ANGLE_IBP_FLAG : 0) |
+                        (f->seq_hdr->ibp ? ANGLE_SEQHDR_IBP_FLAG : 0) |
                         (f->seq_hdr->intra_edge_filter ? ANGLE_USE_EDGE_FILTER_FLAG : 0) |
                         ((t->cbx + (x << ss_hor) > ts->tiling.col_start) ? ANGLE_HAS_LEFT_FLAG : 0) |
                         ((t->cby + (y << ss_ver) > ts->tiling.row_start) ? ANGLE_HAS_TOP_FLAG  : 0);

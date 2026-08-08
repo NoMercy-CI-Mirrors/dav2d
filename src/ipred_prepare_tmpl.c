@@ -117,7 +117,8 @@ bytefn(dav2d_prepare_intra_edges)(DB_ONLY(const int print_dbg)
         else
             mode = angle > 180 && (have_left || apply_ibp) ? Z3_PRED : HOR_PRED;
         tl_filter = (unsigned) mode - Z1_PRED <= 2U && have_left && have_top &&
-                    !mrl_idx && enable_edge_filter && tw4 + th4 >= 6;
+                    !mrl_idx && enable_edge_filter && tw4 + th4 >= 6 &&
+                    ((intra_flags & ANGLE_SEQHDR_IBP_FLAG) || mode == Z2_PRED);
         break;
     }
     case DC_PRED:
