@@ -2055,14 +2055,17 @@ scaleup_8pel_mv_for_chroma(union mv *const mv, const enum Dav2dPixelLayout layou
 }
 
 static int tip_pred(Dav2dTaskContext *const t,
-                    int16_t (*const tmp)[64 * 64], const Av2Block *const b,
+                    pixel *dst, int16_t (*const tmp)[64 * 64],
+                    const ptrdiff_t stride, const Av2Block *const b,
                     const int bw4, const int bh4, const int w4, const int h4)
 {
     const Dav2dFrameContext *const f = t->f;
     int opfl = f->seq_hdr->tip_refine_mv &&
         (f->frame_hdr->tip.frame_mode == 1 ||
          f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
-    const union refpair ref = f->rf.tip.ref;
+    const int is_bidir = b->cwp_idx != 16;
+    const union refpair ref = is_bidir ? f->rf.tip.ref :
+        (union refpair) { .pair = f->rf.tip.ref.ref[0] * 0x101 };
     const int refine = opfl && f->frame_hdr->tip.frame_mode == 1 &&
                        f->refdist[ref.ref[0]] == -f->refdist[ref.ref[1]];
     const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
@@ -2102,12 +2105,16 @@ static int tip_pred(Dav2dTaskContext *const t,
             if (tmv.y == INVALID_MV) tmv.n = 0;
             union mv (*const rmv)[2] = rmv_line[x >> 1], *const cmv = rmv[0];
             int left[2], top[2];
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i <= is_bidir; i++) {
                 const mv tipmv = scale_mv(tmv, f->rf.tip.sf[i]);
                 rmv[1][i].y = cmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
                 rmv[1][i].x = cmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
                 top[i] = t->by * 4 + y * 4 + (cmv[i].y >> 3) - 3;
                 left[i] = t->bx * 4 + x * 4 + (cmv[i].x >> 3) - 3;
+            }
+            if (!is_bidir) {
+                rmv[1][1] = rmv[1][0];
+                cmv[1] = cmv[0];
             }
             scaleup_8pel_mv_for_chroma(rmv[1], f->cur.p.p.layout);
             if (opfl) {
@@ -2177,8 +2184,9 @@ static int tip_pred(Dav2dTaskContext *const t,
                                           bw4 * bh4 * 16);
                 scaledown_16pel_mv_for_chroma(cmv, f->cur.p.p.layout);
             } else {
-                for (int i = 0; i < 2; i++)
-                    mc(t, NULL, &tmp[i][off_y + x * 4], bw4 * 4,
+                for (int i = 0; i <= is_bidir; i++)
+                    mc(t, dst ? &dst[x * 4] : NULL,
+                       tmp ? &tmp[i][off_y + x * 4] : NULL, stride,
                        step, step, t->bx + x, t->by + y, 0,
                        cmv[i], refp[i], ref.ref[i], b->filter,
                        0, f->bw * 4, 0, f->bh * 4);
@@ -2193,11 +2201,12 @@ static int tip_pred(Dav2dTaskContext *const t,
                         mv tmv = t->rt.rp_proj[off_8x8 + (p & 1) +
                                                ((p & 2) >> 1) * t_stride].mv;
                         if (tmv.y == INVALID_MV) tmv.n = 0;
-                        for (int i = 0; i < 2; i++) {
+                        for (int i = 0; i <= is_bidir; i++) {
                             const mv tipmv = scale_mv(tmv, f->rf.tip.sf[i]);
                             dmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
                             dmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
                         }
+                        if (!is_bidir) dmv[1] = dmv[0];
                         update_temporal(f, &t_dst[((p & 2) >> 1) * t_stride +
                                                   (x >> 1) + (p & 1)], t_stride, 1,
                                         1, ref, dmv, t_swap);
@@ -2210,7 +2219,8 @@ static int tip_pred(Dav2dTaskContext *const t,
                 scaleup_8pel_mv_for_chroma(cmv, f->cur.p.p.layout);
             }
         }
-        off_y += bw4 * 4 * 4 * step;
+        if (dst) dst += PXSTRIDE(stride) * 4 * step;
+        if (tmp) off_y += stride * 4 * step;
         t_dst += (step >> 1) * t_stride;
     }
     return bacp && have_bacp;
@@ -2418,7 +2428,8 @@ static int opfl_pred(Dav2dTaskContext *const t,
     return bacp && have_bacp;
 }
 
-static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
+static int rmv_uvpred(Dav2dTaskContext *const t,
+                      pixel *dst, const ptrdiff_t stride, const Av2Block *const b,
                       const int plane, const int r_step, const int o_step,
                       const int bw4, const int bh4)
 {
@@ -2429,8 +2440,8 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     const union refpair ref = tip ? f->rf.tip.ref : b->ref;
     int16_t (*const tmp)[64 * 64] = t->scratch.compinter;
     union mv (*rmv_line)[2][2] = &t->rmv[((t->cby & 31) >> 1) * 16 + ((t->cbx & 31) >> 1)];
-    const ptrdiff_t stride = bw4 * 4 >> ss_hor;
     ptrdiff_t uvoff = 0;
+    const int is_bidir = b->cwp_idx != 16;
 
     uint8_t *const mask = t->scratch.seg_mask;
     const int bacp = !plane && f->seq_hdr->imp_msk_bld && b->cwp_idx == 8;
@@ -2447,6 +2458,13 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
     for (int y = 0; y < h4; y += rh4, rmv_line += 16 * r_step >> 1) {
         for (int x = 0; x < w4; x += rw4) {
             union mv (*const rmv)[2] = rmv_line[x >> 1];
+            if (!is_bidir) {
+                mc(t, &dst[x * 4 >> ss_hor], NULL, stride,
+                   rw4, rh4, t->cbx + x, t->cby + y,
+                   1 + plane, rmv[0][0], &f->refp[ref.ref[0]], ref.ref[0],
+                   b->filter, 0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
+                continue;
+            }
             int top[2], left[2], bottom[2], right[2];
             for (int i = 0; i < 2; i++) {
                 top[i] = ((t->cby + y) * 4 >> ss_ver) +
@@ -2481,6 +2499,7 @@ static int rmv_uvpred(Dav2dTaskContext *const t, const Av2Block *const b,
                 uvoffi += oh4 * 4 * stride >> ss_ver;
             }
         }
+        if (dst) dst += rh4 * 4 * PXSTRIDE(stride) >> ss_ver;
         uvoff += rh4 * 4 * stride >> ss_ver;
     }
     return bacp && have_bacp;
@@ -3209,13 +3228,17 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                      imin(f->bh - t->by, bh4) * 4, "y-pred");
         }
     } else if (!b->intra) {
-        if (b->ref.ref[1] == -1 && b->ref.ref[0] != TIP_FRAME) {
+        if (b->ref.ref[1] == -1 && (b->ref.ref[0] != TIP_FRAME ||
+                                    b->cwp_idx == 16))
+        {
             const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[0]];
-            if (!f->frame_hdr->force_integer_mv &&
-                ((b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
-                  f->gmv_warp_allowed[b->ref.ref[0]]) ||
-                 (b->motion_mode >= MM_WARP_CAUSAL &&
-                  t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
+            if (b->ref.ref[0] == TIP_FRAME) {
+                tip_pred(t, dst, NULL, f->cur.p.stride[0], b, bw4, bh4, w4, h4);
+            } else if (!f->frame_hdr->force_integer_mv &&
+                       ((b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
+                         f->gmv_warp_allowed[b->ref.ref[0]]) ||
+                        (b->motion_mode >= MM_WARP_CAUSAL &&
+                         t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
             {
                 warp_affine(t, dst, NULL, f->cur.p.stride[0], b_dim, 0, refp,
                             b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
@@ -3236,7 +3259,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             int bacp;
 
             if (b->ref.ref[0] == TIP_FRAME) {
-                bacp = tip_pred(t, tmp, b, bw4, bh4, w4, h4);
+                bacp = tip_pred(t, NULL, tmp, bw4 * 4, b, bw4, bh4, w4, h4);
             } else if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
                        (b->refine_mv && b->comp_type == COMP_INTER_AVG))
             {
@@ -3681,15 +3704,24 @@ chroma: {}
                 hex_dump(((pixel *) f->cur.p.data[1 + pl]) + uvdstoff,
                          stride, cw4 * 4 >> ss_hor, ch4 * 4 >> ss_ver,
                          pl ? "v-pred" : "u-pred");
-    } else if (b->ref.ref[1] == -1 && b->ref.ref[0] != TIP_FRAME) {
+    } else if (b->ref.ref[1] == -1 && (b->ref.ref[0] != TIP_FRAME ||
+                                       b->cwp_idx == 16))
+    {
         const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[0]];
         for (int pl = 0; pl < 2; pl++) {
             pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) + uvdstoff;
-            if (!f->frame_hdr->force_integer_mv &&
-                ((b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
-                  f->gmv_warp_allowed[b->ref.ref[0]]) ||
-                 (b->motion_mode >= MM_WARP_CAUSAL &&
-                  t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
+            if (b->ref.ref[0] == TIP_FRAME) {
+                const int opfl = f->seq_hdr->tip_refine_mv &&
+                    (f->frame_hdr->tip.frame_mode == 1 ||
+                     f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
+                const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
+                                       ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
+                rmv_uvpred(t, dst, stride, b, pl, step, step, cbw4, cbh4);
+            } else if (!f->frame_hdr->force_integer_mv &&
+                       ((b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
+                         f->gmv_warp_allowed[b->ref.ref[0]]) ||
+                        (b->motion_mode >= MM_WARP_CAUSAL &&
+                         t->warpmv[0].type > DAV2D_WM_TYPE_INVALID)))
             {
                 warp_affine(t, dst, NULL, stride, cb_dim, 1 + pl, refp,
                             b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
@@ -3719,13 +3751,15 @@ chroma: {}
                      f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
                 const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
                                        ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
-                bacp = rmv_uvpred(t, b, pl, step, step, cbw4, cbh4);
+                bacp = rmv_uvpred(t, NULL, cbw4 * 4 >> ss_hor, b, pl,
+                                  step, step, cbw4, cbh4);
             } else if (b->inter_mode >= OPFL_NEARMV_NEARMV ||
                        (b->refine_mv && b->comp_type == COMP_INTER_AVG))
             {
                 const int refine = b->comp_type == COMP_INTER_AVG && b->refine_mv;
                 const int opfl = b->inter_mode >= OPFL_NEARMV_NEARMV;
-                bacp = rmv_uvpred(t, b, pl, 2 << refine, 4 >> opfl, cbw4, cbh4);
+                bacp = rmv_uvpred(t, NULL, cbw4 * 4 >> ss_hor, b, pl,
+                                  2 << refine, 4 >> opfl, cbw4, cbh4);
             } else {
                 if (!pl)
                     bacp = 2 * (f->seq_hdr->imp_msk_bld &&
