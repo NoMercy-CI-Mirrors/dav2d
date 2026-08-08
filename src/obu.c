@@ -2134,8 +2134,9 @@ static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
             // chroma has one more point
             const int num_pl_pos = num_pos + !!pl * !!fgd->num_points[0];
             const int coef_bits = 5 + dav2d_get_bits(gb, 2);
+            const int half = 1 << (coef_bits - 1);
             for (int i = 0; i < num_pl_pos; i++)
-                fgd->ar_coeffs[pl][i] = dav2d_get_bits(gb, coef_bits) - 128;
+                fgd->ar_coeffs[pl][i] = dav2d_get_bits(gb, coef_bits) - half;
 #if DEBUG_FGM_HDR
             printf("FGM: post-ar_coefs[id=%d,pl=%d,cnt=%d->%d,bits=%d]: off=%td\n",
                    idx, pl, fgd->ar_coeff_lag, num_pl_pos, coef_bits,
