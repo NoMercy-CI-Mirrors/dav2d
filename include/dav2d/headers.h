@@ -428,8 +428,8 @@ typedef struct Dav2dSequenceHeader {
     uint8_t separate_uv_delta_q;
     uint8_t equal_ac_dc_q;
     int8_t base_ydc_dq, ydc_dq_enabled;
-    uint8_t base_uvdc_dq, uvdc_dq_enabled;
-    uint8_t base_uvac_dq, uvac_dq_enabled;
+    int8_t base_uvdc_dq, uvdc_dq_enabled;
+    int8_t base_uvac_dq, uvac_dq_enabled;
 
     struct {
         uint8_t /*enum Dav2dAdaptiveBoolean*/ present;
