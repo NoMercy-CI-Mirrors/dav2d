@@ -3403,7 +3403,10 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         uint16_t (*noskip_mask)[4] = &t->lf_mask->noskip_mask[by4 >> 1];
         const unsigned mask = (~0U >> imax(0, 32 - bw4)) << (bx4 & 15);
         const int bx_idx = (bx4 & 0x30) >> 4;
-        for (int y = 0; y < bh4; y += 2, noskip_mask++) {
+        // the "by64 & 1" handles unaligned blocks. For example, if a block
+        // at by4=1 with bh4=2 has coefficients, it should set "noskip_mask"
+        // for both the "by8=0" as well as the "by8=1" rows.
+        for (int y = 0; y < bh4 + (by4 & 1); y += 2, noskip_mask++) {
             (*noskip_mask)[bx_idx] |= mask;
             if (bw4 >= 32) {
                 assert(mask == ~0U);
