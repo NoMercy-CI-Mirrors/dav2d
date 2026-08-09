@@ -539,6 +539,36 @@ static ALWAYS_INLINE mv get_warpmv_proj(const refmvs_block *const r,
     return res;
 }
 
+static void add_tmvp(const refmvs_tile *const rt,
+                     struct refmvs_state *const st,
+                     const union refpair ref,
+                     const int bw4, const int bh4,
+                     const int w4, const int h4,
+                     const int bx4, const int by4)
+{
+    const refmvs_frame *const rf = rt->rf;
+    if (!rf->use_ref_frame_mvs) return;
+    const ptrdiff_t stride = rf->rp_stride;
+    const int bw8 = imin(bw4 >> 1, 8), bh8 = imin(bh4 >> 1, 8);
+    const int step_h = bw4 >= 16 ? 2 : 1, step_v = bh4 >= 16 ? 2 : 1;
+    const int x_off = 2 * bw8 - 2 * step_h, y_off = 2 * bh8 - 2 * step_v;
+    const int first = (unsigned) x_off < (unsigned) w4 &&
+                      (unsigned) y_off < (unsigned) h4 &&
+        add_temporal_candidate(rt, st,
+                               (((by4 + y_off) &
+                                 (rf->sbsz - 1)) >> 1) * stride +
+                               ((bx4 + x_off) >> 1),
+                               DB_ARGS((bx4 + x_off) >> 1,
+                                       (by4 + y_off) >> 1) ref);
+    if (!first && (bw4 > 4 || bh4 > 4)) {
+        add_temporal_candidate(rt, st,
+                               (((by4 + bh8) & (rf->sbsz - 1)) >> 1) *
+                                   stride + ((bx4 + bw8) >> 1),
+                               DB_ARGS((bx4 + bw8) >> 1,
+                                       (by4 + bh8) >> 1) ref);
+    }
+}
+
 /*
  * refmvs_frame allocates memory for one sbrow (32 blocks high, whole frame
  * wide) of 4x4-resolution refmvs_block entries for spatial MV referencing.
@@ -687,7 +717,14 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
 #endif
     };
 
-    // FIXME high-priority TMVP
+    const int use_tmvp =
+        rf->frm_hdr->use_ref_frame_mvs && (ref.ref[0] != ref.ref[1] || skip_mode);
+    const int high_priority_tmvp =
+        ref.ref[1] == -1 && rf->high_priority_tmvp_mask & (1 << (ref.ref[0] + 1));
+    if (use_tmvp && high_priority_tmvp) {
+        DEBUG_REFMV_printf("High-priority TMVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
+        add_tmvp(rt, &st, ref, bw4, bh4, w4, h4, bx4, by4);
+    }
 
     DEBUG_REFMV_printf("Spatial MVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
 
@@ -768,26 +805,10 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
     }
 
     // normal priority TMVP
-    DEBUG_REFMV_printf("Low-priority TMVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
-    if (rf->use_ref_frame_mvs && (ref.ref[0] != ref.ref[1] || skip_mode) && *cnt < 6) {
-        const int bw8 = imin(bw4 >> 1, 8), bh8 = imin(bh4 >> 1, 8);
-        const int step_h = bw4 >= 16 ? 2 : 1, step_v = bh4 >= 16 ? 2 : 1;
-        const int x_off = 2 * bw8 - 2 * step_h, y_off = 2 * bh8 - 2 * step_v;
-        const int first = (unsigned) x_off < (unsigned) w4 &&
-                          (unsigned) y_off < (unsigned) h4 &&
-            add_temporal_candidate(rt, &st,
-                                   (((by4 + y_off) &
-                                     (rf->sbsz - 1)) >> 1) * stride +
-                                   ((bx4 + x_off) >> 1),
-                                   DB_ARGS((bx4 + x_off) >> 1,
-                                           (by4 + y_off) >> 1) ref);
-        if (!first && (bw4 > 4 || bh4 > 4)) {
-            add_temporal_candidate(rt, &st,
-                                   (((by4 + bh8) & (rf->sbsz - 1)) >> 1) *
-                                       stride + ((bx4 + bw8) >> 1),
-                                   DB_ARGS((bx4 + bw8) >> 1,
-                                           (by4 + bh8) >> 1) ref);
-        }
+    if (use_tmvp && !high_priority_tmvp) {
+        DEBUG_REFMV_printf("Low-priority TMVP [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
+        if (*cnt < 6)
+            add_tmvp(rt, &st, ref, bw4, bh4, w4, h4, bx4, by4);
     }
 
     // top-left
@@ -852,7 +873,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
     if ((rf->seq_hdr->drl_reorder == 2 /* always */ &&
          nearest_refmv_count >= 2) ||
         (rf->seq_hdr->drl_reorder == 1 /* constraint */ &&
-         (/*!is_tmvp_high_priority &&*/ nearest_refmv_count >= 4)))
+         (!high_priority_tmvp && nearest_refmv_count >= 4)))
     {
         int maxwidx = 0, maxw = mvstack[0].weight;
         for (int n = 1; n < nearest_refmv_count; n++) {
@@ -2064,6 +2085,15 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
             for (m = 0; m < frm_hdr->n_ref_frames; m++)
                 if (ref_ref_poc[i][n] == ref_poc[m]) break;
             refref2curref_idx[i][n] = m == frm_hdr->n_ref_frames ? -1 : m;
+        }
+    }
+    rf->high_priority_tmvp_mask = 0;
+    if (seq_hdr->drl_reorder != 2 /* always */ &&
+        !frm_hdr->has_bothside_refs)
+    {
+        for (int i = 0; i < frm_hdr->n_ref_frames; i++) {
+            if (rf->abspocdiff[i] <= 2)
+                rf->high_priority_tmvp_mask |= 2 << i;
         }
     }
     uint64_t flipmask = 0;

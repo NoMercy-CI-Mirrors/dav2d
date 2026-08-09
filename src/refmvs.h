@@ -99,6 +99,7 @@ typedef struct refmvs_frame {
     int8_t pocdiff[7];
     uint64_t ref_flip;
     uint8_t abspocdiff[7];
+    uint8_t high_priority_tmvp_mask;
     uint8_t mfmv_mask;
     struct MfmvRef {
         uint8_t ref;
