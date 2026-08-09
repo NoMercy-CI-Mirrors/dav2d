@@ -1063,15 +1063,30 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     if (hdr->show_existing_frame) {
         hdr->existing_frame_idx = dav2d_get_bits(gb, seqhdr->ref_frames_log2);
         if (hdr->existing_frame_idx >= seqhdr->ref_frames) goto error;
-        if (dav2d_get_bit(gb)) {
-            // FIXME poc
+        const int poc =
+            c->refs[hdr->existing_frame_idx].p.p.frame_hdr->frame_offset;
+        if (!dav2d_get_bit(gb)) {
+            const int cpoc = dav2d_get_bits(gb, seqhdr->order_hint_n_bits);
+            if (cpoc != poc) goto error;
         }
-        // FIXME filmgrain
 #if DEBUG_FRAME_HDR
-        printf("HDR: post-existing_frame_idx[%d]: off=%td\n",
-               hdr->existing_frame_idx,
+        printf("HDR: post-existing_frame_idx[%d,poc=%d]: off=%td\n",
+               hdr->existing_frame_idx, poc,
                (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
+        if (seqhdr->film_grain_present) {
+            hdr->film_grain.present = seqhdr->reduced_still_picture_header ||
+                                      dav2d_get_bit(gb);
+            if (hdr->film_grain.present) {
+                hdr->film_grain.id = dav2d_get_bits(gb, 3);
+                hdr->film_grain.seed = dav2d_get_bits(gb, 16);
+            }
+#if DEBUG_FRAME_HDR
+            printf("HDR: post-filmgrain[%d]: off=%td\n",
+                   hdr->film_grain.present,
+                   (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+        }
         return 0;
     }
 
@@ -2776,11 +2791,6 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 break;
             }
             if (!c->refs[c->frame_hdr->existing_frame_idx].p.p.data[0]) goto error;
-            if (c->strict_std_compliance &&
-                !c->refs[c->frame_hdr->existing_frame_idx].p.showable)
-            {
-                goto error;
-            }
             dav2d_queue_output(c, &c->refs[c->frame_hdr->existing_frame_idx].p);
 #if 0
             dav2d_picture_copy_props(&c->out.p,
