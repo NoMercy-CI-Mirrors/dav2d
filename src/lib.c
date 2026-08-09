@@ -251,7 +251,7 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
     }
     c->task_thread.n_passes = 1 + (c->n_tc > 1) + (c->n_fc > 1);
 
-    c->dpb_sz = c->n_fc + 16;
+    c->dpb_sz = c->n_fc + 1 + DAV2D_NUM_REF_FRAMES + DAV2D_REFS_PER_FRAME;
     c->dpb = dav2d_malloc(ALLOC_THREAD_CTX, sizeof(*c->dpb) * c->dpb_sz);
     if (!c->dpb) goto error;
     memset(c->dpb, 0, sizeof(*c->dpb) * c->dpb_sz);
@@ -330,7 +330,7 @@ static void queue_flush(Dav2dContext *const c) {
     int mask = 0;
     for (;;) {
         int cand_n = -1, cand_poc;
-        for (int n = 0, m = 1; n < 8; n++, m <<= 1) {
+        for (int n = 0, m = 1; n < DAV2D_NUM_REF_FRAMES; n++, m <<= 1) {
             if (mask & m) continue;
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
@@ -364,7 +364,7 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
 
     for (;;) {
         int cand_n = -1, cand_poc = poc;
-        for (int n = 0, m = 1; n < 8; n++, m <<= 1) {
+        for (int n = 0, m = 1; n < DAV2D_NUM_REF_FRAMES; n++, m <<= 1) {
             if (mask & m) continue;
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
@@ -388,7 +388,7 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
     // immediately-adjacent future refs after the trigger frame
     for (;;) {
         int n, m;
-        for (n = 0, m = 1; n < 8; n++, m <<= 1) {
+        for (n = 0, m = 1; n < DAV2D_NUM_REF_FRAMES; n++, m <<= 1) {
             if (mask & m) continue;
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
@@ -397,7 +397,7 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
             const int ipoc = hdr->frame_offset;
             if (get_poc_diff(nb, ipoc, c->dpb_poc) == 1) break;
         }
-        if (n == 8) break;
+        if (n == DAV2D_NUM_REF_FRAMES) break;
         queue_append(c, &c->refs[n].p);
         mask |= 1 << n;
     }
@@ -565,14 +565,15 @@ void dav2d_flush(Dav2dContext *const c) {
             dav2d_thread_picture_unref(&c->dpb[n].p);
     c->dpb_in = c->dpb_out = c->drain = 0;
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
         if (c->refs[i].p.p.frame_hdr)
             dav2d_thread_picture_unref(&c->refs[i].p);
         dav2d_ref_dec(&c->refs[i].segmap);
         dav2d_ref_dec(&c->refs[i].refmvs);
         dav2d_cdf_thread_unref(&c->cdf[i]);
-        dav2d_ref_dec(&c->fgm[i]);
     }
+    for (int i = 0; i < 8; i++)
+        dav2d_ref_dec(&c->fgm[i]);
     dav2d_ref_dec(&c->ci_ref);
     c->frame_hdr = NULL;
     c->seq_hdr = NULL;
@@ -702,7 +703,7 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
         dav2d_data_unref_internal(&c->tile[n].data);
     dav2d_free(c->tile);
     dav2d_free(c->dpb);
-    for (int n = 0; n < 8; n++) {
+    for (int n = 0; n < DAV2D_NUM_REF_FRAMES; n++) {
         dav2d_cdf_thread_unref(&c->cdf[n]);
         if (c->refs[n].p.p.frame_hdr)
             dav2d_thread_picture_unref(&c->refs[n].p);
@@ -710,6 +711,8 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
         dav2d_ref_dec(&c->refs[n].segmap);
         dav2d_ref_dec(&c->refs[n].ccsomap);
     }
+    for (int i = 0; i < 8; i++)
+        dav2d_ref_dec(&c->fgm[i]);
     dav2d_ref_dec(&c->seq_hdr_ref);
     dav2d_ref_dec(&c->frame_hdr_ref);
 

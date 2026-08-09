@@ -186,9 +186,9 @@ struct Dav2dContext {
         Dav2dRef *refmvs;
         Dav2dRef *ccsomap;
         uint16_t refpoc[7];
-    } refs[8];
+    } refs[DAV2D_NUM_REF_FRAMES];
     Dav2dMemPool *cdf_pool;
-    CdfThreadContext cdf[8];
+    CdfThreadContext cdf[DAV2D_NUM_REF_FRAMES];
     Dav2dMemPool *fgm_pool;
     Dav2dRef *fgm[8];
     Dav2dMemPool *ci_pool;

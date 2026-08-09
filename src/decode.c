@@ -5700,7 +5700,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
 
     // update references etc.
     const unsigned refresh_frame_flags = f->frame_hdr->refresh_frame_flags;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
         if (refresh_frame_flags & (1 << i)) {
             if (c->refs[i].p.p.frame_hdr)
                 dav2d_thread_picture_unref(&c->refs[i].p);
@@ -5734,7 +5734,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
 
     if (c->n_fc == 1) {
         if ((res = dav2d_decode_frame(f)) < 0) {
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
                 if (refresh_frame_flags & (1 << i)) {
                     if (c->refs[i].p.p.frame_hdr)
                         dav2d_thread_picture_unref(&c->refs[i].p);

@@ -783,11 +783,11 @@ static int get_ref_frames(Dav2dContext *const c, const int have_resolution) {
         uint16_t qidx;
         uint8_t mlayer;
         int8_t res_ratio_log2;
-    } ref_info[8];
-    uint8_t sort_idx[8];
+    } ref_info[DAV2D_NUM_REF_FRAMES];
+    uint8_t sort_idx[DAV2D_NUM_REF_FRAMES];
     int n_refs = 0, have_fwd_refs = 0;
     const unsigned poc = hdr->frame_offset;
-    for (int n = 0; n < 8 && !have_fwd_refs; n++) {
+    for (int n = 0; n < DAV2D_NUM_REF_FRAMES && !have_fwd_refs; n++) {
         if (!c->refs[n].p.p.frame_hdr) continue;
         have_fwd_refs = get_poc_diff(seqhdr->order_hint_n_bits, poc,
                                      c->refs[n].p.p.frame_hdr->frame_offset) < 0;
@@ -796,7 +796,7 @@ static int get_ref_frames(Dav2dContext *const c, const int have_resolution) {
     const int w = hdr->width, h = hdr->height;
     int minq = 512, maxq = -1;
     const Dav2dFrameHeader *last_refhdr = NULL;
-    for (int n = 0; n < 8; n++) {
+    for (int n = 0; n < DAV2D_NUM_REF_FRAMES; n++) {
         struct Score *const r = &ref_info[n];
         const Dav2dFrameHeader *const refhdr = c->refs[n].p.p.frame_hdr;
         if (!refhdr || refhdr == last_refhdr) continue;
@@ -846,14 +846,14 @@ static int get_ref_frames(Dav2dContext *const c, const int have_resolution) {
             sort_idx[m] = idx;
         }
         sort_idx[m] = n;
-        n_refs++;
         last_refhdr = refhdr;
+        n_refs++;
     }
 
-    if (n_refs == 8) {
+    if (n_refs > 7) {
         const int q_thr = (maxq + minq + 1) >> 1;
         int maxpocdiff[2] = { 0, 0 }, num[2] = { 0, 0 }, furthest_idx[2];
-        for (int n = 0; n < 8; n++) {
+        for (int n = 0; n < n_refs; n++) {
             const struct Score *const r = &ref_info[sort_idx[n]];
             if (r->qidx < q_thr) continue;
             if (r->pocdiff > 0) {
@@ -2455,7 +2455,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             c->content_light = NULL;
             dav2d_ref_dec(&c->mastering_display_ref);
             dav2d_ref_dec(&c->content_light_ref);
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
                 if (c->refs[i].p.p.frame_hdr)
                     dav2d_thread_picture_unref(&c->refs[i].p);
                 dav2d_ref_dec(&c->refs[i].segmap);
@@ -2807,7 +2807,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             if (c->refs[c->frame_hdr->existing_frame_idx].p.p.frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY) {
                 const int r = c->frame_hdr->existing_frame_idx;
                 c->refs[r].p.showable = 0;
-                for (int i = 0; i < 8; i++) {
+                for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
                     if (i == r) continue;
 
                     if (c->refs[i].p.p.frame_hdr)
@@ -2860,7 +2860,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
 
 skip:
     // update refs with only the headers in case we skip the frame
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
         if (c->frame_hdr->refresh_frame_flags & (1 << i)) {
             dav2d_thread_picture_unref(&c->refs[i].p);
             c->refs[i].p.p.frame_hdr = c->frame_hdr;

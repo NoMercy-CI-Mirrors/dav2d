@@ -41,7 +41,7 @@ extern "C" {
 #define DAV2D_MAX_TILE_COLS 64
 #define DAV2D_MAX_TILE_ROWS 64
 #define DAV2D_MAX_SEGMENTS 16
-#define DAV2D_NUM_REF_FRAMES 8
+#define DAV2D_NUM_REF_FRAMES 16
 #define DAV2D_PRIMARY_REF_NONE 7
 #define DAV2D_REFS_PER_FRAME 7
 #define DAV2D_TOTAL_REFS_PER_FRAME (DAV2D_REFS_PER_FRAME + 1)
@@ -477,7 +477,7 @@ typedef struct Dav2dFrameHeader {
     uint8_t frame_size_override;
     uint8_t primary_ref_signaled, primary_ref_frame, secondary_ref_frame;
     uint8_t n_ref_frames;
-    uint8_t refresh_frame_flags;
+    uint16_t refresh_frame_flags;
     uint8_t allow_intrabc, allow_global_intrabc, allow_local_intrabc;
     uint8_t max_bvp_drl_bits, max_drl_bits;
     int8_t refidx[DAV2D_REFS_PER_FRAME];
