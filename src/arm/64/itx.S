@@ -1573,31 +1573,50 @@ endconst
 function cctx_8bpc_neon, export=1
         ldr             s6, [x2]
 1:
-        ldr             q0, [x0]
-        ldr             q1, [x1]
-        smull           v2.4s, v0.4h, v6.h[1]  // u[i] * cosa
-        smull2          v3.4s, v0.8h, v6.h[1]  // u[i] * cosa
-        smull           v4.4s, v0.4h, v6.h[0]  // u[i] * sina
-        smull2          v5.4s, v0.8h, v6.h[0]  // u[i] * sina
-        smlsl           v2.4s, v1.4h, v6.h[0]  // u[i] * cosa - v[i] * sina
-        smlsl2          v3.4s, v1.8h, v6.h[0]  // u[i] * cosa - v[i] * sina
-        smlal           v4.4s, v1.4h, v6.h[1]  // u[i] * sina + v[i] * cosa
-        smlal2          v5.4s, v1.8h, v6.h[1]  // u[i] * sina + v[i] * cosa
+        ldp             q0, q1, [x0], #32
+        ldp             q2, q3, [x1], #32
 
-        ssra            v2.4s, v2.4s, #31      // Adjust for sqrshrn rounding up
-        ssra            v3.4s, v3.4s, #31
-        ssra            v4.4s, v4.4s, #31
-        ssra            v5.4s, v5.4s, #31
+        smull           v16.4s,  v0.4h,   v6.h[1]  // u[i] * cosa
+        smull           v17.4s,  v1.4h,   v6.h[1]  // u[i+8] * cosa
+        smull           v18.4s,  v0.4h,   v6.h[0]  // u[i] * sina
+        smull           v19.4s,  v1.4h,   v6.h[0]  // u[i+8] * sina
 
-        sub             w3, w3, #8
-        sqrshrn         v2.4h, v2.4s, #8
-        sqrshrn         v3.4h, v3.4s, #8
-        sqrshrn         v4.4h, v4.4s, #8
-        sqrshrn         v5.4h, v5.4s, #8
+        smlsl           v16.4s,  v2.4h,   v6.h[0]  // u[i] * cosa - v[i] * sina
+        smlsl           v17.4s,  v3.4h,   v6.h[0]  // u[i+8] * cosa - v[i+8] * sina
+        smull2          v20.4s,  v0.8h,   v6.h[1]  // u[i] * cosa
+        smull2          v21.4s,  v1.8h,   v6.h[1]  // u[i+8] * cosa
+        smlal           v18.4s,  v2.4h,   v6.h[1]  // u[i] * sina + v[i] * cosa
+        smlal           v19.4s,  v3.4h,   v6.h[1]  // u[i+8] * sina + v[i+8] * cosa
+        smull2          v22.4s,  v0.8h,   v6.h[0]  // u[i] * sina
+        smull2          v23.4s,  v1.8h,   v6.h[0]  // u[i+8] * sina
 
-        stp             d2, d3, [x0], #16
-        stp             d4, d5, [x1], #16
+        ssra            v16.4s,  v16.4s,  #31      // Adjust for sqrshrn rounding up
+        ssra            v17.4s,  v17.4s,  #31
+        smlsl2          v20.4s,  v2.8h,   v6.h[0]  // u[i] * cosa - v[i] * sina
+        smlsl2          v21.4s,  v3.8h,   v6.h[0]  // u[i+8] * cosa - v[i+8] * sina
+        ssra            v18.4s,  v18.4s,  #31
+        ssra            v19.4s,  v19.4s,  #31
+        smlal2          v22.4s,  v2.8h,   v6.h[1]  // u[i] * sina + v[i] * cosa
+        smlal2          v23.4s,  v3.8h,   v6.h[1]  // u[i+8] * sina + v[i+8] * cosa
 
-        cbnz            w3, 1b
+        sub             w3,  w3,  #16
+        sqrshrn         v16.4h,  v16.4s,  #8
+        sqrshrn         v17.4h,  v17.4s,  #8
+        ssra            v20.4s,  v20.4s,  #31
+        ssra            v21.4s,  v21.4s,  #31
+        sqrshrn         v18.4h,  v18.4s,  #8
+        sqrshrn         v19.4h,  v19.4s,  #8
+        ssra            v22.4s,  v22.4s,  #31
+        ssra            v23.4s,  v23.4s,  #31
+
+        sqrshrn2        v16.8h,  v20.4s,  #8
+        sqrshrn2        v17.8h,  v21.4s,  #8
+        sqrshrn2        v18.8h,  v22.4s,  #8
+        sqrshrn2        v19.8h,  v23.4s,  #8
+
+        stp             q16, q17, [x0, #-32]
+        stp             q18, q19, [x1, #-32]
+
+        cbnz            w3,  1b
         ret
 endfunc
