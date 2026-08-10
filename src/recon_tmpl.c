@@ -3599,6 +3599,7 @@ chroma: {}
                         }
                     }
                 }
+                align_cf_buffer(1, uv_t_dim);
                 t->cf_uv = ts->frame_thread[1].cf;
                 ts->frame_thread[1].cf += cbw4ss * cbh4ss * 16 * 2;
             }
