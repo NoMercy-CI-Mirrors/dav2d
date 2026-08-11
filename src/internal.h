@@ -432,8 +432,6 @@ struct Dav2dTileState {
     const uint32_t (*dq)[3][2];
     int last_qidx;
 
-    Av2RestorationUnit *lr_ref[3];
-
     struct WienerBankY {
         uint8_t size[16], idx[16];
         int8_t filter[4][16][16];
