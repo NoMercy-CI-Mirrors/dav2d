@@ -200,15 +200,16 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, coef *coeff,
                  enum TxfmType txtp, int eob HIGHBD_DECL_SUFFIX);
 
-    /* Always using the largest possible coef_max just results in
-     * most of the output being clipped to either 0 or bitdepth_max.
-     * Randomize the range a bit to cover more scenarios. */
+    /* Some implementations can take advantage of lower coef range
+     * to use a faster implementation. Make sure we have coverage
+     * of all paths. */
 #if BITDEPTH == 16
     const int bpc = (rnd() & 1) ? 10 : 12;
 #else
     const int bpc = 8;
 #endif
-    const int coef_max = (1 << ((rnd() % (bpc + 5)) + 4)) - 1;
+    const int coef_bits_min = 4;
+    const int coef_bits_max = bpc + 8;
     const int bitdepth_max = (1 << bpc) - 1;
 
     for (int txtp_idx = 0; valid_txtp_per_txsz[tx][txtp_idx] != 0xff;
@@ -220,16 +221,20 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
         const int n_dpcm =
             1 + 2 * (txtp == WHT_WHT || (hor1d == IDENTITY && ver1d == IDENTITY));
         for (int dpcm = 0; dpcm < n_dpcm; dpcm++)
-            for (int subsh = !!txtp; subsh < subsh_max; subsh++)
-                if (check_func(c->itxfm_add[tx],
-                               "inv_txfm_add_%dx%d_%s_%s%s%s_%d_%dbpc",
-                               w, h, itx_1d_names[hor1d], itx_1d_names[ver1d],
-                               is_inv ? "_inv" : "", dpcm_names[dpcm], subsh,
-                               BITDEPTH))
+            for (int subsh = !!txtp; subsh < subsh_max; subsh++) {
+                if (!check_func(c->itxfm_add[tx],
+                                "inv_txfm_add_%dx%d_%s_%s%s%s_%d_%dbpc",
+                                w, h, itx_1d_names[hor1d], itx_1d_names[ver1d],
+                                is_inv ? "_inv" : "", dpcm_names[dpcm], subsh,
+                                BITDEPTH))
+                    continue;
+                for (int coef_bits = coef_bits_min; coef_bits <= coef_bits_max;
+                     coef_bits += 2)
                 {
                     int max_eob;
                     const int eob = generate_coefs(coeff[0], tx, txtp, sw, sh,
-                                                   subsh, &max_eob, dpcm, coef_max);
+                                                   subsh, &max_eob, dpcm,
+                                                   (1 << coef_bits) - 1);
                     memcpy(coeff[1], coeff[0], sizeof(*coeff));
 
                     CLEAR_PIXEL_RECT(c_dst);
@@ -253,12 +258,22 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
                     }
                     if (memcmp(coeff[0], coeff[1], sizeof(*coeff)))
                         fail();
-
-                    if ((hor1d <= ADST && ver1d <= ADST) || txtp == WHT_WHT)
-                        bench_new(alternate(c_dst, a_dst), a_dst_stride,
-                                  alternate(coeff[0], coeff[1]), txtp | (dpcm << 8),
-                                  max_eob HIGHBD_TAIL_SUFFIX);
                 }
+                if ((hor1d <= ADST && ver1d <= ADST) || txtp == WHT_WHT) {
+                    /* Only benchmark with coef_bits_min */
+                    int max_eob;
+                    generate_coefs(coeff[0], tx, txtp, sw, sh, subsh, &max_eob,
+                                   dpcm, (1 << coef_bits_min) - 1);
+                    memcpy(coeff[1], coeff[0], sizeof(*coeff));
+
+                    CLEAR_PIXEL_RECT(c_dst);
+                    CLEAR_PIXEL_RECT(a_dst);
+
+                    bench_new(alternate(c_dst, a_dst), a_dst_stride,
+                              alternate(coeff[0], coeff[1]), txtp | (dpcm << 8),
+                              max_eob HIGHBD_TAIL_SUFFIX);
+                }
+            }
     }
 }
 
