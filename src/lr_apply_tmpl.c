@@ -52,10 +52,13 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
     pixel *ptrs[3] = { p[0], p[1], p[2] };
     const pixel (*left_uv_ptrs[2])[2] = { left_uv[0], left_uv[1] };
     const Dav2dDSPContext *const dsp = f->dsp;
-    const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
-    const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
+    const enum Dav2dPixelLayout layout = f->cur.p.p.layout;
+    const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
+    const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
     const ptrdiff_t *const strides = f->cur.p.stride;
     const int by64 = (y + (y ? 8 : 0)) >> 6;
+    const int uv_idx = DAV2D_PIXEL_LAYOUT_I444 - layout;
+    const wienerfilter_uv_luma_fn wiener_uv_l_fn = dsp->lr.wiener_uv_luma[uv_idx];
 
     const pixel *lpf[3], *lpfb[3], *top[3];
 
@@ -175,7 +178,10 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
         }
     }
 
-    ALIGN_STK_64(int8_t, gdf_err, 64 * 64,);
+    union {
+        ALIGN(int8_t gdf_err[64 * 64], 64);
+        ALIGN(coef uv_luma[64 * 64], 64);
+    } scratch;
     while (y + stripe_h <= row_h) {
         // Change the HAVE_BOTTOM bit in edges to (by64 + 1 != f->sb64h || y + stripe_h != row_h)
         edges ^= (-(by64 + 1 != f->sb64h || y + stripe_h != row_h) ^ edges) & LR_HAVE_BOTTOM;
@@ -206,17 +212,21 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
         }
         for (int pl = 1; pl <= 2; pl++) {
             if (uv_filter[pl - 1]) {
-                dsp->lr.wiener_uv(ptrs[pl], strides[1], left_uv_ptrs[pl - 1],
-                                  top[pl] ? top[pl] : lpf[pl], lpfb[pl],
-                                  ptrs[0], left, top[0] ? top[0] : lpf[0],
-                                  lpfb[0], strides[0], uv_filter[pl - 1],
-                                  w >> ss_hor, stripe_h >> ss_ver, ss_ver, ss_hor,
-                                  ds_flt, edges, ll_mask_uv
-                                  HIGHBD_CALL_SUFFIX);
+                const pixel *top_ptr = top[0] ? top[0] : lpf[0];
+                const pixel *top_uv_ptr = top[pl] ? top[pl] : lpf[pl];
+                wiener_uv_l_fn(scratch.uv_luma, ptrs[0], strides[0], left,
+                               top_ptr, lpfb[0], uv_filter[pl - 1],
+                               w >> ss_hor, stripe_h >> ss_ver, ds_flt, edges
+                               HIGHBD_CALL_SUFFIX);
+                dsp->lr.wiener_uv_chroma(ptrs[pl], strides[1], left_uv_ptrs[pl - 1],
+                                         top_uv_ptr, lpfb[pl], scratch.uv_luma,
+                                         uv_filter[pl - 1], ll_mask_uv,
+                                         w >> ss_hor, stripe_h >> ss_ver, edges
+                                         HIGHBD_CALL_SUFFIX);
             }
         }
         if (gdf) {
-            dsp->lr.gdf_prep(gdf_err, ptrs[0], strides[0], left,
+            dsp->lr.gdf_prep(scratch.gdf_err, ptrs[0], strides[0], left,
                              top[0] ? top[0] : lpf[0], lpfb[0],
                              f->lf.gdf_params, w, stripe_h, edges
                              HIGHBD_CALL_SUFFIX);
@@ -230,8 +240,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
                 wiener_params.multi.noskip_mask += stripe_h >> 2;
         }
         if (gdf) {
-            dsp->lr.gdf_add(ptrs[0], strides[0], gdf_err, ll_mask_y, w, stripe_h,
-                            gdf_scale HIGHBD_CALL_SUFFIX);
+            dsp->lr.gdf_add(ptrs[0], strides[0], scratch.gdf_err, ll_mask_y, w,
+                            stripe_h, gdf_scale HIGHBD_CALL_SUFFIX);
         }
         // this loop runs twice at the bottom of a frame, if e.g. the sequence
         // height is 128px, the first slice is 56px, followed by a 72px slice

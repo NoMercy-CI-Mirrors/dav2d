@@ -203,18 +203,22 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
             HIGHBD_DECL_SUFFIX)
 typedef decl_wiener_filter_fn(*wienerfilter_fn);
 
-#define decl_wiener_filter_uv_fn(name) \
-void (name)(pixel *dst, ptrdiff_t dst_stride, \
-            const_left_pixel_row_uv left, \
-            const pixel *top, const pixel *bottom, \
-            const pixel *luma, const_left_pixel_row luma_left, \
-            const pixel *luma_top, const pixel *luma_bottom, \
-            ptrdiff_t luma_stride, \
-            const int8_t *filter, \
-            int w, int h, int ss_ver, int ss_hor, int ds_flt, \
-            enum LrEdgeFlags edges, \
-            const uint16_t (*ll_mask)[4] HIGHBD_DECL_SUFFIX)
-typedef decl_wiener_filter_uv_fn(*wienerfilter_uv_fn);
+// sum the luma component of the chroma filter
+// dst has a constant stride of 64 coefs (this applies to the chroma part too)
+#define decl_wiener_filter_uv_luma_fn(name) \
+void (name)(coef *dst, const pixel *luma, const ptrdiff_t stride, \
+            const_left_pixel_row left, const pixel *top, const pixel *bottom, \
+            const int8_t *filter, int w, int h, int ds_flt, \
+            enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+typedef decl_wiener_filter_uv_luma_fn(*wienerfilter_uv_luma_fn);
+
+// compute and add the chroma component of the chroma filter to the luma filter
+#define decl_wiener_filter_uv_chroma_fn(name) \
+void (name)(pixel *p, const ptrdiff_t stride, const_left_pixel_row_uv left, \
+            const pixel *top, const pixel *bottom, const coef *luma, \
+            const int8_t *filter, const uint16_t (*ll_mask)[4], \
+            int w, int h, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+typedef decl_wiener_filter_uv_chroma_fn(*wienerfilter_uv_chroma_fn);
 
 #define decl_gdf_prep_fn(name) \
 void (name)(int8_t *dst, const pixel *p, ptrdiff_t stride, \
@@ -233,7 +237,8 @@ typedef struct Dav2dLoopRestorationDSPContext {
     wienerfilter_fn ns_wiener_single;
     wienerfilter_fn ns_wiener_multi;
     wienerfilter_fn pc_wiener;
-    wienerfilter_uv_fn wiener_uv;
+    wienerfilter_uv_luma_fn wiener_uv_luma[3 /* 444/luma, 422, 420 */];
+    wienerfilter_uv_chroma_fn wiener_uv_chroma;
     gdf_prep_fn gdf_prep;
     gdf_add_fn gdf_add;
 } Dav2dLoopRestorationDSPContext;
