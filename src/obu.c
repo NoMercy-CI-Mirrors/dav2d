@@ -2461,8 +2461,9 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 dav2d_ref_dec(&c->refs[i].segmap);
                 dav2d_ref_dec(&c->refs[i].refmvs);
                 dav2d_cdf_thread_unref(&c->cdf[i]);
-                dav2d_ref_dec(&c->fgm[i]);
             }
+            for (int i = 0; i < 8; i++)
+                dav2d_ref_dec(&c->fgm[i]);
             dav2d_ref_dec(&c->ci_ref);
 #if 0
             c->frame_flags |= PICTURE_FLAG_NEW_SEQUENCE;
