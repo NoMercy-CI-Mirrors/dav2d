@@ -346,7 +346,7 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
 
     backup_row_luma(bak_rows[1][2], luma, lstride, luma_left, w << ss_hor, edges,
                     ss_hor, ss_ver, ds_flt);
-    luma_left += 1 << ss_ver;
+    luma_left += (size_t) 1 << ss_ver;
     ptrs[1][2] = bak_rows[1][2];
     if (edges & LR_HAVE_TOP_INTEGRATED) {
         backup_row_luma(bak_rows[1][0], luma_top + 2 * PXSTRIDE(lstride),
@@ -371,7 +371,7 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
                     luma + ((size_t) 1 << ss_ver) * PXSTRIDE(lstride),
                     lstride, luma_left, w << ss_hor, edges, ss_hor, ss_ver,
                     ds_flt);
-    luma_left += 1 << ss_ver;
+    luma_left += (size_t) 1 << ss_ver;
     ptrs[1][3] = bak_rows[1][3];
     int lbak_idx = 4;
 
@@ -399,7 +399,7 @@ static void ns_wiener_single_uv_c(pixel *p, const ptrdiff_t stride,
                             luma + (2 << ss_ver) * PXSTRIDE(lstride), lstride,
                             luma_left, w << ss_hor, edges, ss_hor, ss_ver,
                             ds_flt);
-            luma_left += 1 << ss_ver;
+            luma_left += (size_t) 1 << ss_ver;
             ptrs[1][4] = bak_rows[1][lbak_idx];
         } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
             backup_row_luma(bak_rows[1][lbak_idx],
