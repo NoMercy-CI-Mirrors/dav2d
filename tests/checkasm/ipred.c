@@ -337,42 +337,56 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                 const int itse = rnd() & CFL_IS_TOP_SB_EDGE;
                                 const int flags = dir | has_t | has_l | itse;
                                 const int dir_l = dir == CFL_DIR_LEFT;
+                                const int dir_t = dir == CFL_DIR_TOP;
 
-                                int refw = w + 2 * !!has_l;
-                                int refh = h;
-                                int subleft = has_l && !dir_l;
+                                int refw = 0, refh = 0, n_left_cols = 0, n_top_rows = 0;
                                 if (has_t) {
                                     const int avail = rnd() % (3 - (w == 4));
+                                    refw = w;
                                     if (avail == 1) // full
                                         refw += w;
                                     else if (avail == 2) // partial
                                         refw += (rnd() % w) & ~3;
+                                    n_top_rows = 1 + dir_t;
                                 }
                                 if (has_l) {
                                     const int avail = rnd() % 3;
+                                    refh = h;
                                     if (avail == 1)
                                         refh += (rnd() % h) & ~3;
                                     else if (avail == 2)
                                         refh += h;
+                                    n_left_cols = 1 + dir_l;
                                 }
-                                if (refw > 128 >> ss_hor) {
-                                    refw = 128 >> ss_hor;
-                                    subleft = 0;
+                                int needed_top = 0, needed_left = 0;
+                                if (has_t) {
+                                    refw = imin(refw + has_l - 1 - !has_l, (128 >> ss_hor) - 2);
+                                    needed_top = refw + (dir_l || (dir_t && !has_l));
+                                    if (dir_t) {
+                                        const int need_first = !has_l && needed_top > w;
+                                        needed_top = need_first + imax(needed_top, w + n_left_cols);
+                                    }
                                 }
-                                refh = imin(refh, (128 >> ss_ver) - 2 * !!has_t);
+                                if (has_l) {
+                                    refh = imin(refh + has_t - 1 - !has_t, (128 >> ss_ver) - 2);
+                                    needed_left = refh + dir_t;
+                                    refh -= has_t;
+                                    if (dir_l) {
+                                        const int need_first = !has_t && needed_left > h;
+                                        needed_left = need_first + imax(needed_left, h + n_top_rows);
+                                    }
+                                }
 
                                 const int unaligned_offset = imax(w / 4, 4);
                                 pixel *const src = src0 + (unaligned_offset << ss_hor);
                                 pixel *const top_sb = itse ? top_sb0 + 64 : NULL;
 
                                 call_ref(c_dst, src, top_sb, src0_stride,
-                                         refw - subleft, refh, w, h, flags);
+                                         needed_top, needed_left - n_top_rows, w, h, flags);
                                 call_new(a_dst, src, top_sb, src0_stride,
-                                         refw - subleft, refh, w, h, flags);
+                                         needed_top, needed_left - n_top_rows, w, h, flags);
 
-                                const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
-                                const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT) : 0;
-                                const int blk_off = n_top * CFL_MH_TOP_STRIDE;
+                                const int blk_off = n_top_rows * CFL_MH_TOP_STRIDE;
                                 const pixel *const c_left = c_dst + blk_off + 64 * 64;
                                 const pixel *const a_left = a_dst + blk_off + 64 * 64;
                                 const pixel *const c_blk = c_dst + blk_off;
@@ -380,14 +394,14 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
 
                                 checkasm_check_pixel(c_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
                                                      a_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
-                                                     refw - subleft, n_top, "top");
-                                checkasm_check_pixel(c_left, n_left, a_left, n_left,
-                                                     n_left, refh, "left");
+                                                     needed_top, n_top_rows, "top");
+                                checkasm_check_pixel(c_left, n_left_cols, a_left, n_left_cols,
+                                                     n_left_cols, needed_left - n_top_rows, "left");
                                 checkasm_check_pixel(c_blk, w, a_blk, w, w, h, "blk");
 
                                 bench_new(a_dst, src, top_sb, src0_stride,
-                                          refw - subleft, refh, w, h,
-                                          flags | CFL_HAS_TOP | CFL_HAS_LEFT);
+                                          needed_top, needed_left - n_top_rows,
+                                          w, h, flags | CFL_HAS_TOP | CFL_HAS_LEFT);
                             }
 #if !BENCH_DIR
                         }
@@ -423,18 +437,17 @@ static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
         {
             const int has_t = rnd() & 1;
             const int has_l = has_t ? rnd() & 1 : 1;
-            const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT) : 0;
-            const int refw = imin(4 + 4 * (rnd() & 31) + n_left, 128);
-            const int refh = imin(4 + 4 * (rnd() & 31), 128 - has_t);
+            int refw = 4 + 4 * (rnd() & 63) + has_l - 1 - !has_l;
+            int refh = 4 + 4 * (rnd() & 63) - 1 - !has_t;
+            refw = has_t * imin(refw, 128 - 2);
+            refh = has_l * imin(refh, 128 - 2 - has_t);
             const int edge_flags = (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
 
             call_ref(c_mat, c_imat, luma, refw, refh, edge_flags HIGHBD_TAIL_SUFFIX);
             call_new(a_mat, a_imat, luma, refw, refh, edge_flags HIGHBD_TAIL_SUFFIX);
 
-            checkasm_check1d(uint16_t, c_imat[0], a_imat[0],
-                             has_t * (refw - 2) + has_l * (refh - 2), "imat0");
-            checkasm_check1d(uint16_t, c_imat[1], a_imat[1],
-                             has_t * (refw - 2) + has_l * (refh - 2), "imat1");
+            checkasm_check1d(uint16_t, c_imat[0], a_imat[0], refw + refh, "imat0");
+            checkasm_check1d(uint16_t, c_imat[1], a_imat[1], refw + refh, "imat1");
             checkasm_check2d(int32_t, c_mat_ptr, mat_stride, a_mat_ptr, mat_stride,
                              3, 3, "mat");
 
@@ -469,15 +482,16 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
     if (check_func(c->cfl_mh_calc_alphas, "cfl_mh_calc_alphas_%dbpc", BITDEPTH)) {
         const int has_t = rnd() & 1;
         const int has_l = has_t ? rnd() & 1 : 1;
+        const int edge_flags = (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
         const int itse = rnd() & 1;
         const int dir = rnd() % 3;
-        const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT) : 0;
-        const int refw = imin(4 + 4 * (rnd() & 31) + n_left, 128);
-        const int refh = imin(4 + 4 * (rnd() & 31), 128 - has_t);
-        const int edge_flags = (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
+        int refw = 4 + 4 * (rnd() & 63) + has_l - 1 - !has_l;
+        int refh = 4 + 4 * (rnd() & 63) - 1 - !has_t;
+        refw = has_t * imin(refw, 128 - 2);
+        refh = has_l * imin(refh, 128 - 2 - has_t);
         int n;
 
-        for (n = 0; n < has_t * (refw - 2) + has_l * (refh - 2); n++) {
+        for (n = 0; n < refw + refh; n++) {
             const int v0 = luma[n];
             int v1 = dir == CFL_DIR_CENTER ? v0 :
                 rnd() & 1 ? // allow_far_neighbor
@@ -555,7 +569,7 @@ static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
                     const int has_l = rnd() & CFL_HAS_LEFT;
                     const int edge_flags = has_t | has_l;
                     const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
-                    const pixel *luma = luma_buf + n_top * 128;
+                    const pixel *luma = luma_buf + n_top * CFL_MH_TOP_STRIDE;
 
                     CLEAR_PIXEL_RECT(c_chroma);
                     CLEAR_PIXEL_RECT(a_chroma);

@@ -2992,8 +2992,8 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
     const int sbsz = f->sb_step;
     const int ss_hor = f->ss_hor, ss_ver = f->ss_ver;
     const int ssbx = t->cbx >> ss_hor, ssby = t->cby >> ss_ver;
-    const int has_top = t->cby > ts->tiling.row_start;
-    const int has_left = t->cbx > ts->tiling.col_start;
+    const int has_t = t->cby > ts->tiling.row_start;
+    const int has_l = t->cbx > ts->tiling.col_start;
     const int is_top_sb_edge = !(t->cby & (sbsz - 1));
     const int ctw4 = imin(t_dim->w, (f->bw - t->cbx + ss_hor) >> ss_hor);
     const int cth4 = imin(t_dim->h, (f->bh - t->cby + ss_ver) >> ss_ver);
@@ -3028,8 +3028,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         const int hpad = cbh4 - cth4;
 
         const unsigned flags = filter_type |
-            (t->cby > ts->tiling.row_start ? CFL_HAS_TOP : 0) |
-            (t->cbx > ts->tiling.col_start ? CFL_HAS_LEFT : 0) |
+            (has_t ? CFL_HAS_TOP : 0) | (has_l ? CFL_HAS_LEFT : 0) |
             (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0) |
             (((unsigned)b->cfl_alpha[0] << CFL_ALPHA_U_SHIFT) & CFL_ALPHA_U_MASK) |
             (((unsigned)b->cfl_alpha[1] << CFL_ALPHA_V_SHIFT) & CFL_ALPHA_V_MASK);
@@ -3043,13 +3042,12 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         }
 
     } else { // CFL MHCCP
-        ALIGN_STK_64(pixel, luma, CFL_MH_MAX_LUMA_SIZE,);
+        const int dir_l = b->cfl_mh_dir == CFL_DIR_LEFT;
+        const int dir_t = b->cfl_mh_dir == CFL_DIR_TOP;
         const int cbx4 = (t->cbx & 63) >> ss_hor, cby4 = (t->cby & 63) >> ss_ver;
-        int refw = ctw4 * 4, refh = cth4 * 4;
-        uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES];
-        int32_t mat[3][3];
-        int n_tr = 0, n_bl = 0;
-        if (has_top) {
+        int refw = 0, refh = 0, n_left_cols = 0, n_top_rows = 0, n_tr = 0, n_bl = 0;
+
+        if (has_t) {
             const int csbsz = sbsz >> ss_hor;
             const int tile_end = ts->tiling.col_end >> ss_hor;
             int w = imax(0, imin(ctw4, tile_end - ssbx - ctw4));
@@ -3066,10 +3064,10 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                     n_tr = imin(ctz(0x10000 | ~bits), w);
                 }
             }
-            refw += n_tr * 4;
+            refw += (ctw4 + n_tr) * 4;
+            n_top_rows = 1 + dir_t;
         }
-        int subleft = 0;
-        if (has_left) {
+        if (has_l) {
             const int csbsz = sbsz >> ss_ver;
             const int end = imax(0, imin((ssby + csbsz) & ~(csbsz - 1),
                                          ts->tiling.row_end >> ss_ver));
@@ -3082,24 +3080,53 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                     if (!(t->is_coded[1][cby4 + n_bl + cth4] & mask))
                         break;
             }
-            refh += n_bl * 4;
-            refw += 2;
-            subleft = b->cfl_mh_dir != CFL_DIR_LEFT;
+            refh += (cth4 + n_bl) * 4;
+            n_left_cols = 1 + dir_l;
         }
-        if (refw > (128 >> ss_hor)) {
-            refw = 128 >> ss_hor;
-            subleft = 0;
-        }
-        refh = imin(refh, (128 >> ss_ver) - 2 * has_top);
 
-        const int edge_flags = (has_top ? CFL_HAS_TOP : 0) |
-                               (has_left ? CFL_HAS_LEFT : 0) |
+        // In MHCCP reference samples are defined as pairs of pixels in the
+        // block's edge (consecutively), one (closest to the block) squared and
+        // rounded, and the other (either above, left, or the same), as is.
+        // Reference pixels are defined as the edge (left+top), - 1 at each end.
+        // Reference width and height are therefore defined as such, but we need
+        // one more pixel when the direction's orientation is along the edge.
+        // Although since it is part of the same sample pair, we do not count
+        // it, but we still need to regress it in gen_y.
+        int needed_top = 0, needed_left = 0;
+        if (has_t) {
+            refw = imin(refw + has_l - 1 - !has_l, (128 >> ss_hor) - 2);
+            needed_top = refw + (dir_l || (dir_t && !has_l));
+        }
+        if (has_l) {
+            refh = imin(refh + has_t - 1 - !has_t, (128 >> ss_ver) - 2);
+            needed_left = refh + dir_t;
+            // Some reference samples are counted twice due to the topleft edge,
+            // so adjust refh accordingly.
+            refh -= has_t;
+        }
+        // For the prediction, make sure we also regress the pixels of the edge
+        // matching the direction.
+        if (has_t && dir_t) {
+            const int need_first = !has_l && needed_top > ctw;
+            needed_top = need_first + imax(needed_top, ctw + n_left_cols);
+        } else if (has_l && dir_l) {
+            const int need_first = !has_t && needed_left > cth;
+            needed_left = need_first + imax(needed_left, cth + n_top_rows);
+        }
+
+        ALIGN_STK_64(pixel, luma, CFL_MH_MAX_LUMA_SIZE,);
+        uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES];
+        int32_t mat[3][3];
+        const int edge_flags = (has_t ? CFL_HAS_TOP : 0) |
+                               (has_l ? CFL_HAS_LEFT : 0) |
                                (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0);
-        dsp->ipred.cfl_mh_gen_y[layout][filter_type](luma, ysrc, ytop_sb_edge, ystride,
-                                                     refw - subleft, refh, ctw, cth,
+
+        dsp->ipred.cfl_mh_gen_y[layout][filter_type](luma, ysrc, ytop_sb_edge,
+                                                     ystride, needed_top,
+                                                     needed_left - n_top_rows,
+                                                     ctw, cth,
                                                      edge_flags | b->cfl_mh_dir);
-        refh += has_top;
-        if (has_top || has_left)
+        if (has_t || has_l)
             dsp->ipred.cfl_mh_gen_mat[b->cfl_mh_dir](mat, imat, luma, refw, refh,
                                                      edge_flags HIGHBD_CALL_SUFFIX);
 
@@ -3112,7 +3139,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                                         4 * ssby - 1 : ts->tiling.row) *
                                        PXSTRIDE(cstride) + ssbx * 4] : NULL;
 
-            if (has_top || has_left) {
+            if (has_t || has_l) {
                 dsp->ipred.cfl_mh_calc_alphas(alpha, chroma, ctop_sb_edge, cstride,
                                               refw, refh, mat, imat, edge_flags
                                               HIGHBD_CALL_SUFFIX);
@@ -3120,8 +3147,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                 alpha[0] = alpha[1] = 0;
                 alpha[2] = 0x10000;
             }
-            const int n_top = has_top ? has_top + (b->cfl_mh_dir == CFL_DIR_TOP) : 0;
-            const pixel *const src = luma + n_top * 128;
+            const pixel *const src = luma + n_top_rows * CFL_MH_TOP_STRIDE;
             dsp->ipred.cfl_mh_pred[b->cfl_mh_dir](chroma, cstride, src, ctw, cth,
                                                   alpha, edge_flags HIGHBD_CALL_SUFFIX);
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {

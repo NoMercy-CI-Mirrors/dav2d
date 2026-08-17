@@ -1105,16 +1105,15 @@ cfl_implicit_fn(444, 0, 0)
 
 static NOINLINE void
 cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
-                   const ptrdiff_t src_stride, const int refw, const int refh,
-                   const int w, const int h, const int flags, const int filter_type)
+                   const ptrdiff_t src_stride, const int needed_top_cols,
+                   const int needed_left_rows, const int w, const int h,
+                   const int flags, const int filter_type)
 {
     const int has_t = flags & CFL_HAS_TOP;
     const int has_l = flags & CFL_HAS_LEFT;
     const int dir = flags & CFL_DIR_MASK;
-    const int n_left = has_l ? 1 + (dir == CFL_DIR_LEFT): 0;
-    const int n_top = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
-    pixel *dst_left = dst + n_top * CFL_MH_TOP_STRIDE + 64 * 64;
-    src -= n_left << 1;
+    const int n_left_cols = has_l ? 1 + (dir == CFL_DIR_LEFT): 0;
+    const int n_top_rows = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
 
 // ::
 #define FILTER_UNIFORM(src) \
@@ -1128,23 +1127,24 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
 
     // tl+t+tr
     if (has_t) {
-        const pixel *top = top_sb_edge ?
-            top_sb_edge - n_left * 2 : src - n_top * 2 * src_stride;
+        const pixel *top = (top_sb_edge ? top_sb_edge :
+            src - n_top_rows * 2 * src_stride) - n_left_cols * 2;
         const ptrdiff_t b = !top_sb_edge ? src_stride : 0;
-        ptrdiff_t t = n_top == 1 ? -b : 0;
-        for (int y = 0; y < n_top; y++) {
-            for (int x = 0; x < refw; x++) {
+        ptrdiff_t t = n_top_rows == 1 ? -b : 0;
+        const int start = !has_l && dir == CFL_DIR_CENTER;
+        for (int y = 0; y < n_top_rows; y++) {
+            for (int x = start; x < start + needed_top_cols; x++) {
                 const int c = x * 2, r = c + 1;
-                const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
+                const int l = (n_left_cols & 1) ? c - 1 : imax(c - 1, 0);
                 switch (filter_type) {
                 case CFL_FLT_TYPE_UNIFORM:
-                    dst[x] = FILTER_UNIFORM(top);
+                    dst[x - start] = FILTER_UNIFORM(top);
                     break;
                 case CFL_FLT_TYPE_VSTRIP:
-                    dst[x] = FILTER_VSTRIP(top);
+                    dst[x - start] = FILTER_VSTRIP(top);
                     break;
                 case CFL_FLT_TYPE_GAUSS:
-                    dst[x] = FILTER_GAUSS(top, &top[t]);
+                    dst[x - start] = FILTER_GAUSS(top, &top[t]);
                     break;
                 }
             }
@@ -1154,69 +1154,56 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
         }
     }
 
-    // l+blk
+    // l+bl
+    const int ystart = !has_t && dir == CFL_DIR_CENTER;
     const ptrdiff_t b = src_stride;
-    const pixel *top = has_t ? top_sb_edge ?
-        top_sb_edge - n_left * 2 : src - src_stride : src;
-    for (int y = 0; y < h; y++) {
-        int x = 0;
-        for (; x < n_left; x++) {
+    const pixel *src_left = src + ystart * 2 * src_stride - n_left_cols * 2;
+    const pixel *top_left = has_t || ystart ? top_sb_edge && !ystart ?
+        top_sb_edge - n_left_cols * 2 : src_left - src_stride : src_left;
+    pixel *dst_left = dst + 64 * 64;
+
+    for (int y = ystart; y < ystart + needed_left_rows; y++) {
+        for (int x = 0; x < n_left_cols; x++) {
             const int c = x * 2, r = c + 1;
-            const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
+            const int l = (n_left_cols & 1) ? c - 1 : imax(c - 1, 0);
             switch (filter_type) {
             case CFL_FLT_TYPE_UNIFORM:
-                dst_left[x] = FILTER_UNIFORM(src);
+                dst_left[x] = FILTER_UNIFORM(src_left);
                 break;
             case CFL_FLT_TYPE_VSTRIP:
-                dst_left[x] = FILTER_VSTRIP(src);
+                dst_left[x] = FILTER_VSTRIP(src_left);
                 break;
             case CFL_FLT_TYPE_GAUSS:
-                dst_left[x] = FILTER_GAUSS(src, top);
+                dst_left[x] = FILTER_GAUSS(src_left, top_left);
                 break;
             }
         }
-        for (; x < n_left + w; x++) {
-            const int c = x * 2, r = c + 1;
-            const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
-            switch (filter_type) {
-            case CFL_FLT_TYPE_UNIFORM:
-                dst[x - n_left] = FILTER_UNIFORM(src);
-                break;
-            case CFL_FLT_TYPE_VSTRIP:
-                dst[x - n_left] = FILTER_VSTRIP(src);
-                break;
-            case CFL_FLT_TYPE_GAUSS:
-                dst[x - n_left] = FILTER_GAUSS(src, top);
-                break;
-            }
-        }
-        src += src_stride << 1;
-        top = src - src_stride;
-        dst_left += n_left;
-        dst += w;
+        src_left += src_stride << 1;
+        top_left = src_left - src_stride;
+        dst_left += n_left_cols;
     }
 
-    // bl
-    const int n_bl = refh - h;
-    for (int y = 0; y < n_bl; y++) {
-        for (int x = 0; x < n_left; x++) {
+    // blk
+    const pixel *top = has_t ? top_sb_edge ? top_sb_edge : src - src_stride : src;
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
             const int c = x * 2, r = c + 1;
-            const int l = (n_left & 1) ? c - 1 : imax(c - 1, 0);
+            const int l = !has_l ? imax(c - 1, 0) : c - 1;
             switch (filter_type) {
             case CFL_FLT_TYPE_UNIFORM:
-                dst_left[x] = FILTER_UNIFORM(src);
+                dst[x] = FILTER_UNIFORM(src);
                 break;
             case CFL_FLT_TYPE_VSTRIP:
-                dst_left[x] = FILTER_VSTRIP(src);
+                dst[x] = FILTER_VSTRIP(src);
                 break;
             case CFL_FLT_TYPE_GAUSS:
-                dst_left[x] = FILTER_GAUSS(src, top);
+                dst[x] = FILTER_GAUSS(src, top);
                 break;
             }
         }
         src += src_stride << 1;
         top = src - src_stride;
-        dst_left += n_left;
+        dst += w;
     }
 }
 
@@ -1267,8 +1254,8 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
 
     int n = 0;
     if (has_t) {
-        const int start = !dir_l && !has_l;
-        for (int i = start; i < refw - 1 - !start; i++, n++) {
+        const int start = !has_l && dir_t;
+        for (int i = start; i < start + refw; i++, n++) {
             const int v0 = y[i];
             const int v1 = SQRND(y[dir_t * CFL_MH_TOP_STRIDE + i + dir_l]);
             imat[0][n] = v0;
@@ -1277,16 +1264,16 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
         }
     }
     if (has_l) {
-        const int use_tl = dir_t && has_t;
-        if (use_tl) {
+        const int extra_tl = has_t && dir_t;
+        if (extra_tl) {
             const int v0 = y[CFL_MH_TOP_STRIDE];
             const int v1 = SQRND(left[0]);
             imat[0][n] = v0;
             imat[1][n++] = v1;
             GEN_MATRIX();
         }
-        const int start = !dir_t && !has_t;
-        for (int i = start; i < refh - 1 - !start - use_tl; i++, n++) {
+        const int start = dir_l && !has_t;
+        for (int i = start; i < start + refh - extra_tl; i++, n++) {
             const int v0 = left[i * n_left];
             const int v1 = SQRND(left[(i + dir_t) * n_left + dir_l]);
             imat[0][n] = v0;
@@ -1397,15 +1384,14 @@ cfl_mh_calc_alphas_c(int alpha[3], const pixel *const c,
     if (has_t) {
         const pixel *const top = top_sb_edge ?
             top_sb_edge - has_l : c - PXSTRIDE(stride) - has_l;
-        const int start = !has_l;
-        for (int i = start; i < refw - 1 - !start; i++, n++) {
+        for (int i = !has_l; i < !has_l + refw; i++, n++) {
             alpha[0] += imat[0][n] * top[i];
             alpha[1] += imat[1][n] * top[i];
             alpha[2] += top[i] << (bd - 1);
         }
     }
     if (has_l) {
-        for (int i = !has_t; i < refh - 1 - has_t; i++, n++) {
+        for (int i = !has_t; i < !has_t + refh; i++, n++) {
             const int v = c[i * PXSTRIDE(stride) - 1];
             alpha[0] += imat[0][n] * v;
             alpha[1] += imat[1][n] * v;
