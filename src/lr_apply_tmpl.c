@@ -110,7 +110,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
     uint16_t noskip_mask[64 + 2];
     int multi_wiener = 0;
     // TODO: We copy from a 16x18 array. That array should be 16x16 in the first place.
-    ALIGN_STK_64(int8_t, luma_filters, 16, [16]);
+    int8_t luma_filters[16][16];
 
     if (f->c->inloop_filters & DAV2D_INLOOPFILTER_WIENER) {
         for (int pl = 1; pl <= 2; pl++) {

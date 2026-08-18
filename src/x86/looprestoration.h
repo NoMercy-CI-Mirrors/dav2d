@@ -55,11 +55,9 @@ static void BF(wiener_single, avx2)(pixel *p, const ptrdiff_t stride,
     const union ZeroData zero = { 0 };
     uint16_t noskip_mask[16];
     WienerParams params;
-    ALIGN_STK_64(int8_t, filters, 16, [16]);
-    memcpy(filters[0], in_params->single.filter, sizeof(filters[0]));
     params.multi.noskip_mask = noskip_mask;
     params.multi.qval_approx = &zero.qval_approx;
-    params.multi.filters.user = filters;
+    params.multi.filters.user = (const int8_t(*)[16]) in_params->single.filter;
     params.multi.class_lut = zero.class_lut;
     BF(dav2d_wiener_multi, avx2)(p, stride, left, lpf, lpf_bottom, &params,
                                  ll_mask, w, h, edges HIGHBD_TAIL_SUFFIX);

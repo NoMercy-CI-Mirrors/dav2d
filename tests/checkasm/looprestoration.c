@@ -174,7 +174,7 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
     uint16_t ll_mask[64][4];
     uint16_t noskip_mask[64];
     pixel left[64][8];
-    ALIGN_STK_64(int8_t, filters, 16, [16]);
+    int8_t filters[16][16];
     WienerParams params;
     WienerQValApproxData qval_approx;
     params.multi.filters.user = filters;

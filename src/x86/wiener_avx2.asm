@@ -245,12 +245,12 @@ DEFINE_ARGS p, stride, left, lpf, lpf_bot, params, ll_mask, bw, bh, edge, \
     ; TODO: accumulate filter values outside of asm
     ; 0 | 1
     ; 2 | 3
-    mova              m2, [filtersq + 8*cntq + 0]
-    mova              m3, [filtersq + 8*cntq + 32]
+    movu              m2, [filtersq + 8*cntq + 0]
+    movu              m3, [filtersq + 8*cntq + 32]
     ; 4 | 5
     ; 6 | 7
-    mova              m4, [filtersq + 8*cntq + 64]
-    mova              m5, [filtersq + 8*cntq + 96]
+    movu              m4, [filtersq + 8*cntq + 64]
+    movu              m5, [filtersq + 8*cntq + 96]
 
     ; 0 2 | 1 3
     punpcklqdq        m0, m2, m3
