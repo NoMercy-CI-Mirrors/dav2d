@@ -569,6 +569,48 @@ static void check_warp8x8t(Dav2dMCDSPContext *const c) {
     report("warp8x8t");
 }
 
+static void check_ext_warp4x4(Dav2dMCDSPContext *const c) {
+    ALIGN_STK_64(pixel, src_buf, 11 * 11,);
+    PIXEL_RECT(c_dst, 4, 4);
+    PIXEL_RECT(a_dst, 8, 4);
+    const pixel *const src = src_buf + 11 * 3 + 3;
+    const ptrdiff_t src_stride = 11 * sizeof(pixel);
+
+    declare_func(void, pixel *dst, ptrdiff_t dst_stride, const pixel *src,
+                 ptrdiff_t src_stride, int mx, int my HIGHBD_DECL_SUFFIX);
+
+    for (int mxy = 0; mxy < 4; mxy++)
+        if (check_func(c->ext_warp4x4, "ext_warp4x4_%s_%dbpc", mxy_names[mxy],
+                       BITDEPTH))
+        {
+#if BITDEPTH == 16
+            const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+            const int bitdepth_max = 0xff;
+#endif
+            const int mx = (mxy & 1) ? rnd() % 63 + 1 : 0;
+            const int my = (mxy & 2) ? rnd() % 63 + 1 : 0;
+            pixel *const u_dst = a_dst + 1;
+
+            for (int i = 0; i < 11 * 11; i++)
+                src_buf[i] = rnd() & bitdepth_max;
+
+            CLEAR_PIXEL_RECT(c_dst);
+            CLEAR_PIXEL_RECT(a_dst);
+
+            call_ref(c_dst, c_dst_stride, src, src_stride, mx,
+                     my HIGHBD_TAIL_SUFFIX);
+            call_new(u_dst, a_dst_stride, src, src_stride, mx,
+                     my HIGHBD_TAIL_SUFFIX);
+            checkasm_check_pixel_padded(c_dst, c_dst_stride, u_dst,
+                                        a_dst_stride, 4, 4, "dst");
+
+            bench_new(a_dst, a_dst_stride, src, src_stride, mx,
+                      my HIGHBD_TAIL_SUFFIX);
+        }
+    report("ext_warp4x4");
+}
+
 enum EdgeFlags {
     HAVE_TOP = 1,
     HAVE_BOTTOM = 2,
@@ -895,6 +937,7 @@ void bitfn(checkasm_check_mc)(void) {
     check_blend(&c);
     check_warp8x8(&c);
     check_warp8x8t(&c);
+    check_ext_warp4x4(&c);
     check_emuedge(&c);
     check_morph(&c);
     check_sad_refine_mv(&c);
