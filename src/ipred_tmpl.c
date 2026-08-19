@@ -34,7 +34,6 @@
 #include "common/intops.h"
 #include "src/derivation.h"
 
-#include "src/dip_tables.h"
 #include "src/ibp.h"
 #include "src/ipred.h"
 #include "src/tables.h"
@@ -1525,37 +1524,26 @@ static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
     const int hl2 = ulog2(hd);
     const int wrnd = width >> 3;
     const int hrnd = height >> 3;
-    const int i_t = 1 + 4 * trans;
-    const int i_l = 5 - 4 * trans;
+    const int i_t = 1 + 5 * trans;
+    const int i_l = 6 - 5 * trans;
     pixel in[11];
-    int sum;
     int in_sum = in[0] = topleft[0];
 
     const pixel *tl = &topleft[1];
-    for (int i = 0; i < 4; i++) {
-        sum = 0;
+    for (int i = 0; i < 5; i++) {
+        int sum = 0;
         for (int x = 0; x < wd; x++)
             sum += *tl++;
         in_sum += in[i_t + i] = (sum + wrnd) >> wl2;
     }
 
     tl = &topleft[-1];
-    for (int i = 0; i < 4; i++) {
-        sum = 0;
+    for (int i = 0; i < 5; i++) {
+        int sum = 0;
         for (int y = 0; y < hd; y++)
             sum += *tl--;
         in_sum += in[i_l + i] = (sum + hrnd) >> hl2;
     }
-
-    sum = 0;
-    for (int x = 0; x < wd; x++)
-        sum += topleft[x + width + 1];
-    in_sum += in[9 + trans] = (sum + wrnd) >> wl2;
-
-    sum = 0;
-    for (int y = 0; y < hd; y++)
-        sum += topleft[-(y + height + 1)];
-    in_sum += in[10 - trans] = (sum + hrnd) >> hl2;
 
     const int m = mode & 7;
     assert(m < 6);

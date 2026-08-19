@@ -93,6 +93,7 @@ EXTERN const uint16_t dav2d_div_recip[128 + 1];
 EXTERN const uint16_t dav2d_div_scale_sh_offset[8];
 EXTERN const uint16_t dav2d_div_scale_sh_bias[8];
 EXTERN const uint8_t  dav2d_div_scale_sh_coefw[8];
+EXTERN const uint16_t dav2d_dip_weights[6][64][11];
 
 EXTERN const int16_t dav2d_gaussian_sequence[2048]; // for fgs
 
