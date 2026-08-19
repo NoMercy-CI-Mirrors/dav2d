@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 64
 
 pb_4x_1_m1_4x_3_m3_4x_2_m2_4x_4_m4: times 4 db 1, -1
@@ -5470,5 +5468,3 @@ cglobal pal_pred_8bpc, 4, 6, 5, dst, stride, pal, idx, w, h
     dec                  hd
     jg .w64
     RET
-
-%endif

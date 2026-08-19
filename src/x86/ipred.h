@@ -104,7 +104,6 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
 
     c->pal_pred = BF(dav2d_pal_pred, ssse3);
 
-#if ARCH_X86_64
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
 #if BITDEPTH == 8
@@ -162,5 +161,4 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
 #endif
 
     c->pal_pred = BF(dav2d_pal_pred, avx512icl);
-#endif
 }
