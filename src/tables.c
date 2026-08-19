@@ -1253,6 +1253,7 @@ const uint8_t dav2d_div_scale_sh_coefw[8] = {
     214, 153, 113,  86,  67, 53, 43, 35
 };
 
+ATTR_MCMODEL_SMALL
 const uint16_t ALIGN(dav2d_dip_weights[6][64][11], 32) = {
     {
         { 3104, 6856, 4308, 3992, 4172, 4044, 5748, 4628, 4108, 4108, 4092 },
