@@ -1512,117 +1512,88 @@ static void pal_pred_c(pixel *dst, const ptrdiff_t stride,
 }
 
 static void ipred_dip_c(pixel *dst, const ptrdiff_t stride,
-                        const pixel *const topleft,
-                        const int width, const int height, int mode,
-                        const int max_width, const int max_height
+                        const pixel *const topleft, const int w, const int h,
+                        const int mode, const int max_w, const int max_h
                         HIGHBD_DECL_SUFFIX)
 {
-    const int trans = !!(mode & 16);
-    const int wd = width >> 2;
-    const int hd = height >> 2;
-    const int wl2 = ulog2(wd);
-    const int hl2 = ulog2(hd);
-    const int wrnd = width >> 3;
-    const int hrnd = height >> 3;
-    const int i_t = 1 + 5 * trans;
-    const int i_l = 6 - 5 * trans;
+    assert(!(w & (w - 1)) && w >= 4 && w <= 64);
+    assert(!(h & (h - 1)) && h >= 4 && h <= 64);
+    assert((mode & 7) < 6);
+    const uint16_t (*const weights)[11] = dav2d_dip_weights[mode & 7];
+    const int transpose = !!(mode & 16);
+    const int wl2 = ulog2(w) - 2;
+    const int hl2 = ulog2(h) - 2;
+    const int wrnd = w >> 3;
+    const int hrnd = h >> 3;
     pixel in[11];
     int in_sum = in[0] = topleft[0];
 
     const pixel *tl = &topleft[1];
+    pixel *in_tl = &in[1 + 5 * transpose];
     for (int i = 0; i < 5; i++) {
         int sum = 0;
-        for (int x = 0; x < wd; x++)
+        for (int x = 0; x < w; x += 4)
             sum += *tl++;
-        in_sum += in[i_t + i] = (sum + wrnd) >> wl2;
+        in_sum += in_tl[i] = (sum + wrnd) >> wl2;
     }
 
     tl = &topleft[-1];
+    in_tl = &in[6 - 5 * transpose];
     for (int i = 0; i < 5; i++) {
         int sum = 0;
-        for (int y = 0; y < hd; y++)
+        for (int y = 0; y < h; y += 4)
             sum += *tl--;
-        in_sum += in[i_l + i] = (sum + hrnd) >> hl2;
+        in_sum += in_tl[i] = (sum + hrnd) >> hl2;
     }
 
-    const int m = mode & 7;
-    assert(m < 6);
-
-    int uwl2 = wl2 - 1;
-    int dwl2 = 0;
-    if (uwl2 < 0) {
-        dwl2 = -uwl2;
-        uwl2 = 0;
-    }
-    const int step_x = 1 << uwl2;
-    const int dw = 1 << dwl2;
-    int uhl2 = hl2 - 1;
-    int dhl2 = 0;
-    if (uhl2 < 0) {
-        dhl2 = -uhl2;
-        uhl2 = 0;
-    }
-    const int step_y = 1 << uhl2;
-    const int dh = 1 << dhl2;
-    const int grid_h = 8 >> dhl2;
-    const int grid_w = 8 >> dwl2;
+    const int step_x = imax(w >> 3, 1);
+    const int step_y = imax(h >> 3, 1);
+    const int dw = (1 + 7 * transpose) << (w < 8);
+    const int dh = (8 - 7 * transpose) << (h < 8);
 
     // Run DIP prediction at each coarse grid position
-    int y = step_y - 1;
-    for (int gy = 0; gy < grid_h; gy++) {
-        const int iy = gy * dh;
-        int x = step_x - 1;
-        for (int gx = 0; gx < grid_w; gx++) {
-            const int ix = gx * dw;
-            const int idx = trans ? (ix * 8 + iy) : (iy * 8 + ix);
+    for (int y = step_y - 1, iy = 0; y < h; y += step_y, iy += dh) {
+        for (int x = step_x - 1, idx = iy; x < w; x += step_x, idx += dw) {
             int sum = 0;
-            for (int i = 0; i < 11; i++) {
-                sum += dav2d_dip_weights[m][idx][i] * in[i];
-            }
+            for (int i = 0; i < 11; i++)
+                sum += weights[idx][i] * in[i];
             dst[y * PXSTRIDE(stride) + x] =
                 iclip_pixel(((sum + 2048) >> 12) - in_sum);
-            x += step_x;
         }
-        y += step_y;
     }
 
-    if (step_x > 1) {
+    if (w > 8) {
         // Horizontal interpolation between coarse DIP samples
-        y = step_y - 1;
-        for (int gy = 0; gy < grid_h; gy++) {
-            int p1 = topleft[-(y + 1)];
-            int x = 0;
-            for (int gx = 0; gx < grid_w; gx++) {
-                const int p0 = p1;
-                p1 = dst[y * PXSTRIDE(stride) + x + step_x - 1];
-                for (int z = 0; z < step_x - 1; z++) {
-                    const int z1 = z + 1;
-                    dst[y * PXSTRIDE(stride) + x + z] =
-                        (p0 * (step_x - z1) + (p1 * z1)) >> uwl2;
-                }
-                x += step_x;
+        const int step_z = 16 >> wl2;
+        for (int y = step_y - 1; y < h; y += step_y) {
+            int p0 = topleft[-(y + 1)];
+            for (int x = step_x - 1; x < w; x += step_x) {
+                pixel *p = &dst[y * PXSTRIDE(stride) + x];
+                const int p1 = *p;
+                for (int z = step_z; z < 8; z += step_z)
+                    *--p = (p0 * z + p1 * (8 - z)) >> 3;
+                p0 = p1;
             }
-            y += step_y;
         }
     }
-    if (step_y > 1) {
+
+    if (h > 8) {
         // Vertical interpolation between coarse DIP samples.
-        for (int x = 0; x < width; x++) {
-            int p1 = topleft[x + 1];
-            y = 0;
-            for (int gy = 0; gy < grid_h; gy++) {
-                const int p0 = p1;
-                p1 = dst[(y + step_y - 1) * PXSTRIDE(stride) + x];
-                for (int z = 0; z < step_y - 1; z++) {
-                    const int z1 = z + 1;
-                    dst[(y + z) * PXSTRIDE(stride) + x] =
-                        (p0 * (step_y - z1) + (p1 * z1)) >> uhl2;
+        const int step_z = 16 >> hl2;
+        for (int x = 0; x < w; x++) {
+            int p0 = topleft[x + 1];
+            for (int y = step_y - 1; y < h; y += step_y) {
+                pixel *p = &dst[y * PXSTRIDE(stride) + x];
+                const int p1 = *p;
+                for (int z = step_z; z < 8; z += step_z) {
+                    p -= PXSTRIDE(stride);
+                    *p = (p0 * z + p1 * (8 - z)) >> 3;
                 }
-                y += step_y;
+                p0 = p1;
             }
         }
     }
- }
+}
 
 #if HAVE_ASM
 #if ARCH_AARCH64 || ARCH_ARM
