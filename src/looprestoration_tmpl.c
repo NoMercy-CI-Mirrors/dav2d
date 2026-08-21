@@ -355,7 +355,7 @@ wiener_uv_luma_c(coef *dst, const pixel *luma, const ptrdiff_t stride,
         if (y + 2 < h) {
             backup_row_luma(bak_rows[bak_idx], luma, stride, left, w << ss_hor,
                             edges, ss_hor, ss_ver, ds_flt);
-            left += 1 << ss_ver;
+            left += 1 + ss_ver;
             ptrs[4] = bak_rows[bak_idx];
         } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
             backup_row_luma(bak_rows[bak_idx], luma, stride, NULL, w << ss_hor,
