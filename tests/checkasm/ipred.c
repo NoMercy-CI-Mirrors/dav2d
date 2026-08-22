@@ -308,7 +308,7 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
     for (int layout = 1; layout <= DAV2D_PIXEL_LAYOUT_I444; layout++) {
         const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
         const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
-        for (int w = 4; w <= 64; w <<= 1)
+        for (int w = 4; w <= 32; w <<= 1)
 #define BENCH_DIR 0
 #if BENCH_DIR
             for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++)
@@ -331,7 +331,7 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
 #if !BENCH_DIR
                         for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++) {
 #endif
-                            for (int h = 4; h <= 64; h <<= 1) {
+                            for (int h = 4; h <= 32; h <<= 1) {
                                 const int has_t = rnd() & CFL_HAS_TOP;
                                 const int has_l = rnd() & CFL_HAS_LEFT;
                                 const int itse = rnd() & CFL_IS_TOP_SB_EDGE;
@@ -387,8 +387,8 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                          needed_top, needed_left - n_top_rows, w, h, flags);
 
                                 const int blk_off = n_top_rows * CFL_MH_TOP_STRIDE;
-                                const pixel *const c_left = c_dst + blk_off + 64 * 64;
-                                const pixel *const a_left = a_dst + blk_off + 64 * 64;
+                                const pixel *const c_left = c_dst + blk_off + 32 * 32;
+                                const pixel *const a_left = a_dst + blk_off + 32 * 32;
                                 const pixel *const c_blk = c_dst + blk_off;
                                 const pixel *const a_blk = a_dst + blk_off;
 
@@ -437,10 +437,10 @@ static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
         {
             const int has_t = rnd() & 1;
             const int has_l = has_t ? rnd() & 1 : 1;
-            int refw = 4 + 4 * (rnd() & 63) + has_l - 1 - !has_l;
-            int refh = 4 + 4 * (rnd() & 63) - 1 - !has_t;
-            refw = has_t * imin(refw, 128 - 2);
-            refh = has_l * imin(refh, 128 - 2 - has_t);
+            int refw = 4 + 4 * (rnd() & 15) + has_l - 1 - !has_l;
+            int refh = 4 + 4 * (rnd() & 15) - 1 - !has_t;
+            refw = has_t * imin(refw, 63);
+            refh = has_l * imin(refh, 63 - has_t);
             const int edge_flags = (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
 
             call_ref(c_mat, c_imat, luma, refw, refh, edge_flags HIGHBD_TAIL_SUFFIX);
@@ -458,7 +458,7 @@ static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
 }
 
 static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
-    PIXEL_RECT(chroma, 129, 129);
+    PIXEL_RECT(chroma, 32, 32);
     pixel luma[CFL_MH_MAX_EDGE_SAMPLES];
     uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES];
     int32_t mat[3][3] = {{ 0 }};
@@ -485,10 +485,10 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
         const int edge_flags = (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
         const int itse = rnd() & 1;
         const int dir = rnd() % 3;
-        int refw = 4 + 4 * (rnd() & 63) + has_l - 1 - !has_l;
-        int refh = 4 + 4 * (rnd() & 63) - 1 - !has_t;
-        refw = has_t * imin(refw, 128 - 2);
-        refh = has_l * imin(refh, 128 - 2 - has_t);
+        int refw = 4 + 4 * (rnd() & 15) + has_l - 1 - !has_l;
+        int refh = 4 + 4 * (rnd() & 15) - 1 - !has_t;
+        refw = has_t * imin(refw, 63);
+        refh = has_l * imin(refh, 63 - has_t);
         int n;
 
         for (n = 0; n < refw + refh; n++) {
@@ -544,8 +544,8 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
 
 static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
     ALIGN_STK_64(pixel, luma_buf, CFL_MH_MAX_LUMA_SIZE,);
-    PIXEL_RECT(c_chroma, 64, 64);
-    PIXEL_RECT(a_chroma, 64, 64);
+    PIXEL_RECT(c_chroma, 32, 32);
+    PIXEL_RECT(a_chroma, 32, 32);
     int alpha[3];
 #if BITDEPTH == 16
     const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
@@ -561,10 +561,10 @@ static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
                  int w, int h, const int alpha[3], int edge_flags HIGHBD_DECL_SUFFIX);
 
     for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++)
-        for (int w = 4; w <= 64; w <<= 1)
+        for (int w = 4; w <= 32; w <<= 1)
             if (check_func(c->cfl_mh_pred[dir], "cfl_mh_pred_%c_w%d_%dbpc",
                            cfl_mh_dir_names[dir], w, BITDEPTH))
-                for (int h = 4; h <= 64; h <<= 1) {
+                for (int h = 4; h <= 32; h <<= 1) {
                     const int has_t = rnd() & CFL_HAS_TOP;
                     const int has_l = rnd() & CFL_HAS_LEFT;
                     const int edge_flags = has_t | has_l;
@@ -582,7 +582,7 @@ static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
                     checkasm_check_pixel_padded(c_chroma, c_chroma_stride,
                                                 a_chroma, a_chroma_stride, w, h, "dst");
 
-                    luma = luma_buf + (1 + (dir == CFL_DIR_TOP)) * 128;
+                    luma = luma_buf + (1 + (dir == CFL_DIR_TOP)) * CFL_MH_TOP_STRIDE;
                     bench_new(a_chroma, a_chroma_stride, luma, w, h, alpha,
                               edge_flags | CFL_HAS_TOP | CFL_HAS_LEFT HIGHBD_TAIL_SUFFIX);
                 }

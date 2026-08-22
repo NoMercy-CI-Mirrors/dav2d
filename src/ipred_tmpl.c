@@ -1159,7 +1159,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
     const pixel *src_left = src + ystart * 2 * src_stride - n_left_cols * 2;
     const pixel *top_left = has_t || ystart ? top_sb_edge && !ystart ?
         top_sb_edge - n_left_cols * 2 : src_left - src_stride : src_left;
-    pixel *dst_left = dst + 64 * 64;
+    pixel *dst_left = dst + 32 * 32;
 
     for (int y = ystart; y < ystart + needed_left_rows; y++) {
         for (int x = 0; x < n_left_cols; x++) {
@@ -1247,7 +1247,7 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
     const int dir_l = dir == CFL_DIR_LEFT;
     const int n_top = has_t ? 1 + dir_t : 0;
     const int n_left = has_l ? 1 + dir_l : 0;
-    const pixel *left = y + n_top * CFL_MH_TOP_STRIDE + 64 * 64;
+    const pixel *left = y + n_top * CFL_MH_TOP_STRIDE + 32 * 32;
 
     memset(mat, 0, 3 * sizeof(*mat));
 
@@ -1447,7 +1447,7 @@ cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *src,
     const int has_l = !!(edge_flags & CFL_HAS_LEFT);
     const int dir_t = dir == CFL_DIR_TOP;
     const int dir_l = dir == CFL_DIR_LEFT;
-    const pixel *const left = src + 64 * 64;
+    const pixel *const left = src + 32 * 32;
 
     const int a2v2 = mul32(alpha[2], mid, 16);
     int y = 0;
