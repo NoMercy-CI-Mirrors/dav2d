@@ -361,7 +361,7 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                 int needed_top = 0, needed_left = 0;
                                 if (has_t) {
                                     refw = imin(refw + has_l - 1 - !has_l, (128 >> ss_hor) - 2);
-                                    needed_top = refw + (dir_l || (dir_t && !has_l));
+                                    needed_top = refw + dir_l;
                                     if (dir_t) {
                                         const int need_first = !has_l && needed_top > w;
                                         needed_top = need_first + imax(needed_top, w + n_left_cols);

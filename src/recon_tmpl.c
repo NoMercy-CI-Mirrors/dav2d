@@ -3095,7 +3095,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         int needed_top = 0, needed_left = 0;
         if (has_t) {
             refw = imin(refw + has_l - 1 - !has_l, (128 >> ss_hor) - 2);
-            needed_top = refw + (dir_l || (dir_t && !has_l));
+            needed_top = refw + dir_l;
         }
         if (has_l) {
             refh = imin(refh + has_t - 1 - !has_t, (128 >> ss_ver) - 2);
