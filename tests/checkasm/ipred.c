@@ -458,7 +458,8 @@ static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
 }
 
 static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
-    PIXEL_RECT(chroma, 32, 32);
+    // Max block size is capped at 32, but we also use the top-right and bottom-left edge.
+    PIXEL_RECT(chroma, 64, 64);
     pixel luma[CFL_MH_MAX_EDGE_SAMPLES];
     uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES];
     int32_t mat[3][3] = {{ 0 }};
