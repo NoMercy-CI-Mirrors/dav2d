@@ -94,7 +94,7 @@ if is_asm_enabled and checkasm_dependency.found()
         c_args: checkasm_args,
         )
 
-    test('checkasm', checkasm, suite: 'checkasm', timeout: 180)
+    test('checkasm', checkasm, suite: 'checkasm', timeout: 180, args: '-v')
     benchmark('checkasm', checkasm, suite: 'checkasm', timeout: 3600, args: '--bench')
 endif
 
