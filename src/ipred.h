@@ -105,11 +105,11 @@ typedef decl_cfl_pred_fn(*cfl_pred_fn);
 
 /*
  * max luma size
- * = 2 * align64(max_needed_top) + max_bl_size + max_needed_left
- * = 2 * align64(63) + 32 * 32 + 63
- * = 128 + 2^10 + 63 = 1215
+ * = 2 * align64(max_needed_top) + max_bl_size + max_needed_left + convenience padding bytes
+ * = 2 * align64(63) + 32 * 32 + 63 + 5
+ * = 128 + 2^10 + 68 = 1220
  */
-#define CFL_MH_MAX_LUMA_SIZE 1215
+#define CFL_MH_MAX_LUMA_SIZE 1220
 #define CFL_MH_TOP_STRIDE 64
 
 #define decl_cfl_mh_gen_y_fn(name) \
