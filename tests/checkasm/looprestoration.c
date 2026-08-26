@@ -94,13 +94,156 @@ static void init_filter(int8_t* filter, const int chroma) {
     }
 }
 
+static const char ss_name[][4] = {
+    [DAV2D_PIXEL_LAYOUT_I420 - 1] = "420",
+    [DAV2D_PIXEL_LAYOUT_I422 - 1] = "422",
+    [DAV2D_PIXEL_LAYOUT_I444 - 1] = "444",
+};
+
+static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
+                                 int layout_idx)
+{
+    ALIGN_STK_64(coef, c_dst, 64 * 64, );
+    ALIGN_STK_64(coef, a_dst, 64 * 64, );
+    PIXEL_RECT(luma, 128, 64);
+    PIXEL_RECT(top, 128, 4);
+    PIXEL_RECT(bottom, 128, 4);
+    ALIGN_STK_16(pixel, left[64], 8, );
+    int8_t filter[18];
+    const enum Dav2dPixelLayout layout = layout_idx + 1;
+    const int ss_hor = layout != DAV2D_PIXEL_LAYOUT_I444;
+    const int ss_ver = layout == DAV2D_PIXEL_LAYOUT_I420;
+
+    declare_func(void, coef *dst, const pixel *luma, const ptrdiff_t stride,
+                 const pixel (*const left)[8],
+                 const pixel *top, const pixel *bottom,
+                 const int8_t *filter, int w, int h, int ds_flt,
+                 enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX);
+
+    if (check_func(c->wiener_uv_luma[DAV2D_PIXEL_LAYOUT_I444 - layout],
+                   "wiener_uv_luma_%s_%dbpc", ss_name[layout_idx], BITDEPTH))
+    {
+        // ds_flt does nothing for 422/444
+        int max_ds_flt = layout == DAV2D_PIXEL_LAYOUT_I420 ? 2 : 0;
+        for (int ds_flt = 0; ds_flt <= max_ds_flt; ds_flt++) {
+            // test up to 64 pixels regardless of subsampling
+            const int base_w = (8 >> ss_hor) * (1 + (rnd() & (15 >> (1 - ss_hor))));
+            const int base_h = (8 >> ss_ver) * (1 + (rnd() & 7));
+            const int bpc = BITDEPTH == 8 ? 8 : 10 + (rnd() & 2);
+            const int bitdepth_max = (1 << bpc) - 1;
+            init_filter(filter, 1);
+
+            init_tmp(luma - 4, luma_stride, 128 + 8, 64 + 4, bitdepth_max);
+            init_tmp(top - 4, top_stride, 128 + 8, 4, bitdepth_max);
+            init_tmp(bottom - 4, bottom_stride, 128 + 8, 4, bitdepth_max);
+            init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
+
+            for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
+                if (!is_edge_combination_valid(edges))
+                    continue;
+
+                const int w = edges & LR_HAVE_RIGHT ? 64 >> (rnd() & ss_hor) : base_w;
+                const int h =
+                    (edges & (LR_HAVE_BOTTOM | LR_HAVE_BOTTOM_INTEGRATED)) ?
+                        64 >> ss_ver : base_h;
+
+                assert(luma_stride == top_stride);
+                assert(luma_stride == bottom_stride);
+                call_ref(c_dst, luma, luma_stride, left, top, bottom, filter,
+                         w, h, ds_flt, edges HIGHBD_TAIL_SUFFIX);
+                call_new(a_dst, luma, luma_stride, left, top, bottom, filter,
+                         w, h, ds_flt, edges HIGHBD_TAIL_SUFFIX);
+                if (checkasm_check_coef(c_dst, 64 * sizeof(*c_dst),
+                                        a_dst, 64 * sizeof(*a_dst),
+                                        w, h, "dst"))
+                {
+                    fprintf(stderr, "size = %dx%d, edges = %06d, dst_flt = %d\n",
+                            w, h, to_binary(edges), ds_flt);
+                }
+            }
+
+            bench_new(alternate(c_dst, a_dst), luma, luma_stride, left, top,
+                      bottom, filter, 64, 64 >> ss_ver, 0, 0xf
+                      HIGHBD_TAIL_SUFFIX);
+        }
+    }
+}
+
+static void check_wiener_uv_chroma(Dav2dLoopRestorationDSPContext *const c) {
+    PIXEL_RECT(c_dst, 64, 64);
+    PIXEL_RECT(a_dst, 64, 64);
+    ALIGN_STK_64(coef, luma, 64 * 64, );
+    PIXEL_RECT(top, 64, 4);
+    PIXEL_RECT(bottom, 64, 4);
+    ALIGN_STK_16(pixel, left[64], 2, );
+    uint16_t ll_mask[64][4];
+    int8_t filter[18];
+
+    declare_func(void, pixel *p, const ptrdiff_t stride,
+                 const pixel (*const left)[2],
+                 const pixel *top, const pixel *bottom, const coef *luma,
+                 const int8_t *filter, const uint16_t (*ll_mask)[4],
+                 int w, int h, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX);
+
+    if (check_func(c->wiener_uv_chroma, "wiener_uv_chroma_%dbpc", BITDEPTH)) {
+        const int base_w = 4 * (1 + (rnd() & 7));
+        const int base_h = 4 * (1 + (rnd() & 7));
+        const int bpc = BITDEPTH == 8 ? 8 : 10 + (rnd() & 2);
+        const int bitdepth_max = (1 << bpc) - 1;
+        init_filter(filter, 1);
+
+        CLEAR_PIXEL_RECT(c_dst);
+        init_tmp(c_dst - 4, c_dst_stride, 64 + 8, 64 + 4, bitdepth_max);
+        init_tmp(top - 4, top_stride, 64 + 8, 4, bitdepth_max);
+        init_tmp(bottom - 4, bottom_stride, 64 + 8, 4, bitdepth_max);
+        init_tmp((pixel *) left, 2 * sizeof(pixel), 2, 64, bitdepth_max);
+        for (int i = 0; i < 64 * 64; i++)
+            luma[i] = rnd() % (bitdepth_max << 8) - bitdepth_max;
+
+        for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
+            if (!is_edge_combination_valid(edges))
+                continue;
+
+            for (int i = 0; i < 64; i++)
+                ll_mask[i][0] = rnd() & 0xffff;
+
+            const int w = edges & LR_HAVE_RIGHT ? 64 >> (rnd() & 1) : base_w;
+            const int h =
+                (edges & (LR_HAVE_BOTTOM | LR_HAVE_BOTTOM_INTEGRATED)) ?
+                    64 >> (rnd() & 1) : base_h;
+
+            assert(c_dst_stride == a_dst_stride);
+            assert(c_dst_buf_h == a_dst_buf_h);
+            memcpy(a_dst_buf, c_dst_buf, a_dst_stride * a_dst_buf_h);
+
+            assert(c_dst_stride == top_stride);
+            assert(c_dst_stride == bottom_stride);
+            call_ref(c_dst, c_dst_stride, left, top, bottom, luma, filter, ll_mask,
+                     w, h, edges HIGHBD_TAIL_SUFFIX);
+            call_new(a_dst, a_dst_stride, left, top, bottom, luma, filter, ll_mask,
+                     w, h, edges HIGHBD_TAIL_SUFFIX);
+            if (checkasm_check_pixel_padded_align(c_dst, c_dst_stride,
+                                                  a_dst, a_dst_stride,
+                                                  w, h, "dst", 64, 1))
+            {
+                fprintf(stderr, "size = %dx%d, edges = %06d\n",
+                        w, h, to_binary(edges));
+            }
+        }
+
+        memset(ll_mask, 0, sizeof(ll_mask));
+        bench_new(alternate(c_dst, a_dst), a_dst_stride, left, top, bottom, luma, filter, ll_mask,
+                  64, 32, 0xf HIGHBD_TAIL_SUFFIX);
+    }
+}
+
 static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
     PIXEL_RECT(top, 64, 4);
     PIXEL_RECT(bottom, 64, 4);
     uint16_t ll_mask[64][4];
-    pixel left[64][8];
+    ALIGN_STK_16(pixel, left[64], 8, );
     int8_t filter[16];
     WienerParams params;
     params.single.filter = filter;
@@ -173,7 +316,7 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
     PIXEL_RECT(bottom, 64, 4);
     uint16_t ll_mask[64][4];
     uint16_t noskip_mask[64];
-    pixel left[64][8];
+    ALIGN_STK_16(pixel, left[64], 8, );
     int8_t filters[16][16];
     WienerParams params;
     WienerQValApproxData qval_approx;
@@ -269,7 +412,7 @@ static void check_wiener_pretrained(Dav2dLoopRestorationDSPContext *const c) {
     PIXEL_RECT(bottom, 64, 4);
     uint16_t ll_mask[64][4];
     uint16_t noskip_mask[64];
-    pixel left[64][8];
+    ALIGN_STK_16(pixel, left[64], 8, );
     WienerParams params;
     WienerQValApproxData qval_approx;
     params.multi.noskip_mask = noskip_mask;
@@ -456,6 +599,9 @@ void bitfn(checkasm_check_looprestoration)(void) {
     check_wiener_single(&c);
     check_wiener_multi(&c);
     check_wiener_pretrained(&c);
+    for (int layout_idx = 0; layout_idx < 3; layout_idx++)
+        check_wiener_uv_luma(&c, layout_idx);
+    check_wiener_uv_chroma(&c);
     report("wiener");
 
     check_gdf_prep(&c);
