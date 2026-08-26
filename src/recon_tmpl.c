@@ -3084,8 +3084,8 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         if (has_l) {
             refh = imin(refh + has_t - 1 - !has_t, (128 >> ss_ver) - 2);
             needed_left = refh + dir_t;
-            // Some reference samples are counted twice due to the topleft edge,
-            // so adjust refh accordingly.
+            // The topleft sample is counted twice (since it is common to both
+            // edges), so adjust refh accordingly.
             refh -= has_t;
         }
         // For the prediction, make sure we also regress the pixels of the edge

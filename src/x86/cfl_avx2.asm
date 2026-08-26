@@ -70,6 +70,8 @@ pb_flt2: times 2 db 4, 1
 pw_128:  times 2 dw 128
 pw_1024: times 2 dw 1024
 pd_18:           dd 18
+pd_29:           dd 29
+pd_126:          dd 126
 pd_511:          dd 511
 
 %macro JMP_TABLE 1-*
@@ -745,7 +747,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %ifidn %1, implicit
     pand                    m2, m1, m11
     sub                     t0, t1
-    xor                     t2, t2
+    xor                    t2d, t2d
     test                   t0d, 2
     cmovz                   t1, t2
     sub                     t0, t1
@@ -3246,7 +3248,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %endif
     movd                  xm15, [ysrcq+ystrideq*0]
     pslldq                xm15, 15
-    xor                     t2, t2
+    xor                    t2d, t2d
     jmp .blk.f2.w32
 .blk.f2.w32.left:
     movd                  xm15, [ysrcq+ystrideq*0]
@@ -3257,7 +3259,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     mov                    t3d, hm
 %endif
     sub                    t3d, hd
-    xor                     t2, t2
+    xor                    t2d, t2d
     cmp                    t3d, 32
     cmovne                  t2, ystrideq
     neg                     t2
@@ -3273,7 +3275,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     mov                    t3d, hm
 %endif
     sub                    t3d, hd
-    xor                     t2, t2
+    xor                    t2d, t2d
     cmp                    t3d, 32
     cmovne                  t2, ystrideq
     neg                     t2
@@ -5098,5 +5100,411 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     mova             [matq+16], xm1
     mova             [matq+32], xm0
     RET
+
+cglobal cfl_mh_pred_c_8bpc, 4, 13, 16, dst, ds, src, w, h, a, _, a2, _
+ DECLARE_REG_TMP 9, 10, 11, 12
+    movifnidn               aq, amp
+    movifnidn               hd, hm
+    lea                     r8, [pd_126]
+%define base r8-pd_126
+    call .prep_a0_a1
+    call .calc_a2v2
+    movd                  xm15, a2d
+    vpbroadcastd            m9, [base+pd_126]
+    vpbroadcastd           m10, [base+pd_29]
+    vpbroadcastd           m15, xm15
+    cmp                     wd, 8
+    je .w8
+    jg .w16
+
+.w4:
+    pmovzxbd                m0, [srcq]
+    mova                    m1, m0
+    call .pred
+    packuswb                m0, m0
+    vextracti128           xm1, m0, 1
+    movd          [dstq+dsq*0], xm0
+    movd          [dstq+dsq*1], xm1
+    add                   srcq, 8
+    lea                   dstq, [dstq+dsq*2]
+    sub                     hd, 2
+    jg .w4
+    jmp .ret
+
+.w8:
+    pmovzxbd                m0, [srcq]
+    mova                    m1, m0
+    call .pred
+    vpermq                  m0, m0, q3220
+    packuswb               xm0, xm0
+    movq                [dstq], xm0
+    add                   srcq, 8
+    add                   dstq, dsq
+    dec                     hd
+    jg .w8
+    jmp .ret
+
+.w16:
+    mov                     wd, wd
+    add                   dstq, wq
+    neg                     wq
+.w16.yloop:
+    sub                   srcq, wq
+    mov                     t0, wq
+.w16.xloop:
+    pmovzxbd                m0, [srcq+t0]
+    mova                    m1, m0
+    call .pred
+    vpermq                  m0, m0, q3220
+    packuswb               xm0, xm0
+    movq             [dstq+t0], xm0
+    add                     t0, 8
+    jl .w16.xloop
+    add                   dstq, dsq
+    dec                     hd
+    jg .w16.yloop
+.ret:
+    RET
+
+.pred:
+    pcmpeqd                 m7, m7
+    psrld                   m7, 31              ; pd_1
+    pslld                   m8, m7, 4           ; pd_16
+    psllw                   m3, m1, 7
+    pmulhrsw                m1, m3
+    por                     m2, m0, m7
+    por                     m3, m1, m7
+    REPX       {cvtdq2ps x, x}, m2, m3
+    REPX         {psrld x, 23}, m2, m3
+    REPX         {psubd x, m9}, m2, m3
+    paddd                   m2, m11
+    paddd                   m3, m12
+    REPX      {psubusw x, m10}, m2, m3          ; drop
+    psrld                   m4, m2, 1           ; ash
+    psrld                   m5, m3, 1
+    psubd                   m6, m2, m4          ; bsh
+    psubd                   m7, m3, m5
+    vpsrlvd                 m0, m6
+    vpsrlvd                 m1, m7
+    vpsravd                 m4, m13, m4
+    vpsravd                 m5, m14, m5
+    pmulld                  m0, m4
+    pmulld                  m1, m5
+    psubd                   m2, m8, m2          ; adj
+    psubd                   m3, m8, m3
+    pabsd                   m4, m0
+    pabsd                   m5, m1
+    psrld                   m8, 4
+    psubd                   m6, m2, m8
+    psubd                   m7, m3, m8
+    vpsllvd                 m6, m8, m6
+    vpsllvd                 m7, m8, m7
+    paddd                   m4, m6
+    paddd                   m5, m7
+    vpsrlvd                 m4, m2
+    vpsrlvd                 m5, m3
+    psignd                  m0, m4, m0
+    psignd                  m1, m5, m1
+    paddd                   m0, m1
+    paddd                   m0, m15
+    packssdw                m0, m0
+    ret
+
+.prep_a0_a1:
+    vpbroadcastd           m13, [aq+0]
+    vpbroadcastd           m14, [aq+4]
+    pcmpeqd                m10, m10
+    psrld                   m9, m10, 31         ; pd_1
+    psrld                  m10, 25              ; pd_127
+    pabsd                  m11, m13
+    pabsd                  m12, m14
+    REPX          {pabsd x, x}, m11, m12
+    REPX           {por x, m9}, m11, m12
+    REPX       {cvtdq2ps x, x}, m11, m12
+    REPX         {psrld x, 23}, m11, m12
+    REPX        {psubd x, m10}, m11, m12
+    REPX         {paddd x, m9}, m11, m12
+    ret
+
+.calc_a2v2:
+    mov                    a2d, [aq+8]
+    mov                    t1d, 11              ; 31+1+8-29
+    xor                    t0d, t0d
+    sub                    t0d, a2d
+    cmovs                  t0d, a2d
+    lzcnt                  t0d, t0d
+    xor                    t2d, t2d
+    sub                    t1d, t0d
+    cmovb                  t1d, t2d             ; drop
+    mov                    t0d, t1d
+    shr                    t1d, 1               ; ash
+    sub                    t0d, t1d             ; bsh
+    mov                    t3d, 0x80
+    sarx                   a2d, a2d, t1d
+    shrx                   t3d, t3d, t0d
+    imul                   a2d, t3d
+    lea                    t2d, [t0+t1-16]
+    neg                    t2d                  ; adj
+    jg .calc_a2v2.shift
+    ret
+.calc_a2v2.shift:
+    mov                    t1d, 1
+    lea                    t0d, [t2-1]
+    shlx                   t1d, t1d, t0d
+    cmp                    a2d, 0
+    jl .neg_a2v2
+    add                    a2d, t1d
+    shrx                   a2d, a2d, t2d        ; a2v2
+    ret
+.neg_a2v2:
+    neg                    a2d
+    add                    a2d, t1d
+    shrx                   a2d, a2d, t2d
+    neg                    a2d
+    ret
+
+cglobal cfl_mh_pred_t_8bpc, 4, 13, 16, dst, ds, src, w, h, a, flags, a2, _
+ DECLARE_REG_TMP 9, 10, 11, 12
+    mov                 flagsd, flagsm
+    movifnidn               aq, amp
+    movifnidn               hd, hm
+    lea                     r8, [pd_126]
+%define base r8-pd_126
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).prep_a0_a1
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).calc_a2v2
+    movd                  xm15, a2d
+    vpbroadcastd            m9, [base+pd_126]
+    vpbroadcastd           m10, [base+pd_29]
+    vpbroadcastd           m15, xm15
+    mov                     t1, -64
+    xor                    t2d, t2d
+    test                flagsb, 0x4
+    cmovz                   t1, t2
+    setnz                  t2b
+    test                flagsb, 0x8
+    setnz                  t0b
+    and                    t0d, t2d
+    add                     t1, t0
+    mov                    t2d, wd
+    neg                     t2
+    cmp                     wd, 8
+    je .w8
+    jg .w16
+
+.w4:
+    pmovzxbd               xm0, [srcq+t1]
+    pmovzxbd                m1, [srcq]
+    mov                     t1, t2
+    vinserti128             m0, xm1, 1
+    jmp .w4.loop.start
+.w4.loop:
+    pmovzxbd                m0, [srcq+t1]
+    pmovzxbd                m1, [srcq]
+.w4.loop.start:
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).pred
+    packuswb                m0, m0
+    vextracti128           xm1, m0, 1
+    movd          [dstq+dsq*0], xm0
+    movd          [dstq+dsq*1], xm1
+    add                   srcq, 8
+    lea                   dstq, [dstq+dsq*2]
+    sub                     hd, 2
+    jg .w4
+    jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
+
+.w8:
+    pmovzxbd                m0, [srcq+t1]
+    pmovzxbd                m1, [srcq]
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).pred
+    vpermq                  m0, m0, q3220
+    packuswb               xm0, xm0
+    movq                [dstq], xm0
+    add                   srcq, 8
+    add                   dstq, dsq
+    mov                     t1, t2
+    dec                     hd
+    jg .w8
+    jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
+
+.w16:
+    mov                     wd, wd
+    add                   dstq, wq
+    neg                     wq
+.w16.yloop:
+    sub                   srcq, wq
+    add                     t1, srcq
+    mov                     t0, wq
+.w16.xloop:
+    pmovzxbd                m0, [t1+t0]
+    pmovzxbd                m1, [srcq+t0]
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).pred
+    vpermq                  m0, m0, q3220
+    packuswb               xm0, xm0
+    movq             [dstq+t0], xm0
+    add                     t0, 8
+    jl .w16.xloop
+    add                   dstq, dsq
+    mov                     t1, t2
+    dec                     hd
+    jg .w16.yloop
+    jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
+
+cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
+ DECLARE_REG_TMP 10, 11, 12, 13
+    mov                 flagsd, flagsm
+    movifnidn               aq, amp
+    movifnidn               hd, hm
+    lea                     r8, [pd_126]
+%define base r8-pd_126
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).prep_a0_a1
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).calc_a2v2
+    movd                  xm15, a2d
+    vpbroadcastd            m9, [base+pd_126]
+    vpbroadcastd           m10, [base+pd_29]
+    vpbroadcastd           m15, xm15
+    test                flagsb, 0x8
+    jz .no_left
+    lea                     lq, [srcq+32*32+1]
+    cmp                     wd, 8
+    je .w8
+    jg .w16
+
+.w4:
+    pmovzxbd               xm2, [lq]
+    punpckhqdq             xm3, xm2, xm2
+    vinserti128             m2, xm3, 1
+    pmovzxbd                m0, [srcq-1]
+    pmovzxbd                m1, [srcq]
+    vpblendd                m0, m2, 0x11
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).pred
+    packuswb                m0, m0
+    vextracti128           xm1, m0, 1
+    movd          [dstq+dsq*0], xm0
+    movd          [dstq+dsq*1], xm1
+    add                     lq, 4
+    add                   srcq, 8
+    lea                   dstq, [dstq+dsq*2]
+    sub                     hd, 2
+    jg .w4
+    jmp .ret
+
+.w8:
+    movd                   xm2, [lq]
+    pmovzxbd               xm2, xm2
+    pmovzxbd                m0, [srcq-1]
+    pmovzxbd                m1, [srcq]
+    vpblendd                m0, m2, 0x1
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).pred
+    vpermq                  m0, m0, q3220
+    packuswb               xm0, xm0
+    movq                [dstq], xm0
+    add                     lq, 2
+    add                   srcq, 8
+    add                   dstq, dsq
+    dec                     hd
+    jg .w8
+    jmp .ret
+
+.w16:
+    mov                     wd, wd
+    add                   dstq, wq
+    neg                     wq
+.w16.yloop:
+    sub                   srcq, wq
+    add                     t1, srcq
+    mov                     t0, wq
+    movd                   xm2, [lq]
+    pmovzxbd               xm2, xm2
+    pmovzxbd                m0, [srcq+t0-1]
+    pmovzxbd                m1, [srcq+t0]
+    vpblendd                m0, m2, 0x1
+    jmp .w16.xloop.start
+.w16.xloop:
+    pmovzxbd                m0, [srcq+t0-1]
+    pmovzxbd                m1, [srcq+t0]
+.w16.xloop.start:
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).pred
+    vpermq                  m0, m0, q3220
+    packuswb               xm0, xm0
+    movq             [dstq+t0], xm0
+    add                     t0, 8
+    jl .w16.xloop
+    add                     lq, 2
+    add                   dstq, dsq
+    dec                     hd
+    jg .w16.yloop
+.ret:
+    RET
+
+.no_left:
+    cmp                     wd, 8
+    je .no_left.w8
+    jg .no_left.w16
+
+.no_left.w4:
+    vbroadcasti128          m2, [base+pb_0to15]
+    pmovzxbd                m0, [srcq-1]
+    pmovzxbd                m1, [srcq]
+    pshufd                  m2, m2, q3211
+    pshufb                  m0, m2
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).pred
+    packuswb                m0, m0
+    vextracti128           xm1, m0, 1
+    movd          [dstq+dsq*0], xm0
+    movd          [dstq+dsq*1], xm1
+    add                     lq, 4
+    add                   srcq, 8
+    lea                   dstq, [dstq+dsq*2]
+    sub                     hd, 2
+    jg .no_left.w4
+    jmp .ret
+
+.no_left.w8:
+    vbroadcasti128          m2, [base+pb_0to15]
+    pmovzxbd                m0, [srcq-1]
+    pmovzxbd                m1, [srcq]
+    pshufd                 xm3, xm2, q3211
+    vpblendd                m2, m3, 0x1
+    pshufb                  m0, m2
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).pred
+    vpermq                  m0, m0, q3220
+    packuswb               xm0, xm0
+    movq                [dstq], xm0
+    add                     lq, 2
+    add                   srcq, 8
+    add                   dstq, dsq
+    dec                     hd
+    jg .no_left.w8
+    jmp .ret
+
+.no_left.w16:
+    mov                     wd, wd
+    add                   dstq, wq
+    neg                     wq
+.no_left.w16.yloop:
+    vbroadcasti128          m2, [base+pb_0to15]
+    sub                   srcq, wq
+    add                     t1, srcq
+    mov                     t0, wq
+    pmovzxbd                m0, [srcq+t0-1]
+    pmovzxbd                m1, [srcq+t0]
+    pshufd                 xm3, xm2, q3211
+    vpblendd                m2, m3, 0x1
+    pshufb                  m0, m2
+    jmp .no_left.w16.xloop.start
+.no_left.w16.xloop:
+    pmovzxbd                m0, [srcq+t0-1]
+    pmovzxbd                m1, [srcq+t0]
+.no_left.w16.xloop.start:
+    call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).pred
+    vpermq                  m0, m0, q3220
+    packuswb               xm0, xm0
+    movq             [dstq+t0], xm0
+    add                     t0, 8
+    jl .no_left.w16.xloop
+    add                   dstq, dsq
+    dec                     hd
+    jg .no_left.w16.yloop
+    jmp .ret
 
 %endif ; ARCH_X86_64

@@ -1343,7 +1343,7 @@ static int mul32(int a, int b, int sh) {
     // 2. Split the drop across a and b to minimize error
     const int ash = drop >> 1;
     const int bsh = drop - ash;
-    const int adj = sh - (ash + bsh);
+    const int adj = sh - drop;
     const int mul = (a >> ash) * (b >> bsh);
     if (adj <= 0) return mul;
     assert(adj <= 29);
@@ -1458,7 +1458,7 @@ cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *src,
                                  mul32(alpha[1], v1, 16) + a2v2);
         }
         for (; x < w; x++) {
-            const int v0 = src[dir_t ? x - ((!!y) | has_t) * w :
+            const int v0 = src[dir_t ? x - !!y * w :
                                dir_l ? imax(x - 1, 0) : x];
             const int v1 = SQRND(src[x]);
             dst[x] = iclip_pixel(mul32(alpha[0], v0, 16) +

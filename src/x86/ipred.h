@@ -51,20 +51,29 @@
 
 #define init_cfl_fns(layout, suffix) \
     init_cfl_explicit_fn(layout, suffix); \
-    init_cfl_implicit_fn(layout, suffix);
+    init_cfl_implicit_fn(layout, suffix)
 
-#define init_cfl_mh_gen_y(layout, flt_type, flt_name, suffix) \
+#define init_cfl_mh_gen_y_fn(layout, flt_type, flt_name, suffix) \
     init_fn(cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I##layout - 1], CFL_FLT_TYPE_##flt_type, \
             cfl_mh_gen_y_##layout##_##flt_name, suffix)
 
 #define init_cfl_mh_gen_y_fns(layout, suffix) \
-    init_cfl_mh_gen_y(layout, UNIFORM, uniform, suffix); \
-    init_cfl_mh_gen_y(layout, VSTRIP, vstrip, suffix); \
-    init_cfl_mh_gen_y(layout, GAUSS, gauss, suffix)
+    init_cfl_mh_gen_y_fn(layout, UNIFORM, uniform, suffix); \
+    init_cfl_mh_gen_y_fn(layout, VSTRIP, vstrip, suffix); \
+    init_cfl_mh_gen_y_fn(layout, GAUSS, gauss, suffix)
+
+#define init_cfl_mh_pred_fn(dir, dir_name, suffix) \
+    init_fn(cfl_mh_pred, dir, cfl_mh_pred_##dir_name, suffix)
+
+#define init_cfl_mh_pred_fns(suffix) \
+    init_cfl_mh_pred_fn(CFL_DIR_CENTER, c, suffix); \
+    init_cfl_mh_pred_fn(CFL_DIR_TOP,    t, suffix); \
+    init_cfl_mh_pred_fn(CFL_DIR_LEFT,   l, suffix)
 
 #define init_cfl_mh_fns(suffix) \
     init_cfl_mh_gen_y_fns(420, suffix); \
-    c->cfl_mh_gen_mat = BF(dav2d_cfl_mh_gen_mat, suffix)
+    c->cfl_mh_gen_mat = BF(dav2d_cfl_mh_gen_mat, suffix); \
+    init_cfl_mh_pred_fns(suffix)
 
 decl_fn(angular_ipred, ipred_dc);
 decl_fn(angular_ipred, ipred_dc_128);
@@ -87,6 +96,9 @@ decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_uniform);
 decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_vstrip);
 decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_gauss);
 decl_fn(cfl_mh_gen_mat, cfl_mh_gen_mat);
+decl_fn(cfl_mh_pred,    cfl_mh_pred_c);
+decl_fn(cfl_mh_pred,    cfl_mh_pred_t);
+decl_fn(cfl_mh_pred,    cfl_mh_pred_l);
 
 decl_fn(pal_pred, pal_pred);
 

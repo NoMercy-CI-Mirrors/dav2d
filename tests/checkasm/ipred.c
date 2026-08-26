@@ -577,8 +577,11 @@ static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
 #endif
 
     INIT_PIXEL_RECT(luma_buf);
+    // min/max observed in CTC are -0xe7f520, 0x65231f, so generate 24-bit
+    // values. This is the best we have for now to define that range.
+    // TODO A better way would be to do it mathematically.
     for (int i = 0; i < 3; i++)
-        alpha[i] = -0x20000 + rnd() % (0x40001);
+        alpha[i] = (rnd() & 1 ? -1 : 1) * rnd() % (0x1000000);
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const pixel *src,
                  int w, int h, const int alpha[3], int edge_flags HIGHBD_DECL_SUFFIX);
