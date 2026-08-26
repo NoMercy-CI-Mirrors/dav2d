@@ -175,7 +175,7 @@ static void backup_row_luma(pixel *dst, const pixel *src,
     if (edges & LR_HAVE_LEFT) {
         switch (cfl_ds_flt) {
         case 0:
-            for (int x = -4; x < 0; x++)
+            for (int x = -4; x < 0; x += 1 + ss_hor)
                 dst[x] = (left1[x] + left2[x] + left1[x + 1] + left2[x + 1]) >> 2;
             break;
         case 1:
@@ -198,7 +198,7 @@ static void backup_row_luma(pixel *dst, const pixel *src,
     if (edges & LR_HAVE_RIGHT) {
         switch (cfl_ds_flt) {
         case 0:
-            for (int x = w; x < w + 4; x++)
+            for (int x = w; x < w + 4; x += 1 + ss_hor)
                 dst[x] = (src[x] + src2[x] + src[x + 1] + src2[x + 1]) >> 2;
             break;
         case 1:
