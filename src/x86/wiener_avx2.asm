@@ -40,6 +40,10 @@ pd_ror1d: dd 7, 0, 1, 2, 3, 4, 5, 6
 pd_mask: dd 0x01010101, 0x02020202, 0x04040404, 0x08080808
          dd 0x10101010, 0x20202020, 0x40404040, 0x80808080
 
+pb_uv_chroma_shuf: db  4,  3,  4,  3,  2,  0,  2,  0
+                   db  5,  1,  5,  1,  1,  5,  1,  5
+                   times 8 db  0,  2
+
 ; for calculating feature sums at the left edge of the row
 pb_left2_mid:
 pb_left2_mid_lo: times 4 db 4*1+1, -1, 4*1+2, -1
@@ -83,12 +87,16 @@ pb_rev_bw: db  1,  0,  3,  2,  5,  4,  7,  6,  9,  8, 11, 10, 13, 12, 15, 14
 pb_pt_ll_filt: times 8 db 0
                times 2 db 0, 0, 0, 64
 
+pw_2176_1: dw 2176, 1
+
 pb_3:    times 4 db 3
 pb_128:  times 4 db 128
 pw_1:    times 2 dw 1
+pw_64:   times 2 dw 64
 pw_128:  times 2 dw 128
 pw_256:  times 2 dw 256
 pw_1088: times 2 dw 1088
+pw_2176: times 2 dw 2176
 pw_3072: times 2 dw 3072
 pw_3074: times 2 dw 3074
 pw_3273: times 2 dw 3273
@@ -237,7 +245,7 @@ DEFINE_ARGS p, stride, left, lpf, lpf_bot, params, ll_mask, bw, bh, edge, \
     vbroadcasti128   m15, [pb_user_filter_shuf]
     pxor             m14, m14
     vpbroadcastd     m13, [pb_128]
-    vpbroadcastd     m12, [pw_1088]
+    vpbroadcastd     m12, [pw_2176]
     vbroadcasti128   m11, [center_tap_shuf]
 
     mov             cntd, 16
@@ -283,8 +291,8 @@ DEFINE_ARGS p, stride, left, lpf, lpf_bot, params, ll_mask, bw, bh, edge, \
 
     ; 0 0 1 1 2 2 3 3 | 4 4 5 5 6 6 7 7
     pshufb            m0, m11
-    psubw             m0, m12, m0
     paddw             m0, m0
+    psubw             m0, m12, m0
     mova [Stk(center_tap) + 2*cntq], m0
 
     sub             cntd, 16
@@ -1998,3 +2006,311 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
     jg .row_loop
 
     RET
+
+struc WienerUVChromaStk
+    .row_buf: resb 96*5 + 32
+    .bot:     resq 1
+    .w:       resd 1
+endstruc
+
+%define Stk(off) (rsp + call_depth*gprsize + WienerUVChromaStk. %+ off)
+%define TREG(=n) t %+ n
+%define BUF_PX(x, y) (TREG((y) + 2) + x)
+DECLARE_REG_TMP 11, 12, 4, 3, 6
+
+cglobal wiener_uv_chroma_8bpc, 8, 15, 16, \
+                               0 - ((WienerUVChromaStk_size + 31) & ~31), \
+                               p, stride, left, top, bot, luma, filter, \
+                               ll_mask, w, h, edge, _, _, tmp, w_bak
+%assign call_depth 0
+    movifnidn         wd, wm
+    movifnidn         hd, hm
+    movifnidn      edged, edgem
+    mov       [Stk(bot)], botq
+
+    mov         [Stk(w)], wd
+    add               wd, 31
+    and               wd, ~31
+    neg               wq
+    mov           w_bakq, wq
+    ; combine h and edge to free up a register
+    shl               hd, 6
+    lea            edged, [edgeq+hq-(4<<6)]
+
+    DEFINE_ARGS p, stride, left, top, bot, luma, filter, ll_mask, w, src, \
+                edge, _, _, tmp, w_bak
+
+    vbroadcasti128    m0, [filterq]
+    pslldq           xm3, xm0, 2
+    vpbroadcastd     xm5, [pb_128]
+    pxor             xm4, xm4
+    paddb            xm3, xm5
+    psadbw           xm3, xm4
+    paddw            xm3, xm3
+    movd             xm2, [pw_2176_1]
+    psubw            xm2, xm3
+    vpbroadcastd     m10, xm2 ; center tap and 1
+
+    pshufb            m0, [pb_uv_chroma_shuf]
+    mova  [Stk(row_buf)], m0
+    vpbroadcastd     m11, [Stk(row_buf) + 0]
+    vpbroadcastd     m12, [Stk(row_buf) + 4]
+    vpbroadcastd     m13, [Stk(row_buf) + 8]
+    vpbroadcastd     m14, [Stk(row_buf) + 12]
+    vpbroadcastd     m15, [Stk(row_buf) + 16]
+    vpbroadcastd      m9, [pw_4096] ; offset to prevent overflows
+
+    mov             srcq, pq
+    lea               t4, [Stk(row_buf) + 96*2 + 32]
+    call .load_p
+    call .load_p_lr
+    mov               t2, t4
+.top:
+    test           edgeb, 0x14 ; LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED
+    jz .no_top
+    lea               t4, [Stk(row_buf) + 32]
+    mov             srcq, topq
+    call .load_p
+    add             srcq, strideq
+    mov               t0, t4
+    add               t4, 96
+    call .load_p
+    call .load_tb_lr
+    mov               t1, t4
+    add               t4, 96*2
+    mov             srcq, pq
+    jmp .top_done
+.no_top:
+    lea               t0, [Stk(row_buf) + 32]
+    lea               t1, [Stk(row_buf) + 96 + 32]
+    mova              m0, [BUF_PX( 0, 0)]
+    mova              m1, [BUF_PX(32, 0)]
+    mova  [BUF_PX(0,-2)], m0
+    mova [BUF_PX(32,-2)], m1
+    mova  [BUF_PX(0,-1)], m0
+    mova [BUF_PX(32,-1)], m1
+    mov             tmpd, [BUF_PX(-4, 0)]
+    mov  [BUF_PX(-4,-1)], tmpd
+    mov             tmpd, [BUF_PX(64, 0)]
+    mov  [BUF_PX(64,-1)], tmpd
+    add               t4, 96
+.top_done:
+    add             srcq, strideq
+    call .load_p
+    call .load_p_lr
+    add             srcq, strideq
+    mov               t3, t4
+    add               t4, 96
+.main_loop:
+    call .load_p
+    call .load_p_lr
+    add             srcq, strideq
+    call .main
+    call .load_p
+    call .load_p_lr
+    add             srcq, strideq
+    call .main
+    ; advance ll_mask every 4 rows
+    rorx            tmpd, edged, 4
+    and             tmpd, 2<<2
+    add         ll_maskq, tmpq
+
+    sub            edged, 2<<6
+    jge .main_loop
+.bottom:
+    test           edgeb, 0x20 ; LR_HAVE_BOTTOM_INTEGRATED
+    jz .no_bottom_integrated
+    jmp .end
+.no_bottom_integrated:
+    test           edgeb, 0x08 ; LR_HAVE_BOTTOM
+    jz .no_bottom
+    mov             srcq, [Stk(bot)]
+.end:
+    call .load_p
+    call .load_tb_lr
+    add             srcq, strideq
+    call .main
+    call .load_p
+.end2:
+    call .main
+    RET
+.no_bottom:
+    mov               t4, t3
+    call .main
+    mov               t4, t3
+    jmp .end2
+    RET
+%assign call_depth 1
+.load_p:
+    mova              m0, [srcq+0]
+    mova              m1, [srcq+32]
+    mova  [BUF_PX(0, 2)], m0
+    mova  [BUF_PX(32,2)], m1
+    ret
+.load_tb_lr:
+    test           edgeb, 0x01 ; LR_HAVE_LEFT
+    jz .load_p_lr_no_left
+    mov             tmpd, [srcq-4]
+    mov   [BUF_PX(-4,2)], tmpd
+    jmp .load_p_lr_right
+.load_p_lr:
+    test           edgeb, 0x01 ; LR_HAVE_LEFT
+    jz .load_p_lr_no_left
+    movzx           tmpd, word [leftq]
+    add            leftq, 2
+    mov   [BUF_PX(-2,2)], tmpw
+    jmp .load_p_lr_right
+.load_p_lr_no_left:
+    vpbroadcastb     xm0, xm0
+    movd  [BUF_PX(-4,2)], xm0
+.load_p_lr_right:
+    test           edgeb, 0x02 ; LR_HAVE_RIGHT
+    jz .load_p_lr_no_right
+    mov             tmpd, [srcq+64]
+    mov   [BUF_PX(64,2)], tmpd
+    ret
+.load_p_lr_no_right:
+    mov             tmpd, [Stk(w)]
+    vpbroadcastb     xm0, [srcq+tmpq-1]
+    movd [BUF_PX(0,2)+tmpq], xm0
+    ret
+.main:
+    ; Min (right), max (mid), range (left) for preventing overflow.
+    ;     -2  -1   0   1   2       -2  -1   0   1   2       -2  -1   0   1   2
+    ;    ┌───┬───┬───┬───┬───┐    ┌───┬───┬───┬───┬───┐    ┌───┬───┬───┬───┬───┐
+    ; -2 │   │   │-16│   │   │ -2 │   │   │ 15│   │   │ -2 │   │   │ 31│   │   │
+    ; -1 │   │-14│-24│-14│   │ -1 │   │ 17│ 39│ 17│   │ -1 │   │ 31│ 63│ 31│   │
+    ; -0 │-16│-24│   │-24│-16│ -0 │ 15│ 39│   │ 39│ 15│ -0 │ 31│ 63│   │ 63│ 31│
+    ;  1 │   │-14│-24│-14│   │  1 │   │ 17│ 39│ 17│   │  1 │   │ 31│ 63│ 31│   │
+    ;  2 │   │   │-16│   │   │  2 │   │   │ 15│   │   │  2 │   │   │ 31│   │   │
+    ;    └───┴───┴───┴───┴───┘    └───┴───┴───┴───┴───┘    └───┴───┴───┴───┴───┘
+    ; Accumulate in two groups (A and B) before accumulating to 32 bits:
+    ;     -2  -1   0   1   2
+    ;    ┌───┬───┬───┬───┬───┐
+    ; -2 │   │   │ A2│   │   │
+    ; -1 │   │ A0│ A0│ A2│   │
+    ; -0 │ A1│ A1│   │ B0│ B0│
+    ;  1 │   │ B2│ B1│ B1│   │
+    ;  2 │   │   │ B2│   │   │
+    ;    └───┴───┴───┴───┴───┘
+    ; A0 + A1 and B0 + B1 are accumulated as horz adjacent pairs before
+    ; unpacking even and odd pairs and adding to A2 and B2 respectively.
+
+    ; A0
+    movu              m0, [BUF_PX(-1, -1)]
+    mova              m1, [BUF_PX( 0, -1)]
+    ; m0:  0,  2,  4,  6,  8, 10, 12, 14 | 16, 18, 20, 22, 24, 26, 28,
+    ; m1:  1,  3,  5,  7,  9, 11, 13, 15 |
+    REPX {pmaddubsw x, m12}, m0, m1
+    REPX {psubw x, m9}, m0, m1
+    ; A1
+    movu              m2, [BUF_PX(-2, 0)]
+    movu              m3, [BUF_PX(-1, 0)]
+    REPX {pmaddubsw x, m13}, m2, m3
+    paddw             m0, m2
+    paddw             m1, m3
+    punpckhwd         m4, m0, m1
+    punpcklwd         m0, m1
+    ; m0: 0,  1,  2,  3,  4,  5,  6,  7 | 16, 17, 18, 19, 20, 21, 22, 23
+    ; m1: 8,  9, 10, 11, 12, 13, 14, 15 | 24, 25, 26, 27, 28, 29, 30, 31
+    SWAP 4, 1
+    ; A2
+    mova              m3, [BUF_PX(0, -2)]
+    movu              m4, [BUF_PX(1, -1)]
+    punpcklbw         m2, m3, m4
+    punpckhbw         m3, m4
+    REPX {pmaddubsw x, m11}, m2, m3
+    paddw             m0, m2
+    paddw             m1, m3
+
+    ; B0
+    movu              m2, [BUF_PX(1, 0)]
+    movu              m3, [BUF_PX(2, 0)]
+    REPX {pmaddubsw x, m14}, m2, m3
+    REPX {psubw x, m9}, m2, m3
+    ; B1
+    mova              m4, [BUF_PX(0, 1)]
+    movu              m5, [BUF_PX(1, 1)]
+    REPX {pmaddubsw x, m15}, m4, m5
+    paddw             m2, m4
+    paddw             m3, m5
+    punpckhwd         m4, m2, m3
+    punpcklwd         m2, m3
+    SWAP 4, 3
+    ; B2
+    mova              m5, [BUF_PX( 0, 2)]
+    movu              m6, [BUF_PX(-1, 1)]
+    punpcklbw         m4, m5, m6
+    punpckhbw         m5, m6
+    REPX {pmaddubsw x, m11}, m4, m5
+    paddw             m2, m4
+    paddw             m3, m5
+
+    ; Accumulate to 32 bits
+    punpckhwd         m4, m0, m2
+    punpcklwd         m0, m2
+    punpckhwd         m2, m1, m3
+    punpcklwd         m1, m3
+    pcmpeqb           m8, m8
+    REPX {pmaddwd x, m8}, m4, m0, m2, m1
+    ; m0:  0,  1,  2,  3 | 16, 17, 18, 19
+    ; m1:  4,  5,  6,  7 | 20, 21, 22, 23
+    ; m2:  8,  9, 10, 11 | 24, 25, 26, 27
+    ; m3: 12, 13, 14, 15 | 16, 17, 18, 19
+    SWAP 3, 2, 1, 4
+
+    ; Add luma and center tap
+    mova              m8, [BUF_PX(0, 0)]
+    pxor              m4, m4
+    punpcklbw         m5, m8, m4
+    mova             xm6, [lumaq+ 0]
+    vinserti128       m6, [lumaq+32], 1
+    mova             xm7, [lumaq+16]
+    vinserti128       m7, [lumaq+48], 1
+    punpcklwd         m4, m5, m6
+    punpckhwd         m5, m6
+    REPX {pmaddwd x, m10}, m4, m5
+    psubd             m4, m0
+    psubd             m5, m1
+    pxor              m6, m6
+    punpckhbw         m6, m8, m6
+    punpckhwd         m1, m6, m7
+    punpcklwd         m6, m7
+    REPX {pmaddwd x, m10}, m6, m1
+    psubd             m6, m2
+    psubd             m7, m1, m3
+    vpbroadcastd      m0, [pw_256]
+    packssdw          m4, m5
+    packssdw          m6, m7
+    REPX {pmulhrsw x, m0}, m4, m6
+    ; Undo offset applied to prevent overflows
+    vpbroadcastd      m0, [pw_64]
+    REPX {paddw x, m0}, m4, m6
+    packuswb          m4, m6
+
+    vpbroadcastb      m0, [ll_maskq]
+    mova              m1, [pd_mask]
+    pand              m0, m1
+    pcmpeqd           m0, m1
+    vblendvps         m4, m8, m0
+    mova            [pq], m4
+
+    inc         ll_maskq
+    add            lumaq, 64
+    REPX {add x, 32}, pq, t0, t1, t2, t3, t4
+    add               wd, 32
+    jl .main
+    mov               wq, w_bakq
+    dec         ll_maskq
+    and         ll_maskq, ~1
+    ; undo column increment and advance by a row
+    add               pq, wq
+    add               pq, strideq
+    mov             tmpq, t0
+    lea               t0, [t1 + wq]
+    lea               t1, [t2 + wq]
+    lea               t2, [t3 + wq]
+    lea               t3, [t4 + wq]
+    lea               t4, [tmpq + wq]
+    lea            lumaq, [lumaq + 2 * wq + 128]
+    ret
