@@ -43,6 +43,10 @@ pd_mask: dd 0x01010101, 0x02020202, 0x04040404, 0x08080808
 pb_uv_chroma_shuf: db  4,  3,  4,  3,  2,  0,  2,  0
                    db  5,  1,  5,  1,  1,  5,  1,  5
                    times 8 db  0,  2
+pb_uv_luma_shuf:   db 13, 10, 13, 10,  9,  5,  9,  5
+                   db 15,  7, 15,  7,  6, 14,  6, 14
+                   times 4 db  4,  8
+                   times 4 db 11, 12
 
 ; for calculating feature sums at the left edge of the row
 pb_left2_mid:
@@ -89,12 +93,14 @@ pb_pt_ll_filt: times 8 db 0
 
 pw_2176_1: dw 2176, 1
 
+pb_1:    times 4 db 1
 pb_3:    times 4 db 3
 pb_128:  times 4 db 128
 pw_1:    times 2 dw 1
 pw_24:   times 2 dw 24
 pw_64:   times 2 dw 64
 pw_128:  times 2 dw 128
+pw_255:  times 2 dw 255
 pw_256:  times 2 dw 256
 pw_2176: times 2 dw 2176
 pw_3072: times 2 dw 3072
@@ -103,7 +109,21 @@ pw_3273: times 2 dw 3273
 pw_3739: times 2 dw 3739
 pw_4096: times 2 dw 4096
 pd_255:  dd 255
+pd_3072: dd 3072
 pd_8192: dd 8192
+
+%macro JMP_TABLE 2-*
+ %xdefine %1_jmptable %%table
+ %xdefine %%base m(%1)
+ %xdefine %%base mangle(private_prefix %+ _%1_avx2)
+ %%table:
+ %rep %0 - 1
+    dd %%base %+ .%2 - %%table
+  %rotate 1
+ %endrep
+%endmacro
+
+JMP_TABLE wiener_uv_luma_420_8bpc, ds_flt0, ds_flt1, ds_flt2
 
 %define m(x) mangle(private_prefix %+ _ %+ x %+ SUFFIX)
 %define BUF_STRIDE 128
@@ -2304,4 +2324,402 @@ cglobal wiener_uv_chroma_8bpc, 8, 15, 16, \
     lea               t3, [t4 + wq]
     lea               t4, [tmpq + wq]
     lea            lumaq, [lumaq + 2 * wq + 128]
+    ret
+
+struc WienerUVLumaStk
+    .row_buf: resb 96*5 + 32
+    .bot:     resq 1
+    .w:       resd 1
+endstruc
+
+%define Stk(off) (rsp + call_depth*gprsize + WienerUVLumaStk. %+ off)
+
+DECLARE_REG_TMP 9, 11, 5, 4, 6
+
+cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
+                                 0 - ((WienerUVLumaStk_size + 31) & ~31), \
+                                 dst, luma, stride, left, top, bot, filter, \
+                                 w, h, ds_flt, edge, _, tmp, bak
+%assign call_depth 0
+    movifnidn         wd, wm
+    movifnidn         hd, hm
+    movifnidn    ds_fltd, ds_fltm
+    movifnidn      edged, edgem
+    mov       [Stk(bot)], botq
+
+    ; load the last few chroma values and the luma filter values
+    vbroadcasti128    m0, [filterq+2]
+    pinsrd           xm1, xm0, [pb_128], 0 ; 4x128, filters 0-3
+    punpckhqdq       xm2, xm0, xm0         ; filters 4-11
+    paddb            xm1, xm2
+    pxor             xm3, xm3
+    psadbw           xm1, xm3
+    vpbroadcastb      m9, xm1
+    psrlw             m9, 8
+
+    pshufb            m0, [pb_uv_luma_shuf]
+    vpbroadcastd     m10, xm0
+    mova  [Stk(row_buf)], xm0
+    vpbroadcastd     m11, [Stk(row_buf) + 4]
+    vpbroadcastd     m12, [Stk(row_buf) + 8]
+    vpbroadcastd     m13, [Stk(row_buf) + 12]
+    vpermq           m14, m0, q2222
+    vpermq           m15, m0, q3333
+
+    lea             tmpq, [wiener_uv_luma_420_8bpc_jmptable]
+    movsxd       ds_fltq, [tmpq+ds_fltq*4]
+    add          ds_fltq, tmpq
+    ; combine h and edge to free up a register
+    shl               hd, 6
+    lea            edged, [edgeq+hq-(3<<6)]
+    DEFINE_ARGS dst, luma, stride, left, top, bot, filter, w, w_bak, ds_flt, \
+                edge, _, tmp, bak
+    mov         [Stk(w)], wd
+    add               wd, 31
+    and               wd, ~31
+    neg               wq
+    mov           w_bakq, wq
+    lea               t4, [Stk(row_buf) + 96*2 + 32]
+    jmp ds_fltq
+
+%assign call_depth 1
+.main:
+    ;     -2  -1   0   1   2
+    ;    ┌───┬───┬───┬───┬───┐
+    ; -2 │   │   │ B0│   │   │
+    ; -1 │   │ A0│ A0│ B0│   │
+    ; -0 │ A1│ A1│ X │ A2│ A2│
+    ;  1 │   │ B1│ A3│ A3│   │
+    ;  2 │   │   │ B1│   │   │
+    ;    └───┴───┴───┴───┴───┘
+    ; A0, A1, X (center tap), A3, A4 are accumulated as horz adjacent pairs
+    ; before unpacking even and odd pairs and adding to B0 + B1.
+    ; Unlike the other wiener filters, we don't need to worry about overflowing
+    ; 16-bit integers.
+
+    ; A0
+    movu              m0, [BUF_PX(-1, -1)]
+    mova              m1, [BUF_PX( 0, -1)]
+    REPX {pmaddubsw x, m11}, m0, m1
+    ; A1
+    movu              m4, [BUF_PX(-2, 0)]
+    movu              m5, [BUF_PX(-1, 0)]
+    REPX {pmaddubsw x, m12}, m4, m5
+    paddw             m0, m4
+    paddw             m1, m5
+    ; B0
+    mova              m3, [BUF_PX(0, -2)]
+    movu              m4, [BUF_PX(1, -1)]
+    punpcklbw         m2, m3, m4
+    punpckhbw         m3, m4
+    REPX {pmaddubsw x, m10}, m2, m3
+    ; A2
+    movu              m4, [BUF_PX(1, 0)]
+    movu              m5, [BUF_PX(2, 0)]
+    pmaddubsw         m6, m4, m13
+    pmaddubsw         m5, m13
+    paddw             m0, m6
+    paddw             m1, m5
+    ; X (center tap)
+    ; reuse (1, 0) load
+    mova              m5, [BUF_PX(0, 0)]
+    REPX {pmaddubsw x, m9}, m4, m5
+    psubw             m1, m4
+    psubw             m0, m5
+    ; A3
+    mova              m4, [BUF_PX(0, 1)]
+    movu              m5, [BUF_PX(1, 1)]
+    REPX {pmaddubsw x, m14}, m4, m5
+    paddw             m0, m4
+    paddw             m1, m5
+    ; B1
+    movu              m5, [BUF_PX(-1, 1)]
+    mova              m6, [BUF_PX( 0, 2)]
+    punpcklbw         m4, m5, m6
+    punpckhbw         m5, m6
+    REPX {pmaddubsw x, m15}, m4, m5
+    paddw             m2, m4
+    paddw             m3, m5
+
+    punpckhwd         m4, m0, m1
+    punpcklwd         m0, m1
+    paddw             m4, m3
+    paddw             m0, m2
+    vperm2i128        m1, m0, m4, 0x31
+    vinserti128       m0, xm4, 1
+    mova          [dstq], m0
+    mova     [dstq + 32], m1
+
+    REPX {add x, 32}, t0, t1, t2, t3, t4
+    add             dstq, 64
+    add               wd, 32
+    jl .main
+    mov               wq, w_bakq
+    mov             tmpq, t0
+    lea               t0, [t1 + wq]
+    lea               t1, [t2 + wq]
+    lea               t2, [t3 + wq]
+    lea               t3, [t4 + wq]
+    lea               t4, [tmpq + wq]
+    lea             dstq, [dstq + 2*wq + 128]
+    ret
+
+%macro WIENER_UV_LUMA 1 ; ds_flt
+%assign call_depth 0
+.ds_flt%1:
+%if %1 == 0
+    vpbroadcastd      m8, [pb_1]
+%else
+    vpbroadcastd      m8, [pw_255]
+%endif
+    call %%load_p
+    call %%load_p_lr
+    mov               t2, t4
+%%top:
+    test           edgeb, 0x14 ; LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED
+    jz %%no_top
+    mov             bakq, lumaq
+    test           edgeb, 0x10 ; LR_HAVE_TOP_INTEGRATED
+    jz %%no_top_integrated
+    lea               t4, [Stk(row_buf) + 32]
+    lea            lumaq, [topq + strideq*2]
+    call %%load_p
+    lea            lumaq, [lumaq + strideq*2]
+    mov               t0, t4
+    add               t4, 96
+    call %%load_p
+    call %%load_tb_lr
+    mov               t1, t4
+    jmp %%top_done0
+%%no_top_integrated:
+    lea               t0, [Stk(row_buf) + 32]
+    lea            lumaq, [topq]
+    sub               t4, 96
+    call %%load_p
+    mov               t1, t4
+%if %1 == 0
+    REPX {psraw x, 1}, m3, m4, m5, m6
+    packuswb          m3, m4
+    packuswb          m5, m6
+    REPX {vpermq x, x, q3120}, m3, m5
+    mova  [BUF_PX(0,-2)], m3
+    mova [BUF_PX(32,-2)], m5
+%elif %1 == 1
+    packuswb          m3, m4
+    packuswb          m5, m6
+    REPX {vpermq x, x, q3120}, m3, m5
+    mova  [BUF_PX(0,-2)], m3
+    mova [BUF_PX(32,-2)], m5
+%else ; %1 == 2
+    mova  [BUF_PX(0,-2)], m0
+    mova [BUF_PX(32,-2)], m1
+%endif
+    call %%load_tb_lr
+    jmp %%top_done0
+%%no_top:
+    lea               t0, [Stk(row_buf) + 32]
+    lea               t1, [Stk(row_buf) + 96 + 32]
+    mova              m0, [BUF_PX( 0, 0)]
+    mova              m1, [BUF_PX(32, 0)]
+    mova  [BUF_PX(0,-2)], m0
+    mova [BUF_PX(32,-2)], m1
+    mova  [BUF_PX(0,-1)], m0
+    mova [BUF_PX(32,-1)], m1
+    mov             tmpd, [BUF_PX(-4, 0)]
+    mov  [BUF_PX(-4,-1)], tmpd
+    mov             tmpd, [BUF_PX(64, 0)]
+    mov  [BUF_PX(64,-1)], tmpd
+    add               t4, 96
+    jmp %%top_done1
+%%top_done0:
+    add               t4, 96*2
+    mov            lumaq, bakq
+%%top_done1:
+    lea            lumaq, [lumaq + strideq*2]
+    call %%load_p
+    call %%load_p_lr
+    mov               t3, t4
+    add               t4, 96
+%%main_loop:
+    lea            lumaq, [lumaq + strideq*2]
+    call %%load_p
+    call %%load_p_lr
+    call .main
+    sub            edged, 1<<6
+    jge %%main_loop
+%%bottom:
+    test           edgeb, 0x20; LR_HAVE_BOTTOM_INTEGRATED
+    jz %%no_bottom_integrated
+    lea            lumaq, [lumaq + strideq*2]
+    call %%load_p
+    call %%load_tb_lr
+    call .main
+    lea            lumaq, [lumaq + strideq*2]
+    call %%load_p
+    jmp %%end
+%%no_bottom_integrated:
+    test            edgeb, 0x08; LR_HAVE_BOTTOM
+    jz %%no_bottom
+    mov             lumaq, [Stk(bot)]
+    call %%load_p
+    call %%load_tb_lr
+    call .main
+    add             lumaq, strideq
+%if %1 == 0
+    pmaddubsw         m0, [lumaq], m8
+    pmaddubsw         m1, [lumaq+32], m8
+    REPX {psraw x, 1}, m0, m1
+    packuswb          m0, m1
+    vpermq            m0, m0, q3120
+    mova   [BUF_PX(0,2)], m0
+    pmaddubsw         m0, [lumaq+64], m8
+    pmaddubsw         m1, [lumaq+96], m8
+    REPX {psraw x, 1}, m0, m1
+    packuswb          m0, m1
+    vpermq            m0, m0, q3120
+    mova  [BUF_PX(32,2)], m0
+%else ; %1 == 1 || %1 == 2
+    call .load_p_ds_flt2
+%endif
+    jmp %%end
+%%no_bottom:
+    mov                      t4, t3
+    call .main
+    mov                      t4, t3
+%%end:
+    call .main
+    RET
+%assign call_depth 1
+%%load_p:
+%if %1 == 0
+    pmaddubsw         m3, [lumaq], m8
+    pmaddubsw         m0, [lumaq+strideq], m8
+    pmaddubsw         m4, [lumaq+32], m8
+    pmaddubsw         m1, [lumaq+32+strideq], m8
+    paddw             m0, m3
+    paddw             m1, m4
+    REPX {psrlw x, 2}, m0, m1
+    packuswb          m0, m1
+    vpermq            m0, m0, q3120
+    mova   [BUF_PX(0,2)], m0
+    pmaddubsw         m5, [lumaq+64], m8
+    pmaddubsw         m1, [lumaq+64+strideq], m8
+    pmaddubsw         m6, [lumaq+96], m8
+    pmaddubsw         m2, [lumaq+96+strideq], m8
+    paddw             m1, m5
+    paddw             m2, m6
+    REPX {psrlw x, 2}, m1, m2
+    packuswb          m1, m2
+    vpermq            m1, m1, q3120
+    mova  [BUF_PX(32,2)], m1
+%elif %1 == 1
+    pxor              m7, m7
+    pand              m3, m8, [lumaq]
+    pand              m0, m8, [lumaq+strideq]
+    pand              m4, m8, [lumaq+32]
+    pand              m1, m8, [lumaq+32+strideq]
+    paddw             m0, m3
+    paddw             m1, m4
+    REPX {psrlw x, 1}, m0, m1
+    packuswb          m0, m1
+    vpermq            m0, m0, q3120
+    mova   [BUF_PX(0,2)], m0
+    pand              m5, m8, [lumaq+64]
+    pand              m1, m8, [lumaq+64+strideq]
+    pand              m6, m8, [lumaq+96]
+    pand              m2, m8, [lumaq+96+strideq]
+    paddw             m1, m5
+    paddw             m2, m6
+    REPX {psrlw x, 1}, m1, m2
+    packuswb          m1, m2
+    vpermq            m1, m1, q3120
+    mova   [BUF_PX(32,2)], m1
+%else ; %1 == 2
+.load_p_ds_flt2:
+    pand              m0, m8, [lumaq]
+    pand              m1, m8, [lumaq+32]
+    packuswb          m0, m1
+    vpermq            m0, m0, q3120
+    mova   [BUF_PX(0,2)], m0
+    pand              m1, m8, [lumaq+64]
+    pand              m2, m8, [lumaq+96]
+    packuswb          m1, m2
+    vpermq            m1, m1, q3120
+    mova  [BUF_PX(32,2)], m1
+%endif
+    ret
+
+%%load_tb_lr:
+    test           edgeb, 0x01 ; LR_HAVE_LEFT
+    jz %%load_p_lr_no_left
+%if %1 == 0
+    movq             xm0, [lumaq-8]
+    movq             xm1, [lumaq+strideq-8]
+    REPX {pmaddubsw x, xm8}, xm0, xm1
+%elif %1 == 1
+    movq             xm0, [lumaq-8]
+    movq             xm1, [lumaq+strideq-8]
+    REPX {pand x, xm8}, xm0, xm1
+%else ; %1 == 2
+    movq             xm0, [lumaq-8]
+%endif
+    jmp %%store_left
+
+%%load_p_lr_no_left:
+    vpbroadcastb     xm0, xm0
+    movd  [BUF_PX(-4,2)], xm0
+    jmp %%load_p_lr_right
+%%load_p_lr:
+    test           edgeb, 0x01 ; LR_HAVE_LEFT
+    jz %%load_p_lr_no_left
+%if %1 == 0
+    pmaddubsw        xm0, [leftq], xm8
+    add            leftq, 16
+    pshufd           xm1, xm0, q3232
+%%store_left:
+    paddw            xm0, xm1
+    psrlw            xm0, 2
+%elif %1 == 1
+    pand             xm0, [leftq], xm8
+    add            leftq, 16
+    pshufd           xm1, xm0, q3232
+%%store_left:
+    paddw            xm0, xm1
+    psrlw            xm0, 1
+%else ; %1 == 2
+    movq             xm0, [leftq]
+    add            leftq, 16
+%%store_left:
+    pand             xm0, xm8
+%endif
+    packuswb         xm0, xm0
+    movd  [BUF_PX(-4,2)], xm0
+
+%%load_p_lr_right:
+    test           edgeb, 0x02 ; LR_HAVE_RIGHT
+    jz .load_p_lr_no_right
+%if %1 == 0
+    pmaddubsw        xm0, [lumaq+128], xm8
+    pmaddubsw        xm1, [lumaq+strideq+128], xm8
+    paddw            xm0, xm1
+    psrlw            xm0, 2
+%elif %1 == 1
+    pand             xm0, [lumaq+128], xm8
+    pand             xm1, [lumaq+strideq+128], xm8
+    paddw            xm0, xm1
+    psraw            xm0, 1
+%else ; %1 == 2
+    pand             xm0, [lumaq+128], xm8
+%endif
+    packuswb         xm0, xm0
+    movd  [BUF_PX(64,2)], xm0
+    ret
+%endmacro
+WIENER_UV_LUMA 0
+WIENER_UV_LUMA 1
+WIENER_UV_LUMA 2
+.load_p_lr_no_right:
+    mov             tmpd, [Stk(w)]
+    vpbroadcastb     xm0, [BUF_PX(0,2)+tmpq-1]
+    movd [BUF_PX(0,2)+tmpq], xm0
     ret

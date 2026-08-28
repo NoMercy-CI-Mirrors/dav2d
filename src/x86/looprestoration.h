@@ -31,7 +31,8 @@
 #define decl_wiener_filter_fns(ext) \
 decl_wiener_filter_fn(BF(dav2d_wiener_multi, ext)); \
 decl_wiener_filter_fn(BF(dav2d_wiener_pretrained, ext)); \
-decl_wiener_filter_uv_chroma_fn(BF(dav2d_wiener_uv_chroma, ext));
+decl_wiener_filter_uv_chroma_fn(BF(dav2d_wiener_uv_chroma, ext)); \
+decl_wiener_filter_uv_luma_fn(BF(dav2d_wiener_uv_luma_420, ext));
 
 decl_gdf_prep_fn(BF(dav2d_gdf_prep, avx2));
 decl_gdf_add_fn(BF(dav2d_gdf_add, avx2));
@@ -77,6 +78,7 @@ static ALWAYS_INLINE void loop_restoration_dsp_init_x86(Dav2dLoopRestorationDSPC
     c->ns_wiener_multi = BF(dav2d_wiener_multi, avx2);
     c->ns_wiener_single = BF(wiener_single, avx2);
     c->wiener_uv_chroma = BF(dav2d_wiener_uv_chroma, avx2);
+    c->wiener_uv_luma[2] = BF(dav2d_wiener_uv_luma_420, avx2);
 #endif
 
 }
