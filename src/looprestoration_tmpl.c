@@ -141,26 +141,45 @@ static void backup_row_luma(pixel *dst, const pixel *src,
                             const int cfl_ds_flt)
 {
     if (!ss_ver) {
-        backup_row_lpf(dst, src, w, 4, edges);
+        if (edges & LR_HAVE_LEFT) {
+            for (int x = -(4 >> ss_hor); x < 0; x++)
+                dst[x] = src[x * (1 << ss_hor)];
+        } else {
+            for (int x = -(4 >> ss_hor); x < 0; x++)
+                dst[x] = src[0];
+        }
+
+        for (int x = 0; x < w; x++)
+            dst[x] = src[x << ss_hor];
+
+        if (edges & LR_HAVE_RIGHT) {
+            for (int x = w; x < w + (4 >> ss_hor); x++)
+                dst[x] = src[x << ss_hor];
+        } else {
+            for (int x = w; x < w + (4 >> ss_hor); x++)
+                dst[x] = dst[w - 1];
+        }
         return;
     }
 
+    assert(ss_hor);
     const pixel *src2 = &src[PXSTRIDE(src_stride)];
     switch (cfl_ds_flt) {
     case 0:
-        for (int x = 0; x < w; x += 1 + ss_hor)
-            dst[x] = (src[x] + src2[x] + src[x + 1] + src2[x + 1]) >> 2;
+        for (int x = 0, x2 = 0; x < w; x++, x2 += 2) {
+            dst[x] = (src[x2] + src2[x2] + src[x2 + 1] + src2[x2 + 1]) >> 2;
+        }
         break;
     case 1:
-        for (int x = 0; x < w; x++)
-            dst[x] = (src[x] + src2[x]) >> 1;
+        for (int x = 0, x2 = 0; x < w; x++, x2 += 2)
+            dst[x] = (src[x2] + src2[x2]) >> 1;
         break;
     default:
         dav2d_unreachable();
         // fall-through in non-debug mode
     case 2:
-        for (int x = 0; x < w; x++)
-            dst[x] = src[x];
+        for (int x = 0, x2 = 0; x < w; x++, x2 += 2)
+            dst[x] = src[x2];
         break;
     }
 
@@ -175,47 +194,48 @@ static void backup_row_luma(pixel *dst, const pixel *src,
     if (edges & LR_HAVE_LEFT) {
         switch (cfl_ds_flt) {
         case 0:
-            for (int x = -4; x < 0; x += 1 + ss_hor)
-                dst[x] = (left1[x] + left2[x] + left1[x + 1] + left2[x + 1]) >> 2;
+            for (int x = -2, x2 = -4; x < 0; x++, x2 += 2)
+                dst[x] = (left1[x2] + left2[x2] +
+                          left1[x2 + 1] + left2[x2 + 1]) >> 2;
             break;
         case 1:
-            for (int x = -4; x < 0; x++)
-                dst[x] = (left1[x] + left2[x]) >> 1;
+            for (int x = -2, x2 = -4; x < 0; x++, x2 += 2)
+                dst[x] = (left1[x2] + left2[x2]) >> 1;
             break;
         default:
             dav2d_unreachable();
             // fall-through in non-debug mode
         case 2:
-            for (int x = -4; x < 0; x++)
-                dst[x] = left1[x];
+            for (int x = -2, x2 = -4; x < 0; x++, x2 += 2)
+                dst[x] = left1[x2];
             break;
         }
     } else {
-        for (int x = -4; x < 0; x++)
+        for (int x = -2; x < 0; x++)
             dst[x] = dst[0];
     }
 
     if (edges & LR_HAVE_RIGHT) {
         switch (cfl_ds_flt) {
         case 0:
-            for (int x = w; x < w + 4; x += 1 + ss_hor)
-                dst[x] = (src[x] + src2[x] + src[x + 1] + src2[x + 1]) >> 2;
+            for (int x = w, x2 = w << 1; x < w + 2; x++, x2 += 2)
+                dst[x] = (src[x2] + src2[x2] + src[x2 + 1] + src2[x2 + 1]) >> 2;
             break;
         case 1:
-            for (int x = w; x < w + 4; x++)
-                dst[x] = (src[x] + src2[x]) >> 1;
+            for (int x = w, x2 = w << 1; x < w + 2; x++, x2 += 2)
+                dst[x] = (src[x2] + src2[x2]) >> 1;
             break;
         default:
             dav2d_unreachable();
             // fall-through in non-debug mode
         case 2:
-            for (int x = w; x < w + 4; x++)
-                dst[x] = src[x];
+            for (int x = w, x2 = w << 1; x < w + 2; x++, x2 += 2)
+                dst[x] = src[x2];
             break;
         }
     } else {
-        for (int x = w; x < w + 4; x++)
-            dst[x] = dst[w - 2];
+        for (int x = w; x < w + 2; x++)
+            dst[x] = dst[w - 1];
     }
 }
 
@@ -320,32 +340,30 @@ wiener_uv_luma_c(coef *dst, const pixel *luma, const ptrdiff_t stride,
 
     ptrdiff_t row_step = 1 + ss_ver;
 
-    backup_row_luma(bak_rows[2], luma, stride, left, w << ss_hor, edges,
+    backup_row_luma(bak_rows[2], luma, stride, left, w, edges,
                     ss_hor, ss_ver, ds_flt);
     luma += row_step * PXSTRIDE(stride);
     left += row_step;
     ptrs[2] = bak_rows[2];
     if (edges & LR_HAVE_TOP_INTEGRATED) {
         backup_row_luma(bak_rows[0], top + row_step * PXSTRIDE(stride),
-                        stride, NULL, w << ss_hor, edges, ss_hor, ss_ver,
-                        ds_flt);
+                        stride, NULL, w, edges, ss_hor, ss_ver, ds_flt);
         ptrs[0] = bak_rows[0];
         backup_row_luma(bak_rows[1], top + 2 * row_step * PXSTRIDE(stride),
-                        stride, NULL, w << ss_hor, edges, ss_hor, ss_ver,
-                        ds_flt);
+                        stride, NULL, w, edges, ss_hor, ss_ver, ds_flt);
         ptrs[1] = bak_rows[1];
     } else if (edges & LR_HAVE_TOP) {
-        backup_row_luma(bak_rows[0], top, 0, NULL, w << ss_hor, edges,
-                        ss_hor, ss_ver, ds_flt);
+        backup_row_luma(bak_rows[0], top, 0, NULL, w, edges, ss_hor, ss_ver,
+                        ds_flt);
         ptrs[0] = bak_rows[0];
-        backup_row_luma(bak_rows[1], top, stride, NULL, w << ss_hor, edges,
-                        ss_hor, ss_ver, ds_flt);
+        backup_row_luma(bak_rows[1], top, stride, NULL, w, edges, ss_hor, ss_ver,
+                        ds_flt);
         ptrs[1] = bak_rows[1];
     } else {
         ptrs[0] = ptrs[1] = ptrs[2];
     }
-    backup_row_luma(bak_rows[3], luma, stride, left, w << ss_hor, edges,
-                    ss_hor, ss_ver, ds_flt);
+    backup_row_luma(bak_rows[3], luma, stride, left, w, edges, ss_hor, ss_ver,
+                    ds_flt);
     luma += row_step * PXSTRIDE(stride);
     left += row_step;
     ptrs[3] = bak_rows[3];
@@ -353,35 +371,34 @@ wiener_uv_luma_c(coef *dst, const pixel *luma, const ptrdiff_t stride,
 
     for (int y = 0; y < h; y++) {
         if (y + 2 < h) {
-            backup_row_luma(bak_rows[bak_idx], luma, stride, left, w << ss_hor,
+            backup_row_luma(bak_rows[bak_idx], luma, stride, left, w,
                             edges, ss_hor, ss_ver, ds_flt);
             left += row_step;
             ptrs[4] = bak_rows[bak_idx];
         } else if (edges & LR_HAVE_BOTTOM_INTEGRATED) {
-            backup_row_luma(bak_rows[bak_idx], luma, stride, NULL, w << ss_hor,
-                            edges, ss_hor, ss_ver, ds_flt);
+            backup_row_luma(bak_rows[bak_idx], luma, stride, NULL, w, edges,
+                            ss_hor, ss_ver, ds_flt);
             ptrs[4] = bak_rows[bak_idx];
         } else if (!(edges & LR_HAVE_BOTTOM)) {
             ptrs[4] = ptrs[3];
         } else if (y + 2 == h) {
-            backup_row_luma(bak_rows[bak_idx], bottom, stride, NULL,
-                            w << ss_hor, edges, ss_hor, ss_ver, ds_flt);
+            backup_row_luma(bak_rows[bak_idx], bottom, stride, NULL, w, edges,
+                            ss_hor, ss_ver, ds_flt);
             ptrs[4] = bak_rows[bak_idx];
         } else if (y + 1 == h) {
-            backup_row_luma(bak_rows[bak_idx], bottom + PXSTRIDE(stride),
-                            0, NULL, w << ss_hor, edges, ss_hor, ss_ver,
-                            ds_flt);
+            backup_row_luma(bak_rows[bak_idx], bottom + PXSTRIDE(stride), 0,
+                            NULL, w, edges, ss_hor, ss_ver, ds_flt);
             ptrs[4] = bak_rows[bak_idx];
         }
         if (++bak_idx == 5) bak_idx = 0;
 
         for (int x = 0; x < w; x++) {
             int s = 0;
-            const int l = ptrs[2][x << ss_hor];
+            const int l = ptrs[2][x];
             for (int i = 0; i < 12; i++) {
                 const int dy = wiener_ns_config_uv_from_y[i][0];
                 const int dx = wiener_ns_config_uv_from_y[i][1];
-                const int diff = ptrs[2 + dy][(x + dx) * (1 << ss_hor)] - l;
+                const int diff = ptrs[2 + dy][x + dx] - l;
                 s += diff * filter[6 + i];
             }
             dst[x] = s;
