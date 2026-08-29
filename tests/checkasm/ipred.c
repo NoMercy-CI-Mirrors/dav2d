@@ -453,7 +453,7 @@ static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
             cfl_mh_dir_names[dir], BITDEPTH))
         {
             const int has_t = rnd() & 1;
-            const int has_l = has_t ? rnd() & 1 : 1;
+            const int has_l = imax(!has_t, rnd() & 1);
             int refw = 4 + 4 * (rnd() & 15) + has_l - 1 - !has_l;
             int refh = 4 + 4 * (rnd() & 15) - 1 - !has_t;
             refw = has_t * imin(refw, 63);
@@ -468,7 +468,12 @@ static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
             checkasm_check2d(int32_t, c_mat[0], mat_stride, a_mat[0], mat_stride,
                              3, 3, "mat");
 
-            bench_new(a_mat, a_imat, luma, refw, refh, flags HIGHBD_TAIL_SUFFIX);
+            // Most common ref values are 16 and 8
+            refw = 1 << (3 + (rnd() & 1));
+            refh = 1 << (3 + (rnd() & 1));
+            bench_new(alternate(c_mat, a_mat), alternate(c_imat, a_imat), luma,
+                      refw, refh - 1, dir | CFL_HAS_TOP | CFL_HAS_LEFT
+                      HIGHBD_TAIL_SUFFIX);
         }
 
     report("cfl_mh_gen_mat");
