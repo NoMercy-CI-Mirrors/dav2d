@@ -444,12 +444,12 @@ static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
 #endif
 
     declare_func(void, int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
-                 const pixel *luma, int refw, int refh, int edge_flags HIGHBD_DECL_SUFFIX);
+                 const pixel *luma, int refw, int refh, int flags HIGHBD_DECL_SUFFIX);
 
     INIT_PIXEL_RECT(luma);
 
     for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++)
-        if (check_func(c->cfl_mh_gen_mat[dir], "cfl_mh_gen_mat_%c_%dbpc",
+        if (check_func(c->cfl_mh_gen_mat, "cfl_mh_gen_mat_%c_%dbpc",
             cfl_mh_dir_names[dir], BITDEPTH))
         {
             const int has_t = rnd() & 1;
@@ -458,17 +458,17 @@ static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
             int refh = 4 + 4 * (rnd() & 15) - 1 - !has_t;
             refw = has_t * imin(refw, 63);
             refh = has_l * imin(refh, 63 - has_t);
-            const int edge_flags = (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
+            const int flags = dir | (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
 
-            call_ref(c_mat, c_imat, luma, refw, refh, edge_flags HIGHBD_TAIL_SUFFIX);
-            call_new(a_mat, a_imat, luma, refw, refh, edge_flags HIGHBD_TAIL_SUFFIX);
+            call_ref(c_mat, c_imat, luma, refw, refh, flags HIGHBD_TAIL_SUFFIX);
+            call_new(a_mat, a_imat, luma, refw, refh, flags HIGHBD_TAIL_SUFFIX);
 
             checkasm_check1d(uint16_t, c_imat[0], a_imat[0], refw + refh, "imat0");
             checkasm_check1d(uint16_t, c_imat[1], a_imat[1], refw + refh, "imat1");
             checkasm_check2d(int32_t, c_mat_ptr, mat_stride, a_mat_ptr, mat_stride,
                              3, 3, "mat");
 
-            bench_new(a_mat, a_imat, luma, refw, refh, edge_flags HIGHBD_TAIL_SUFFIX);
+            bench_new(a_mat, a_imat, luma, refw, refh, flags HIGHBD_TAIL_SUFFIX);
         }
 
     report("cfl_mh_gen_mat");

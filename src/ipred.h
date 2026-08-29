@@ -167,7 +167,7 @@ typedef struct Dav2dIntraPredDSPContext {
     cfl_pred_fn cfl_pred[2 /* explicit, implicit */][3 /* 420, 422, 444 */];
     // cfl mhccp
     cfl_mh_gen_y_fn        cfl_mh_gen_y[3 /* 420, 422, 444 */][3 /* cfl_ds_filter_type */];
-    cfl_mh_gen_mat_fn      cfl_mh_gen_mat[3 /* CflMhDir */];
+    cfl_mh_gen_mat_fn      cfl_mh_gen_mat;
     cfl_mh_calc_alphas_fn  cfl_mh_calc_alphas;
     cfl_mh_pred_fn         cfl_mh_pred[3 /* CflMhDir */];
 

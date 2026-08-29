@@ -1237,12 +1237,13 @@ cfl_mh_gen_y_fn(420)
 static void
 cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
                  const pixel *y, const int refw, const int refh,
-                 const int edge_flags, const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
+                 const int flags HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
     const int mid = 1 << (bd - 1);
-    const int has_t = !!(edge_flags & CFL_HAS_TOP);
-    const int has_l = !!(edge_flags & CFL_HAS_LEFT);
+    const int has_t = !!(flags & CFL_HAS_TOP);
+    const int has_l = !!(flags & CFL_HAS_LEFT);
+    const int dir = flags & CFL_DIR_MASK;
     const int dir_t = dir == CFL_DIR_TOP;
     const int dir_l = dir == CFL_DIR_LEFT;
     const int n_top = has_t ? 1 + dir_t : 0;
@@ -1299,19 +1300,6 @@ cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
     mat[2][0] = mat[0][2];
     mat[2][1] = mat[1][2];
 }
-
-#define cfl_mh_gen_mat_fn(name, dir) \
-static void \
-cfl_mh_gen_mat_##name##_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES], \
-                         const pixel *const y, const int refw, const int refh, \
-                         const int edge_flags HIGHBD_DECL_SUFFIX) \
-{ \
-    cfl_mh_gen_mat_c(mat, imat, y, refw, refh, edge_flags, dir HIGHBD_TAIL_SUFFIX); \
-}
-
-cfl_mh_gen_mat_fn(c, CFL_DIR_CENTER)
-cfl_mh_gen_mat_fn(t, CFL_DIR_TOP)
-cfl_mh_gen_mat_fn(l, CFL_DIR_LEFT)
 
 static void get_div_scale_sh(int d, int *scale, int *sh) {
     d = imax(1, abs(d));
@@ -1630,17 +1618,14 @@ COLD void bitfn(dav2d_intra_pred_dsp_init)(Dav2dIntraPredDSPContext *const c) {
     c->cfl_pred[CFL_IMPLICIT][DAV2D_PIXEL_LAYOUT_I422 - 1] = cfl_implicit_422_c;
     c->cfl_pred[CFL_IMPLICIT][DAV2D_PIXEL_LAYOUT_I444 - 1] = cfl_implicit_444_c;
 
-#define assign_cfl_mhccp(dir, name) \
-    c->cfl_mh_gen_mat[dir] = cfl_mh_gen_mat_##name##_c; \
-    c->cfl_mh_pred[dir] = cfl_mh_pred_##name##_c;
-
     c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][0] = cfl_mh_gen_y_420_uniform_c;
     c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][1] = cfl_mh_gen_y_420_vstrip_c;
     c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][2] = cfl_mh_gen_y_420_gauss_c;
+    c->cfl_mh_gen_mat = cfl_mh_gen_mat_c; \
     c->cfl_mh_calc_alphas = cfl_mh_calc_alphas_c;
-    assign_cfl_mhccp(CFL_DIR_CENTER, c);
-    assign_cfl_mhccp(CFL_DIR_TOP   , t);
-    assign_cfl_mhccp(CFL_DIR_LEFT  , l);
+    c->cfl_mh_pred[CFL_DIR_CENTER] = cfl_mh_pred_c_c;
+    c->cfl_mh_pred[CFL_DIR_TOP   ] = cfl_mh_pred_t_c;
+    c->cfl_mh_pred[CFL_DIR_LEFT  ] = cfl_mh_pred_l_c;
 
     c->pal_pred = pal_pred_c;
 

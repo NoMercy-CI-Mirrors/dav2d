@@ -3117,18 +3117,16 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         ALIGN_STK_64(pixel, luma, CFL_MH_MAX_LUMA_SIZE,);
         uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES];
         int32_t mat[3][3];
-        const int edge_flags = (has_t ? CFL_HAS_TOP : 0) |
-                               (has_l ? CFL_HAS_LEFT : 0) |
-                               (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0);
+        const int flags = (has_t ? CFL_HAS_TOP : 0) | (has_l ? CFL_HAS_LEFT : 0) |
+                          (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0) |
+                          b->cfl_mh_dir;
 
         dsp->ipred.cfl_mh_gen_y[layout][filter_type](luma, ysrc, ytop_sb_edge,
                                                      ystride, needed_top,
                                                      needed_left - n_top_rows,
-                                                     ctw, cth,
-                                                     edge_flags | b->cfl_mh_dir);
+                                                     ctw, cth, flags);
         if (has_t || has_l)
-            dsp->ipred.cfl_mh_gen_mat[b->cfl_mh_dir](mat, imat, luma, refw, refh,
-                                                     edge_flags HIGHBD_CALL_SUFFIX);
+            dsp->ipred.cfl_mh_gen_mat(mat, imat, luma, refw, refh, flags HIGHBD_CALL_SUFFIX);
 
         for (int pl = 1; pl <= 2; pl++) {
             int alpha[3];
@@ -3141,7 +3139,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
 
             if (has_t || has_l) {
                 dsp->ipred.cfl_mh_calc_alphas(alpha, chroma, ctop_sb_edge, cstride,
-                                              refw, refh, mat, imat, edge_flags
+                                              refw, refh, mat, imat, flags
                                               HIGHBD_CALL_SUFFIX);
             } else { // XXX optimize for no edge case? (single const alpha)
                 alpha[0] = alpha[1] = 0;
@@ -3149,7 +3147,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             }
             const pixel *const src = luma + n_top_rows * CFL_MH_TOP_STRIDE;
             dsp->ipred.cfl_mh_pred[b->cfl_mh_dir](chroma, cstride, src, ctw, cth,
-                                                  alpha, edge_flags HIGHBD_CALL_SUFFIX);
+                                                  alpha, flags HIGHBD_CALL_SUFFIX);
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
                 hex_dump(chroma, cstride, ctw, cth, pl == 1 ? "u-intra-pred" : "v-intra-pred");
             }
