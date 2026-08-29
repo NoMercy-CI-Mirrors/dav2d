@@ -3115,8 +3115,8 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         }
 
         ALIGN_STK_64(pixel, luma, CFL_MH_MAX_LUMA_SIZE,);
-        uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES];
-        int32_t mat[3][3];
+        pixel imat[2][CFL_MH_MAX_EDGE_SAMPLES];
+        ALIGN_STK_16(int32_t, mat, 3, [4]);
         const int flags = (has_t ? CFL_HAS_TOP : 0) | (has_l ? CFL_HAS_LEFT : 0) |
                           (is_top_sb_edge ? CFL_IS_TOP_SB_EDGE : 0) |
                           b->cfl_mh_dir;

@@ -432,18 +432,18 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
 
 static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
     ALIGN_STK_64(pixel, luma, CFL_MH_MAX_LUMA_SIZE,);
-    uint16_t c_imat[2][CFL_MH_MAX_EDGE_SAMPLES];
-    uint16_t a_imat[2][CFL_MH_MAX_EDGE_SAMPLES];
-    int32_t c_mat[3][3], *c_mat_ptr = (int32_t *) c_mat;
-    int32_t a_mat[3][3], *a_mat_ptr = (int32_t *) a_mat;
-    const ptrdiff_t mat_stride = 3 * sizeof(int32_t);
+    pixel c_imat[2][CFL_MH_MAX_EDGE_SAMPLES];
+    pixel a_imat[2][CFL_MH_MAX_EDGE_SAMPLES];
+    ALIGN_STK_16(int32_t, c_mat, 3, [4]);
+    ALIGN_STK_16(int32_t, a_mat, 3, [4]);
+    const ptrdiff_t mat_stride = 4 * sizeof(int32_t);
 #if BITDEPTH == 16
     const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
     const int bitdepth_max = 0xff;
 #endif
 
-    declare_func(void, int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
+    declare_func(void, int32_t mat[3][4], pixel imat[2][CFL_MH_MAX_EDGE_SAMPLES],
                  const pixel *luma, int refw, int refh, int flags HIGHBD_DECL_SUFFIX);
 
     INIT_PIXEL_RECT(luma);
@@ -463,9 +463,9 @@ static void check_cfl_mh_gen_mat(Dav2dIntraPredDSPContext *const c) {
             call_ref(c_mat, c_imat, luma, refw, refh, flags HIGHBD_TAIL_SUFFIX);
             call_new(a_mat, a_imat, luma, refw, refh, flags HIGHBD_TAIL_SUFFIX);
 
-            checkasm_check1d(uint16_t, c_imat[0], a_imat[0], refw + refh, "imat0");
-            checkasm_check1d(uint16_t, c_imat[1], a_imat[1], refw + refh, "imat1");
-            checkasm_check2d(int32_t, c_mat_ptr, mat_stride, a_mat_ptr, mat_stride,
+            checkasm_check1d(pixel, c_imat[0], a_imat[0], refw + refh, "imat0");
+            checkasm_check1d(pixel, c_imat[1], a_imat[1], refw + refh, "imat1");
+            checkasm_check2d(int32_t, c_mat[0], mat_stride, a_mat[0], mat_stride,
                              3, 3, "mat");
 
             bench_new(a_mat, a_imat, luma, refw, refh, flags HIGHBD_TAIL_SUFFIX);
@@ -479,7 +479,7 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
     PIXEL_RECT(chroma, 64, 64);
     pixel luma[CFL_MH_MAX_EDGE_SAMPLES];
     uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES];
-    int32_t mat[3][3] = {{ 0 }};
+    ALIGN_STK_16(int32_t, mat, 3, [4]) = {{ 0 }};
 #if BITDEPTH == 16
     const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
@@ -490,7 +490,7 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
     int c_alpha[3], a_alpha[3];
 
     declare_func(void, int alpha[3], const pixel *c, const pixel *top_sb_edge,
-                 ptrdiff_t stride, int refw, int refh, const int32_t mat[3][3],
+                 ptrdiff_t stride, int refw, int refh, const int32_t mat[3][4],
                  const uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
                  int edge_flags HIGHBD_DECL_SUFFIX);
 

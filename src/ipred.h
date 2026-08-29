@@ -126,8 +126,8 @@ typedef decl_cfl_mh_gen_y_fn(*cfl_mh_gen_y_fn);
 #define CFL_MH_MAX_EDGE_SAMPLES 386
 
 #define decl_cfl_mh_gen_mat_fn(name) \
-void (name)(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES], \
-            const pixel *y, int refw, int refh, int edge_flags HIGHBD_DECL_SUFFIX)
+void (name)(int32_t mat[3][4], pixel imat[2][CFL_MH_MAX_EDGE_SAMPLES], \
+            const pixel *y, int refw, int refh, int flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_mh_gen_mat_fn(*cfl_mh_gen_mat_fn);
 
 /*
@@ -135,8 +135,8 @@ typedef decl_cfl_mh_gen_mat_fn(*cfl_mh_gen_mat_fn);
  */
 #define decl_cfl_mh_calc_alphas_fn(name) \
 void (name)(int alpha[3], const pixel *c, const pixel *top_sb_edge, \
-            ptrdiff_t stride, int refw, int refh, const int32_t mat[3][3], \
-            const uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES], \
+            ptrdiff_t stride, int refw, int refh, const int32_t mat[3][4], \
+            const pixel imat[2][CFL_MH_MAX_EDGE_SAMPLES], \
             int edge_flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_mh_calc_alphas_fn(*cfl_mh_calc_alphas_fn);
 

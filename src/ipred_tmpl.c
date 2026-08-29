@@ -1235,7 +1235,7 @@ cfl_mh_gen_y_fn(420)
     } while (0);
 
 static void
-cfl_mh_gen_mat_c(int32_t mat[3][3], uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
+cfl_mh_gen_mat_c(int32_t mat[3][4], pixel imat[2][CFL_MH_MAX_EDGE_SAMPLES],
                  const pixel *y, const int refw, const int refh,
                  const int flags HIGHBD_DECL_SUFFIX)
 {
@@ -1358,7 +1358,7 @@ static void
 cfl_mh_calc_alphas_c(int alpha[3], const pixel *const c,
                      const pixel *const top_sb_edge, const ptrdiff_t stride,
                      const int refw, const int refh,
-                     const int32_t mat[3][3], const uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
+                     const int32_t mat[3][4], const pixel imat[2][CFL_MH_MAX_EDGE_SAMPLES],
                      const int edge_flags HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
