@@ -136,10 +136,9 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
     init_angular_ipred_fn(Z1_PRED,       ipred_z1,       avx2);
     init_angular_ipred_fn(Z2_PRED,       ipred_z2,       avx2);
     init_angular_ipred_fn(Z3_PRED,       ipred_z3,       avx2);
-    init_angular_ipred_fn(DIP_PRED,   ipred_dip,   avx2);
 #endif
-
 #if BITDEPTH == 8
+    init_angular_ipred_fn(DIP_PRED,      ipred_dip,      avx2);
     init_cfl_fns(420, avx2);
 #endif
 
@@ -167,7 +166,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
     init_angular_ipred_fn(Z1_PRED,       ipred_z1,       avx512icl);
     init_angular_ipred_fn(Z2_PRED,       ipred_z2,       avx512icl);
     init_angular_ipred_fn(Z3_PRED,       ipred_z3,       avx512icl);
-    init_angular_ipred_fn(DIP_PRED,      ipred_dip,   avx512icl);
+    init_angular_ipred_fn(DIP_PRED,      ipred_dip,      avx512icl);
 #endif
 
     c->pal_pred = BF(dav2d_pal_pred, avx512icl);
