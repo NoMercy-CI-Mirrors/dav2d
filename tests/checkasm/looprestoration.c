@@ -186,10 +186,11 @@ static void check_wiener_uv_chroma(Dav2dLoopRestorationDSPContext *const c) {
                  int w, int h, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX);
 
     if (check_func(c->wiener_uv_chroma, "wiener_uv_chroma_%dbpc", BITDEPTH)) {
-        const int base_w = 4 * (1 + (rnd() & 7));
-        const int base_h = 4 * (1 + (rnd() & 7));
+        const int base_w = 4 * (1 + (rnd() & 15));
+        const int base_h = 4 * (1 + (rnd() & 15));
         const int bpc = BITDEPTH == 8 ? 8 : 10 + (rnd() & 2);
         const int bitdepth_max = (1 << bpc) - 1;
+        const int luma_max = bitdepth_max << 7;
         init_filter(filter, 1);
 
         CLEAR_PIXEL_RECT(c_dst);
@@ -198,7 +199,7 @@ static void check_wiener_uv_chroma(Dav2dLoopRestorationDSPContext *const c) {
         init_tmp(bottom - 4, bottom_stride, 64 + 8, 4, bitdepth_max);
         init_tmp((pixel *) left, 2 * sizeof(pixel), 2, 64, bitdepth_max);
         for (int i = 0; i < 64 * 64; i++)
-            luma[i] = rnd() % (bitdepth_max << 8) - bitdepth_max;
+            luma[i] = rnd() % (luma_max << 1) - luma_max;
 
         for (enum LrEdgeFlags edges = 0; edges <= 0x3f; edges++) {
             if (!is_edge_combination_valid(edges))
