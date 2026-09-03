@@ -136,12 +136,12 @@ PACKED(union aliasi16 { uint16_t u16; int8_t i8[2]; }) ATTR_ALIAS;
 struct OpflRegressionData {
     int32_t su2, suv, sv2, suw, svw;
 };
-#define decl_opfl_derive_mv_fn(name) \
+#define decl_opfl_refine_mv_fn(name) \
 void (name)(struct OpflRegressionData *out, \
             const pixel *p0, ptrdiff_t p0_stride, \
             const pixel *p1, ptrdiff_t p1_stride, \
             int w, int h, int bs, const union aliasi16 d HIGHBD_DECL_SUFFIX)
-typedef decl_opfl_derive_mv_fn(*opfl_derive_mv_fn);
+typedef decl_opfl_refine_mv_fn(*opfl_refine_mv_fn);
 
 #define decl_sad8x8_fn(name) \
 unsigned (name)(const pixel *p0, ptrdiff_t p0_stride, \
@@ -182,7 +182,7 @@ typedef struct Dav2dMCDSPContext {
     ext_warp4x4t_fn ext_warp4x4t;
     emu_edge_fn emu_edge;
     morph_fn morph;
-    opfl_derive_mv_fn opfl_derive_mv;
+    opfl_refine_mv_fn opfl_refine_mv;
     sad_refine_mv_fn sad_refine_mv;
     sad8x8_fn sad8x8;
 } Dav2dMCDSPContext;

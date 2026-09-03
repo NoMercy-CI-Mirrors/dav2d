@@ -1027,7 +1027,7 @@ end:
     o->x = best_dx;
 }
 
-static void opfl_derive_mv_c(struct OpflRegressionData *out,
+static void opfl_refine_mv_c(struct OpflRegressionData *out,
                              const pixel *p0, const ptrdiff_t p0_stride,
                              const pixel *p1, const ptrdiff_t p1_stride,
                              const int w, const int h, const int bs,
@@ -1165,7 +1165,7 @@ COLD void bitfn(dav2d_mc_dsp_init)(Dav2dMCDSPContext *const c) {
     c->ext_warp4x4t = ext_warp4x4t_c;
     c->emu_edge = emu_edge_c;
     c->morph    = morph_c;
-    c->opfl_derive_mv = opfl_derive_mv_c;
+    c->opfl_refine_mv = opfl_refine_mv_c;
     c->sad_refine_mv = sad_refine_mv_c;
     c->sad8x8 = sad8x8_c;
 

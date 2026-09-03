@@ -2148,7 +2148,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                                                        HIGHBD_CALL_SUFFIX);
                 if (sad >= sad8x8_thr) {
                     struct OpflRegressionData res[4];
-                    f->dsp->mc.opfl_derive_mv(res,
+                    f->dsp->mc.opfl_refine_mv(res,
                                               &p[0][(4 + dy) * PXSTRIDE(p_stride) +
                                                     (4 + dx)], p_stride,
                                               &p[1][(4 - dy) * PXSTRIDE(p_stride) +
@@ -2286,7 +2286,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                 if (opfl) {
                     struct OpflRegressionData res[2 * 2];
                     // subpel-gradient based mv refinement (optical flow = opfl)
-                    f->dsp->mc.opfl_derive_mv(res,
+                    f->dsp->mc.opfl_refine_mv(res,
                                               &p[0][(4 + dy) * PXSTRIDE(p_stride) +
                                                     (4 + dx)], p_stride,
                                               &p[1][(4 - dy) * PXSTRIDE(p_stride) +
@@ -2357,7 +2357,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                    0, b->mv[n], refp[n], b->ref.ref[n], DAV2D_FILTER_BILINEAR,
                    0, w, 0, h);
             struct OpflRegressionData res[2 * 8];
-            f->dsp->mc.opfl_derive_mv(res, p[0], p_stride, p[1], p_stride,
+            f->dsp->mc.opfl_refine_mv(res, p[0], p_stride, p[1], p_stride,
                                       bw4 * 4, sh4 * 4, bs * 4, d
                                       HIGHBD_CALL_SUFFIX);
             const struct OpflRegressionData *r_line = res;

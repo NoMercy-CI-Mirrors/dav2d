@@ -135,7 +135,7 @@ endconst
 // accumulate two lines at a time until both subblocks are complete, then move
 // down to the next pair of subblocks. At the bottom of the block, move 16
 // pixels to the right and restart from the top.
-.macro opfl_derive_mv_8bpc_large_sve
+.macro opfl_refine_mv_8bpc_large_sve
         uxtw            x5,  w5
         movrel          x8,  shift_large
         sub             sp,  sp,  #224                  // 10 * 128-bit vectors for out accs + 4 spill vectors
@@ -489,7 +489,7 @@ endconst
 // and high halves form two adjacent 4x4 subblocks; for bs == 8, they form one
 // 8x8 subblock. After completing the current subblock row, move down to the
 // next one until the bottom of the block is reached.
-.macro opfl_derive_mv_8bpc_small_sve
+.macro opfl_refine_mv_8bpc_small_sve
         // Compute tmp0/tmp1 for the first two lines.
         // in:  line 0: [v2, v3]  (p0, p1)
         //      line 1: [v8, v9]  (p0, p1)
@@ -691,12 +691,12 @@ endconst
 
 .endm
 
-// void dav2d_opfl_derive_mv_8bpc_sve(struct OpflRegressionData *out,
+// void dav2d_opfl_refine_mv_8bpc_sve(struct OpflRegressionData *out,
 //                                     const pixel *p0, const ptrdiff_t p0_stride,
 //                                     const pixel *p1, const ptrdiff_t p1_stride,
 //                                     const int w, const int h, const int bs,
 //                                     const union aliasi16 d HIGHBD_DECL_SUFFIX)
-function opfl_derive_mv_8bpc_sve, export=1
+function opfl_refine_mv_8bpc_sve, export=1
         ldr             h0, [sp]
         stp             d8,  d9,  [sp, #-80]!
         stp             d10, d11, [sp, #16]
@@ -708,11 +708,11 @@ function opfl_derive_mv_8bpc_sve, export=1
         sxtl            v0.8h,   v0.8b
         b.ne            1f
 
-        opfl_derive_mv_8bpc_small_sve
+        opfl_refine_mv_8bpc_small_sve
         b               L(end)
 
 1:
-        opfl_derive_mv_8bpc_large_sve
+        opfl_refine_mv_8bpc_large_sve
 L(end):
         ldr             x19,      [sp, #64]
         ldp             d10, d11, [sp, #16]

@@ -680,7 +680,7 @@ static void check_morph(Dav2dMCDSPContext *const c) {
     report("morph");
 }
 
-static void check_sadrefinemv(Dav2dMCDSPContext *const c) {
+static void check_sad_refine_mv(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src1, 24 * 24,);
     ALIGN_STK_64(pixel, src2, 24 * 24,);
 
@@ -741,7 +741,7 @@ static void check_sadrefinemv(Dav2dMCDSPContext *const c) {
     report("sad_refine_mv");
 }
 
-static void check_opflrefinemv(Dav2dMCDSPContext *const c) {
+static void check_opfl_refine_mv(Dav2dMCDSPContext *const c) {
     ALIGN_STK_64(pixel, src1, 64 * 16,);
     ALIGN_STK_64(pixel, src2, 64 * 16,);
 
@@ -753,7 +753,7 @@ static void check_opflrefinemv(Dav2dMCDSPContext *const c) {
     for (int bs = 4; bs <= 8; bs <<= 1)
         for (int w = 8; w <= (bs == 4 ? 8 : 64); w <<= 1)
             for (int h = 8; h <= bs * 2; h <<= 1)
-                if (check_func(c->opfl_derive_mv, "opfl_refine_mv_%dx%d_bs%d_%dbpc",
+                if (check_func(c->opfl_refine_mv, "opfl_refine_mv_%dx%d_bs%d_%dbpc",
                                w, h, bs, BITDEPTH))
                 {
 #if BITDEPTH == 16
@@ -846,7 +846,7 @@ void bitfn(checkasm_check_mc)(void) {
     check_warp8x8t(&c);
     check_emuedge(&c);
     check_morph(&c);
-    check_sadrefinemv(&c);
-    check_opflrefinemv(&c);
+    check_sad_refine_mv(&c);
+    check_opfl_refine_mv(&c);
     check_sad8x8(&c);
 }

@@ -7401,7 +7401,7 @@ cglobal sad_refine_mv_8bpc, 4, 10, 16, 9 * 32, p0, p0s, p1, p1s, p0s3, h, p1s3, 
     mov           word [r0], 0                  ; o->y = o->x = 0
     RET
 
-cglobal opfl_derive_mv_8bpc, 5, 7, 0, out, p0, p0s, p1, p1s, w, h, bs, reldist
+cglobal opfl_refine_mv_8bpc, 5, 7, 0, out, p0, p0s, p1, p1s, w, h, bs, reldist
     movifnidn            wd, wm
     cmp                  wd, 16
     jge .w16
