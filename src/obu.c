@@ -2792,17 +2792,8 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 break;
             }
             if (!c->refs[c->frame_hdr->existing_frame_idx].p.p.data[0]) goto error;
-            dav2d_queue_output(c, &c->refs[c->frame_hdr->existing_frame_idx].p);
+            dav2d_queue_output(c, &c->refs[c->frame_hdr->existing_frame_idx].p, 1);
 #if 0
-            dav2d_picture_copy_props(&c->out.p,
-                                     c->content_light, c->content_light_ref,
-                                     c->mastering_display, c->mastering_display_ref,
-                                     c->itut_t35, c->itut_t35_ref, c->n_itut_t35,
-                                     &in->m);
-            // Must be removed from the context after being attached to the frame
-            dav2d_ref_dec(&c->itut_t35_ref);
-            c->itut_t35 = NULL;
-            c->n_itut_t35 = 0;
             c->event_flags |= dav2d_picture_get_event_flags(&c->refs[c->frame_hdr->existing_frame_idx].p);
 #endif
             if (c->refs[c->frame_hdr->existing_frame_idx].p.p.frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY) {

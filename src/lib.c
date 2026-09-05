@@ -351,7 +351,8 @@ static void queue_flush(Dav2dContext *const c) {
 }
 
 struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
-                                       Dav2dThreadPicture *const p)
+                                       Dav2dThreadPicture *const p,
+                                       const int reattach_metadata)
 {
     assert(c->seq_hdr);
 
@@ -383,6 +384,16 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
         mask |= 1 << cand_n;
     }
 
+    if (reattach_metadata) {
+        dav2d_picture_copy_props(&p->p, c->content_light, c->content_light_ref,
+                                 c->mastering_display, c->mastering_display_ref,
+                                 c->itut_t35, c->itut_t35_ref, c->n_itut_t35,
+                                 &c->in.m);
+        // Must be removed from the context after being attached to the frame
+        dav2d_ref_dec(&c->itut_t35_ref);
+        c->itut_t35 = NULL;
+        c->n_itut_t35 = 0;
+    }
     struct OutputQueue *const q = queue_append(c, p);
 
     // immediately-adjacent future refs after the trigger frame

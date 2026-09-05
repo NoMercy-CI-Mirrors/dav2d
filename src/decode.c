@@ -5513,7 +5513,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
 
     // move f->cur into output queue
     if (f->frame_hdr->show_immediate || c->output_invisible_frames) {
-        q = dav2d_queue_output(c, &f->cur);
+        q = dav2d_queue_output(c, &f->cur, 0);
 #if 0
         c->event_flags |= dav2d_picture_get_event_flags(&f->cur);
 #endif
