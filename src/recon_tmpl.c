@@ -2067,6 +2067,7 @@ static int tip_pred(Dav2dTaskContext *const t,
     const union refpair ref = is_bidir ? f->rf.tip.ref :
         (union refpair) { .pair = f->rf.tip.ref.ref[0] * 0x101 };
     const int refine = opfl && f->frame_hdr->tip.frame_mode == 1 &&
+                       f->seq_hdr->refine_mv &&
                        f->refdist[ref.ref[0]] == -f->refdist[ref.ref[1]];
     const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
                            ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
