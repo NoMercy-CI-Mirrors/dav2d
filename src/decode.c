@@ -1223,7 +1223,9 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (b->inter_mode != GLOBALMV_GLOBALMV) {
                 refmvs_candidate mvstack[6];
                 int n_mvs[2];
-                if (b->inter_mode > NEARMV_NEWMV) {
+                const int shift = 6 * (f->frame_hdr->opfl_refine_type == 2 &&
+                                       b->inter_mode >= OPFL_NEARMV_NEARMV);
+                if (b->inter_mode - shift > NEARMV_NEWMV) {
                     dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
                                       b->ref, bs, 0, t->by, t->bx);
                 } else if (b->ref.ref[0] == b->ref.ref[1]) {
@@ -1253,7 +1255,7 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 if (BLOCK_TO_DEBUG) {
                     printf("%*sfind_mv_refs(%d,%d)\n", depth, "",
                            b->ref.ref[0], b->ref.ref[1]);
-                    if (b->inter_mode <= NEARMV_NEWMV) {
+                    if (b->inter_mode - shift <= NEARMV_NEWMV) {
                         for (int drl = 0; drl < 2; drl++)
                             for (int n = 0; n < n_mvs[drl]; n++)
                                 printf("%*smv[%d:%d/%d]: y=%d,x=%d,w=%d\n",
@@ -2595,16 +2597,22 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                             ts->cdf.m.comp_mode[comp_ctx], 4);
                 }
             }
-            if (f->frame_hdr->opfl_refine_type == 1 /* switchable */ &&
+            enum CompInterPredMode coded_mode = b->inter_mode;
+            if (f->frame_hdr->opfl_refine_type &&
                 b->inter_mode != GLOBALMV_GLOBALMV && imin(bw4, bh4) >= 2 &&
                 f->refdir[b->ref.ref[0]] != f->refdir[b->ref.ref[1]])
             {
                 const int ctx = b->inter_mode > NEARMV_NEARMV;
-                if (dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.opfl[ctx]))
+                if (f->frame_hdr->opfl_refine_type == 2 /* always */ ||
+                    dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.opfl[ctx]))
+                {
                     b->inter_mode += 6 - (b->inter_mode >= GLOBALMV_GLOBALMV);
+                    if (f->frame_hdr->opfl_refine_type == 1 /* switchable */)
+                        coded_mode = b->inter_mode;
+                }
             }
             DEBUG_BLOCK_printf("%*sPost-comp_inter_mode[ctx=%d,%d]: r=%d\n",
-                               depth, "", comp_ctx, b->inter_mode, ts->msac.rng);
+                               depth, "", comp_ctx, coded_mode, ts->msac.rng);
 
 #define NEWMV_MASK ((1 << NEARMV_NEWMV) | \
                     (1 << NEWMV_NEARMV) | \
@@ -2627,7 +2635,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     [NEWMV_NEWMV       - NEARMV_NEWMV] = 7,
                     [OPFL_NEWMV_NEWMV  - NEARMV_NEWMV] = 8,
                 };
-                const int mode_ctx = amvd_mode_context[b->inter_mode - NEARMV_NEWMV];
+                const int mode_ctx = amvd_mode_context[coded_mode - NEARMV_NEWMV];
                 const int ctx =
                     (nx[0]->ref[0][xoff[0]] == b->ref.ref[0] && nx[0]->amvd[xoff[0]]) +
                     (nx[1]->ref[0][xoff[1]] == b->ref.ref[0] && nx[1]->amvd[xoff[1]]);
@@ -2648,7 +2656,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                    depth, "", jmvd_scale_mode, ts->msac.rng);
             }
 
-            if (b->inter_mode == NEWMV_NEWMV && imin(bw4, bh4) > 1 &&
+            if (coded_mode == NEWMV_NEWMV && imin(bw4, bh4) > 1 &&
                 !f->frame_hdr->force_integer_mv && b->ref.ref[0] != b->ref.ref[1] &&
                 f->frame_hdr->opfl_refine_type != 2 /* always */ &&
                 f->frame_hdr->motion_modes & (1 << MM_WARP_CAUSAL))
@@ -2691,7 +2699,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             // drl
             memset(b->drl_idx, 0, sizeof(b->drl_idx));
             if (b->inter_mode != GLOBALMV_GLOBALMV) {
-                const int n_drls = 1 + (b->inter_mode <= NEARMV_NEWMV);
+                const int n_drls = 1 + (coded_mode <= NEARMV_NEWMV);
                 const int max_drl_bits = f->frame_hdr->max_drl_bits;
                 for (int r = 0, n = 0, ctx = 0; r < n_drls; r++) {
                     for (; n < max_drl_bits; n++, ctx += ctx < 2) {
@@ -2702,7 +2710,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         }
                     }
                     b->drl_idx[r] = n;
-                    n = b->inter_mode == NEARMV_NEARMV && b->ref.ref[0] == b->ref.ref[1] ?
+                    n = coded_mode == NEARMV_NEARMV && b->ref.ref[0] == b->ref.ref[1] ?
                         b->drl_idx[0] + (b->drl_idx[0] < max_drl_bits) : 0;
                     ctx = imin(n, 2);
                 }
@@ -2828,13 +2836,13 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                            (1 << NEWMV_NEWMV) |
                                            (1 << JOINT_NEWMV)))))
             {
-                if ((1 << b->inter_mode) & ((1 << NEARMV_NEARMV) |
-                                            (1 << OPFL_NEARMV_NEARMV) |
-                                            (1 << OPFL_JOINT_NEWMV)))
+                if ((1 << coded_mode) & ((1 << NEARMV_NEARMV) |
+                                         (1 << OPFL_NEARMV_NEARMV) |
+                                         (1 << OPFL_JOINT_NEWMV)))
                 {
                     b->refine_mv = 2; // implicitly enabled
                 } else {
-                    const int ctx = b->inter_mode - NEARMV_NEARMV;
+                    const int ctx = coded_mode - NEARMV_NEARMV;
                     b->refine_mv = dav2d_msac_decode_bool_adapt(&ts->msac,
                                        ts->cdf.m.refine_mv[ctx]);
                     DEBUG_BLOCK_printf("%*sPost-refinemv[ctx=%d,%d]: r=%d\n",
@@ -2848,9 +2856,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 (b->inter_mode != GLOBALMV_GLOBALMV || imin(bw4, bh4) == 1);
 
             b->comp_type = COMP_INTER_AVG;
-            if (b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
+            if (coded_mode <= JOINT_NEWMV /* no opfl */ &&
                 b->refine_mv != 1 /* disabled, or implicitly enabled */ &&
-                !(b->inter_mode == JOINT_NEWMV && b->amvd) &&
+                !(coded_mode == JOINT_NEWMV && b->amvd) &&
                 f->seq_hdr->masked_compound && imin(bw4, bh4) >= 2)
             {
                 const int ffr = f->furthest_future_refidx;
@@ -2890,7 +2898,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             b->cwp_idx = 8;
             if (!b->refine_mv && !jmvd_scale_mode &&
                 f->seq_hdr->cwp && b->comp_type == COMP_INTER_AVG &&
-                (b->inter_mode == NEARMV_NEARMV || b->inter_mode == JOINT_NEWMV))
+                (coded_mode == NEARMV_NEARMV || coded_mode == JOINT_NEWMV))
             {
                 int n;
                 for (n = 0; n < 4; n++) {
