@@ -205,9 +205,9 @@ static void add_spatial_candidate(const int y_off, const int x_off,
              imin(dav2d_block_dimensions[b->bs][0],
                   dav2d_block_dimensions[b->bs][1]) >= 4) || b->bs == BS_256x256;
         const int tip16m = ~tip16;
-        // FIXME this should be relative to the block's top/left position
-        off_y_8x8 &= tip16m;
-        off_x_8x8 &= tip16m;
+        const int rbx8 = b->bx4 >> 1, rby8 = b->by4 >> 1;
+        off_y_8x8 = rby8 + ((off_y_8x8 - rby8) & tip16m);
+        off_x_8x8 = rbx8 + ((off_x_8x8 - rbx8) & tip16m);
     }
     const ptrdiff_t off_8x8 = rf->rp_stride * off_y_8x8 + off_x_8x8;
 
