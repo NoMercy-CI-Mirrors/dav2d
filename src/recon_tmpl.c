@@ -2194,28 +2194,8 @@ static int tip_pred(Dav2dTaskContext *const t,
                        step, step, t->bx + x, t->by + y, 0,
                        cmv[i], refp[i], ref.ref[i], b->filter,
                        0, f->bw * 4, 0, f->bh * 4);
-                // when refinement is disabled, each sub-block in the temporal
-                // MV buffer gets its own 8x8 tip MV even if the tip blocksize
-                // is 16x16 (see #945)
                 update_temporal(f, &t_dst[x >> 1], t_stride, step >> 1,
                                 step >> 1, ref, cmv, t_swap);
-                if (step == 4 && f->frame_hdr->tip.frame_mode == 1 /* reference */) {
-                    union mv dmv[2];
-                    for (int p = 1; p < 4; p++) {
-                        mv tmv = t->rt.rp_proj[off_8x8 + (p & 1) +
-                                               ((p & 2) >> 1) * t_stride].mv;
-                        if (tmv.y == INVALID_MV) tmv.n = 0;
-                        for (int i = 0; i <= is_bidir; i++) {
-                            const mv tipmv = scale_mv(tmv, f->rf.tip.sf[i]);
-                            dmv[i].y = iclip(tipmv.y + b->mv[0].y, -0xffff, 0xffff);
-                            dmv[i].x = iclip(tipmv.x + b->mv[0].x, -0xffff, 0xffff);
-                        }
-                        if (!is_bidir) dmv[1] = dmv[0];
-                        update_temporal(f, &t_dst[((p & 2) >> 1) * t_stride +
-                                                  (x >> 1) + (p & 1)], t_stride, 1,
-                                        1, ref, dmv, t_swap);
-                    }
-                }
                 if (bacp)
                     have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x, t->by, y,
                                           cmv, 3, 3, step, step, w, h,
