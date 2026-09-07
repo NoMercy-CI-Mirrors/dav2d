@@ -329,7 +329,7 @@ wiener_uv_luma_c(coef *dst, const pixel *luma, const ptrdiff_t stride,
                  const pixel (*left)[8], const pixel *top, const pixel *bottom,
                  const int8_t *filter, const int w, const int h,
                  const int ss_hor, const int ss_ver, const int ds_flt,
-                 const enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+                 const enum LrEdgeFlags edges)
 {
     pixel row_buffers[5][REST_UNIT_STRIDE + 64];
     pixel *bak_rows[5];
@@ -417,11 +417,10 @@ wiener_uv_luma_##name##_c(coef *dst, \
                           const pixel (*left)[8], \
                           const pixel *top, const pixel *bottom, \
                           const int8_t *filter, const int w, const int h, \
-                          const int ds_flt, const enum LrEdgeFlags edges \
-                          HIGHBD_DECL_SUFFIX) \
+                          const int ds_flt, const enum LrEdgeFlags edges) \
 { \
     wiener_uv_luma_c(dst, luma, stride, left, top, bottom, filter, w, h, \
-                     ss_hor, ss_ver, ds_flt, edges HIGHBD_TAIL_SUFFIX); \
+                     ss_hor, ss_ver, ds_flt, edges); \
 }
 
 wiener_uv_luma_fn(1, 1, 420);

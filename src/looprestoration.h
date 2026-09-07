@@ -209,7 +209,7 @@ typedef decl_wiener_filter_fn(*wienerfilter_fn);
 void (name)(coef *dst, const pixel *luma, const ptrdiff_t stride, \
             const_left_pixel_row left, const pixel *top, const pixel *bottom, \
             const int8_t *filter, int w, int h, int ds_flt, \
-            enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
+            enum LrEdgeFlags edges)
 typedef decl_wiener_filter_uv_luma_fn(*wienerfilter_uv_luma_fn);
 
 // compute and add the chroma component of the chroma filter to the luma filter

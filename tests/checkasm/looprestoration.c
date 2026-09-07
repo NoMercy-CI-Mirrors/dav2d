@@ -118,7 +118,7 @@ static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
                  const pixel (*const left)[8],
                  const pixel *top, const pixel *bottom,
                  const int8_t *filter, int w, int h, int ds_flt,
-                 enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX);
+                 enum LrEdgeFlags edges);
 
     if (check_func(c->wiener_uv_luma[DAV2D_PIXEL_LAYOUT_I444 - layout],
                    "wiener_uv_luma_%s_%dbpc", ss_name[layout_idx], BITDEPTH))
@@ -150,9 +150,9 @@ static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
                 assert(luma_stride == top_stride);
                 assert(luma_stride == bottom_stride);
                 call_ref(c_dst, luma, luma_stride, left, top, bottom, filter,
-                         w, h, ds_flt, edges HIGHBD_TAIL_SUFFIX);
+                         w, h, ds_flt, edges);
                 call_new(a_dst, luma, luma_stride, left, top, bottom, filter,
-                         w, h, ds_flt, edges HIGHBD_TAIL_SUFFIX);
+                         w, h, ds_flt, edges);
                 if (checkasm_check_coef(c_dst, 64 * sizeof(*c_dst),
                                         a_dst, 64 * sizeof(*a_dst),
                                         w, h, "dst"))
@@ -163,8 +163,7 @@ static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
             }
 
             bench_new(alternate(c_dst, a_dst), luma, luma_stride, left, top,
-                      bottom, filter, 64, 64 >> ss_ver, 0, 0xf
-                      HIGHBD_TAIL_SUFFIX);
+                      bottom, filter, 64, 64 >> ss_ver, 0, 0xf);
         }
     }
 }

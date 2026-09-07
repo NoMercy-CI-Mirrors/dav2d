@@ -216,8 +216,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
                 const pixel *top_uv_ptr = top[pl] ? top[pl] : lpf[pl];
                 wiener_uv_l_fn(scratch.uv_luma, ptrs[0], strides[0], left,
                                top_ptr, lpfb[0], uv_filter[pl - 1],
-                               w >> ss_hor, stripe_h >> ss_ver, ds_flt, edges
-                               HIGHBD_CALL_SUFFIX);
+                               w >> ss_hor, stripe_h >> ss_ver, ds_flt, edges);
                 dsp->lr.wiener_uv_chroma(ptrs[pl], strides[1], left_uv_ptrs[pl - 1],
                                          top_uv_ptr, lpfb[pl], scratch.uv_luma,
                                          uv_filter[pl - 1], ll_mask_uv,
