@@ -121,6 +121,12 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
 #endif  // BITDEPTH == 8
 
 #if BITDEPTH == 16
+#if HAVE_SVE
+    if (flags & DAV2D_ARM_CPU_FLAG_SVE) {
+        c->opfl_refine_mv = BF(dav2d_opfl_refine_mv, sve);
+    }
+#endif  // HAVE_SVE
+
 #if HAVE_SVE2
     if (flags & DAV2D_ARM_CPU_FLAG_SVE2) {
         init_8tap_fns(sve2);

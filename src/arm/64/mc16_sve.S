@@ -25,6 +25,8 @@
  */
 
 #include "src/arm/asm.S"
+#include "mc_common.S"
+#include "mc16_common.S"
 #include "util.S"
 
 #define PREP_BIAS 32, lsl #8        // 8192
@@ -1648,3 +1650,40 @@ filter_8tap_fn  put, sve2, x0, x1, x2, x3, w4, w5, w6, w7, w8, x6, x7
 DISABLE_SVE2
 DISABLE_SVE
 #endif  // HAVE_SVE2
+
+#if HAVE_SVE
+ENABLE_SVE
+
+// void opfl_refine_mv_16bpc_sve(struct OpflRegressionData *out,
+//                               const pixel *p0, const ptrdiff_t p0_stride,
+//                               const pixel *p1, const ptrdiff_t p1_stride,
+//                               const int w, const int h, const int bs,
+//                               const union aliasi16 d, const int bitdepth_max)
+function opfl_refine_mv_16bpc_sve, export=1
+        ldr             h0,  [sp]                       // d
+        ldr             w13, [sp, #8]                   // bitdepth_max
+        stp             d8,  d9,  [sp, #-80]!
+        stp             d10, d11, [sp, #16]
+        stp             d12, d13, [sp, #32]
+        stp             d14, d15, [sp, #48]
+        cmp             w5,  #8
+        sxtl            v0.8h,   v0.8b
+        b.ne            1f
+
+        opfl_refine_mv_16bpc_small opfl_refine_mv_small, sve
+        b               L(end)
+
+1:
+        stp             x19, x20, [sp, #64]
+        opfl_refine_mv_16bpc_large opfl_refine_mv_large, sve
+        ldp             x19, x20, [sp, #64]
+L(end):
+        ldp             d10, d11, [sp, #16]
+        ldp             d12, d13, [sp, #32]
+        ldp             d14, d15, [sp, #48]
+        ldp             d8,  d9,  [sp], #80
+        ret
+endfunc
+
+DISABLE_SVE
+#endif  // HAVE_SVE
