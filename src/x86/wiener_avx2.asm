@@ -92,10 +92,10 @@ pw_2176_1: dw 2176, 1
 pb_3:    times 4 db 3
 pb_128:  times 4 db 128
 pw_1:    times 2 dw 1
+pw_24:   times 2 dw 24
 pw_64:   times 2 dw 64
 pw_128:  times 2 dw 128
 pw_256:  times 2 dw 256
-pw_1088: times 2 dw 1088
 pw_2176: times 2 dw 2176
 pw_3072: times 2 dw 3072
 pw_3074: times 2 dw 3074
@@ -104,7 +104,6 @@ pw_3739: times 2 dw 3739
 pw_4096: times 2 dw 4096
 pd_255:  dd 255
 pd_8192: dd 8192
-pd_3072: dd 3072
 
 %define m(x) mangle(private_prefix %+ _ %+ x %+ SUFFIX)
 %define BUF_STRIDE 128
@@ -739,8 +738,7 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
 %endif
     packssdw         %2, m9
     packssdw         m8, m10
-    pmulhrsw         %2, m4
-    pmulhrsw         m8, m4
+    REPX {pmulhrsw x, m4}, %2, m8
 
     packuswb         %2, m8
 %endmacro
@@ -1615,14 +1613,9 @@ cglobal wiener_pretrained_8bpc, 10, 15, 16, \
     mov        [Stk(bw)], bwd
     mov         [Stk(p)], pq
 
-    ; Reorder filters and backup
 DEFINE_ARGS p, stride, left, lpf, lpf_bot, params, ll_mask, bw, bh, edge, \
             cnt, _12, _13, _14, filters
     mov         filtersq, [paramsq + WienerParams.filters]
-    pxor             m14, m14
-    vpbroadcastd     m13, [pb_128]
-    vpbroadcastd     m12, [pw_1088]
-    vbroadcasti128   m11, [center_tap_shuf]
 
 DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
             class_lut, tmp0, tmp1, filters
@@ -1939,8 +1932,6 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
     punpcklwd         m8, %3
     REPX {pmaddwd x, %4}, m10, m8
 
-    REPX {paddd x, m14}, %2, m9, m10, m8
-
     mova             m11, [Stk(scratch) + 32*(8+2*%1)]
     mova             m12, [Stk(scratch) + 32*(16+2*%1)]
     punpckhwd         %3, m11, m12
@@ -1963,8 +1954,8 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
 %endif
     packssdw         %2, m9
     packssdw         m8, m10
-    pmulhrsw         %2, m4
-    pmulhrsw         m8, m4
+    REPX {pmulhrsw x, m4}, %2, m8
+    REPX {paddw x, m14}, %2, m8
 
     packuswb         %2, m8
 %endmacro
@@ -1972,7 +1963,7 @@ DEFINE_ARGS p, stride, left, top, mid, bot, ll_mask, bw, bh, edge, bx, \
     lea            tmp0q, [strideq*3]
 
     vpbroadcastd     m13, [pw_1]
-    vpbroadcastd     m14, [pd_3072]
+    vpbroadcastd     m14, [pw_24]
     accum_groups_pt 0, m0, m4, m13
     mova  [pq+strideq*0], m0
 
