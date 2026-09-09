@@ -43,9 +43,11 @@ enum FirstSbInTileRow {
 static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
                       const pixel (*left)[8],
                       const pixel (*const left_uv[2])[2],
-                      const int x, int y, const int w, const int row_h,
-                      const Av2RestorationUnit *const lr[3],
-                      enum LrEdgeFlags edges,
+                      const int x, int y, const int w, const int w_uv,
+                      const int row_h,
+                      const Av2RestorationUnit *const lr,
+                      const Av2RestorationUnit *const lr_uv[2],
+                      enum LrEdgeFlags edges, const unsigned right_uv,
                       const enum FirstSbInTileRow first_sby_in_tile_row,
                       const int tile_row_m1, const int restore_planes)
 {
@@ -119,17 +121,17 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
         for (int pl = 1; pl <= 2; pl++) {
             const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[pl].ns;
             if (restore_planes & (1 << pl) &&
-                lr[pl]->type == DAV2D_RESTORATION_NS_WIENER)
+                lr_uv[pl - 1]->type == DAV2D_RESTORATION_NS_WIENER)
             {
                 if (pd->frame_filters_on)
                     uv_filter[pl - 1] = pd->filter[0];
                 else
-                    uv_filter[pl - 1] = lr[pl]->ns_filter[0];
+                    uv_filter[pl - 1] = lr_uv[pl - 1]->ns_filter[0];
             }
         }
 
         const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[0].ns;
-        const enum Dav2dRestorationType wiener_type = lr[0]->type;
+        const enum Dav2dRestorationType wiener_type = lr->type;
 
         if (wiener_type == DAV2D_RESTORATION_NS_WIENER) {
             if (pd->frame_filters_on) {
@@ -149,7 +151,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
                 }
             } else {
                 wiener_fn = dsp->lr.ns_wiener_single;
-                wiener_params.single.filter = lr[0]->ns_filter[0];
+                wiener_params.single.filter = lr->ns_filter[0];
             }
         } else if (wiener_type == DAV2D_RESTORATION_PC_WIENER) {
             multi_wiener = 1;
@@ -197,32 +199,41 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
         const uint16_t (*ll_mask_y)[4] = (const uint16_t(*)[4])
                 &f->lf.mask[sb256_idx].lossless_mask_y[y4][sb64x_idx];
 
-        const uint16_t (*ll_mask_uv)[4];
-        uint16_t ll_uv_mask_mem[16][4];
-        if (!ss_hor) {
-            ll_mask_uv = (const uint16_t(*)[4])
-                &f->lf.mask[sb256_idx].lossless_mask_uv[y4][sb64x_idx];
-        } else {
-            ll_mask_uv = (const uint16_t(*)[4])
-                &f->lf.mask[sb256_idx].lossless_mask_uv[y4 >> ss_ver][sb64x_idx];
-            const int end_y = stripe_h >> 2 >> ss_ver;
-            for (int yy = 0; yy < end_y; yy++, ll_mask_uv++)
-                ll_uv_mask_mem[yy][0] = ll_mask_uv[0][0] | (ll_mask_uv[0][1] << 8);
-            ll_mask_uv = ll_uv_mask_mem;
-        }
-        for (int pl = 1; pl <= 2; pl++) {
-            if (uv_filter[pl - 1]) {
-                const pixel *top_ptr = top[0] ? top[0] : lpf[0];
-                const pixel *top_uv_ptr = top[pl] ? top[pl] : lpf[pl];
-                wiener_uv_l_fn(scratch.uv_luma, ptrs[0], strides[0], left,
-                               top_ptr, lpfb[0], uv_filter[pl - 1],
-                               w >> ss_hor, stripe_h >> ss_ver, ds_flt, edges);
-                dsp->lr.wiener_uv_chroma(ptrs[pl], strides[1], left_uv_ptrs[pl - 1],
-                                         top_uv_ptr, lpfb[pl], scratch.uv_luma,
-                                         uv_filter[pl - 1], ll_mask_uv,
-                                         w >> ss_hor, stripe_h >> ss_ver, edges
-                                         HIGHBD_CALL_SUFFIX);
+        if (restore_planes & (LR_RESTORE_U | LR_RESTORE_V)) {
+            const enum LrEdgeFlags edges_uv = edges & right_uv;
+            const uint16_t (*ll_mask_uv)[4];
+            uint16_t ll_uv_mask_mem[16][4];
+            if (!ss_hor) {
+                ll_mask_uv = (const uint16_t(*)[4])
+                    &f->lf.mask[sb256_idx].lossless_mask_uv[y4][sb64x_idx];
+            } else {
+                ll_mask_uv = (const uint16_t(*)[4])
+                    &f->lf.mask[sb256_idx].lossless_mask_uv[y4 >> ss_ver][sb64x_idx];
+                const int end_y = stripe_h >> 2 >> ss_ver;
+                for (int yy = 0; yy < end_y; yy++, ll_mask_uv++)
+                    ll_uv_mask_mem[yy][0] = ll_mask_uv[0][0] | (ll_mask_uv[0][1] << 8);
+                ll_mask_uv = ll_uv_mask_mem;
             }
+            for (int pl = 1; pl <= 2; pl++) {
+                if (uv_filter[pl - 1]) {
+                    const pixel *top_ptr = top[0] ? top[0] : lpf[0];
+                    const pixel *top_uv_ptr = top[pl] ? top[pl] : lpf[pl];
+                    wiener_uv_l_fn(scratch.uv_luma, ptrs[0], strides[0], left,
+                                   top_ptr, lpfb[0], uv_filter[pl - 1],
+                                   w_uv, stripe_h >> ss_ver, ds_flt, edges_uv);
+                    dsp->lr.wiener_uv_chroma(ptrs[pl], strides[1], left_uv_ptrs[pl - 1],
+                                             top_uv_ptr, lpfb[pl], scratch.uv_luma,
+                                             uv_filter[pl - 1], ll_mask_uv,
+                                             w_uv, stripe_h >> ss_ver, edges_uv
+                                             HIGHBD_CALL_SUFFIX);
+                }
+            }
+            left_uv_ptrs[1] += stripe_h >> ss_ver;
+            ptrs[1] += (stripe_h >> ss_ver) * PXSTRIDE(strides[1]);
+            ptrs[2] += (stripe_h >> ss_ver) * PXSTRIDE(strides[1]);
+            lpf[1] = &lpfb[1][-2 * PXSTRIDE(strides[1])];
+            lpf[2] = &lpfb[2][-2 * PXSTRIDE(strides[1])];
+            top[1] = top[2] = NULL;
         }
         if (gdf) {
             dsp->lr.gdf_prep(scratch.gdf_err, ptrs[0], strides[0], left,
@@ -248,18 +259,13 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
         edges &= ~(LR_HAVE_BOTTOM_INTEGRATED | LR_HAVE_TOP_INTEGRATED);
         left += stripe_h;
         left_uv_ptrs[0] += stripe_h >> ss_ver;
-        left_uv_ptrs[1] += stripe_h >> ss_ver;
         y += stripe_h;
         ptrs[0] += stripe_h * PXSTRIDE(strides[0]);
-        ptrs[1] += (stripe_h >> ss_ver) * PXSTRIDE(strides[1]);
-        ptrs[2] += (stripe_h >> ss_ver) * PXSTRIDE(strides[1]);
         edges |= LR_HAVE_TOP;
         stripe_h = imin(64, row_h - y);
         if (stripe_h == 0) break;
         lpf[0] = &lpfb[0][-2 * PXSTRIDE(strides[0])];
-        lpf[1] = &lpfb[1][-2 * PXSTRIDE(strides[1])];
-        lpf[2] = &lpfb[2][-2 * PXSTRIDE(strides[1])];
-        top[0] = top[1] = top[2] = NULL;
+        top[0] = NULL;
     }
 }
 
@@ -296,7 +302,6 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *const p[3],
     const int row_y = y + 8 * !first_sby_in_tile_row;
 
     const int shift_hor = 8 - ss_hor;
-    const int stripe_w_uv = 64 >> ss_hor;
 
     /* maximum sbrow height is 256 + 8 rows offset */
     ALIGN_STK_16(pixel, pre_lr_border_uv, 2, [2][256 + 8][2]);
@@ -305,7 +310,8 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *const p[3],
         { pre_lr_border_uv[1][0], pre_lr_border_uv[1][1] }
     };
     ALIGN_STK_16(pixel, pre_lr_border_y, 2, [256 + 8][8]);
-    const Av2RestorationUnit *lr[2][3];
+    const Av2RestorationUnit *lr[2];
+    const Av2RestorationUnit *lr_uv[2][2];
 
     enum LrEdgeFlags edges = (y > 0 ? LR_HAVE_TOP : 0) | LR_HAVE_RIGHT;
     if (first_sby_in_tile_row == FIRST_SB_TOP) edges |= LR_HAVE_BOTTOM_INTEGRATED;
@@ -324,58 +330,76 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *const p[3],
     };
     const Av2Restoration *lr_mask_y = &f->lf.lr_mask[(aligned_unit_pos_y >> 8) * f->sb256w];
     const Av2Restoration *lr_mask_uv = &f->lf.lr_mask[(aligned_unit_pos_uv >> 8) * f->sb256w];
-    lr[0][0] = &lr_mask_y->lr[0][unit_idx[0]];
-    lr[0][1] = &lr_mask_uv->lr[1][unit_idx[1]];
-    lr[0][2] = &lr_mask_uv->lr[2][unit_idx[1]];
+    lr[0] = &lr_mask_y->lr[0][unit_idx[0]];
+    lr_uv[0][0] = &lr_mask_uv->lr[1][unit_idx[1]];
+    lr_uv[0][1] = &lr_mask_uv->lr[2][unit_idx[1]];
     int restore = 1; // TODO: restore logic for disabling backups
-    int x = 0, bit = 0;
-    for (; x + 64 < w; edges |= LR_HAVE_LEFT, bit ^= 1) {
+    int x = 0, bit = 0, bit_uv = 0;
+    for (; x < w; edges |= LR_HAVE_LEFT) {
+        // Only run chroma filters every 64 chroma samples
+        const int iter_planes = restore_planes &
+                                (!ss_hor || !(x & 64) ? ~0 : ~(LR_RESTORE_U | LR_RESTORE_V));
+        // Since chroma filters covers a larger area than luma, it can hit the
+        // right edge before the luma filter. This is a mask for the right edge flag
+        unsigned right_edge_uv = ~0;
+
         const int next_x = x + 64;
-        const int next_x_uv = next_x >> ss_hor;
-        int next_iter_start_x[2] = {
-            next_x & ~(unit_size[0] - 1),
-            next_x_uv & ~(unit_size[1] - 1)
-        };
-        if (next_iter_start_x[0] && w - next_iter_start_x[0] < unit_size[0] >> 1)
-            next_iter_start_x[0] -= unit_size[0];
-        if (next_iter_start_x[1] && (w >> ss_hor) - next_iter_start_x[1] < unit_size[1] >> 1)
-            next_iter_start_x[1] -= unit_size[1];
-        const int next_u_idx[2] = {
-            unit_idx[0] + ((next_iter_start_x[0] >> 6) & 3),
-            unit_idx[1] + ((next_iter_start_x[1] >> (shift_hor - 2)) & 3),
-        };
-        const Av2Restoration *const next_rest_uv = &lr_mask_uv[next_iter_start_x[1] >> shift_hor];
-        lr[!bit][0] = &lr_mask_y[next_iter_start_x[0] >> 8].lr[0][next_u_idx[0]];
-        lr[!bit][1] = &next_rest_uv->lr[1][next_u_idx[1]];
-        lr[!bit][2] = &next_rest_uv->lr[2][next_u_idx[1]];
-        const int restore_next = 1;
+        int stripe_w = 64;
+        int stripe_w_uv = 64;
+        int restore_next = 1;
+        if (next_x >= w) {
+            restore_next = 0;
+            edges &= ~LR_HAVE_RIGHT;
+            stripe_w = w - x;
+        }
+        int next_iter_start_x = next_x & ~(unit_size[0] - 1);
+        if (next_iter_start_x && w - next_iter_start_x < unit_size[0] >> 1)
+            next_iter_start_x -= unit_size[0];
+        int next_u_idx = unit_idx[0] + ((next_iter_start_x >> 6) & 3);
+        lr[!bit] = &lr_mask_y[next_iter_start_x >> 8].lr[0][next_u_idx];
+
+        if (iter_planes & (LR_RESTORE_U | LR_RESTORE_V)) {
+            const int x_uv = x >> ss_hor;
+            const int next_x_uv = x_uv + 64;
+            if (next_x_uv >= w >> ss_hor) {
+                right_edge_uv = ~LR_HAVE_RIGHT;
+                stripe_w_uv = (w >> ss_hor) - x_uv;
+            }
+            next_iter_start_x = next_x_uv & ~(unit_size[1] - 1);
+            if (next_iter_start_x && (w >> ss_hor) - next_iter_start_x < unit_size[1] >> 1)
+                next_iter_start_x -= unit_size[1];
+            next_u_idx = unit_idx[1] + ((next_iter_start_x >> (shift_hor - 2)) & 3);
+            const Av2Restoration *const next_rest_uv = &lr_mask_uv[next_iter_start_x >> shift_hor];
+            lr_uv[!bit_uv][0] = &next_rest_uv->lr[1][next_u_idx];
+            lr_uv[!bit_uv][1] = &next_rest_uv->lr[2][next_u_idx];
+        }
+
         if (restore_next) {
             int rem_h = row_h - y;
             // FIXME could backup 4px for luma if gdf=off
             backupNxU(pre_lr_border_y[bit], ptrs[0] + 64, strides[0], rem_h, 8);
-            if (restore_planes & LR_RESTORE_U)
-                backup_left_uv(pre_lr_border_uv[bit][0], ptrs[1] + stripe_w_uv, strides[1], rem_h >> ss_ver);
-            if (restore_planes & LR_RESTORE_V)
-                backup_left_uv(pre_lr_border_uv[bit][1], ptrs[2] + stripe_w_uv, strides[1], rem_h >> ss_ver);
+            if (right_edge_uv & LR_HAVE_RIGHT) {
+                if (iter_planes & LR_RESTORE_U)
+                    backup_left_uv(pre_lr_border_uv[bit_uv][0], ptrs[1] + 64, strides[1], rem_h >> ss_ver);
+                if (iter_planes & LR_RESTORE_V)
+                    backup_left_uv(pre_lr_border_uv[bit_uv][1], ptrs[2] + 64, strides[1], rem_h >> ss_ver);
+            }
         }
         if (restore) {
             lr_stripe(f, ptrs, pre_lr_border_y[!bit],
-                      pre_lr_border_uv_ptrs[!bit], x, y, 64, row_h, lr[bit],
-                      edges, first_sby_in_tile_row, tile_row_m1,
-                      restore_planes);
+                      pre_lr_border_uv_ptrs[!bit_uv], x, y, stripe_w, stripe_w_uv, row_h, lr[bit],
+                      lr_uv[bit_uv], edges, right_edge_uv, first_sby_in_tile_row, tile_row_m1,
+                      iter_planes);
         }
         x = next_x;
         restore = restore_next;
         ptrs[0] += 64;
-        ptrs[1] += stripe_w_uv;
-        ptrs[2] += stripe_w_uv;
-    }
-    if (restore) {
-        edges &= ~LR_HAVE_RIGHT;
-        const int end_w = w - x;
-        lr_stripe(f, ptrs, pre_lr_border_y[!bit], pre_lr_border_uv_ptrs[!bit],
-                  x, y, end_w, row_h, lr[bit], edges, first_sby_in_tile_row,
-                  tile_row_m1, restore_planes);
+        bit ^= 1;
+        if (iter_planes & (LR_RESTORE_U | LR_RESTORE_V)) {
+            bit_uv ^= 1;
+            ptrs[1] += 64;
+            ptrs[2] += 64;
+        }
     }
 }
 

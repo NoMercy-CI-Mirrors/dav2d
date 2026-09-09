@@ -142,7 +142,7 @@ static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
                 if (!is_edge_combination_valid(edges))
                     continue;
 
-                const int w = edges & LR_HAVE_RIGHT ? 64 >> (rnd() & ss_hor) : base_w;
+                const int w = edges & LR_HAVE_RIGHT ? 64 : base_w;
                 const int h =
                     (edges & (LR_HAVE_BOTTOM | LR_HAVE_BOTTOM_INTEGRATED)) ?
                         64 >> ss_ver : base_h;
@@ -207,10 +207,10 @@ static void check_wiener_uv_chroma(Dav2dLoopRestorationDSPContext *const c) {
             for (int i = 0; i < 64; i++)
                 ll_mask[i][0] = rnd() & 0xffff;
 
-            const int w = edges & LR_HAVE_RIGHT ? 64 >> (rnd() & 1) : base_w;
+            const int w = edges & LR_HAVE_RIGHT ? 64 : base_w;
             const int h =
                 (edges & (LR_HAVE_BOTTOM | LR_HAVE_BOTTOM_INTEGRATED)) ?
-                    64 >> (rnd() & 1) : base_h;
+                    64 : base_h;
 
             assert(c_dst_stride == a_dst_stride);
             assert(c_dst_buf_h == a_dst_buf_h);
