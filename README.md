@@ -133,7 +133,7 @@ Some of these companies may provide support and integration help, should you nee
 
 ## Is dav2d a recursive acronym?
 
-- Yes, but it is less funny than dav1d :(, except in French ("deux-vid")
+- Yes, but it is less funny than dav1d :(, except in French ("deux-vid") or Korean ("dav-이-d").
 
 ## Can I help?
 
