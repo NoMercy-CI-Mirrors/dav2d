@@ -435,8 +435,8 @@ test-debian-avm:
         - amd64
     script:
         - set -eo pipefail
-        - git clone -b research-v15.0.0 --depth 1 --shallow-submodules
-              https://gitlab.com/AOMediaCodec/avm.git avm
+        - git clone -b av2-normative --depth 1 --shallow-submodules
+              https://github.com/AOMediaCodec/avm avm
         - |
           cd avm
           git config user.name "CI Bot"
@@ -456,7 +456,7 @@ test-debian-avm:
         - |
           mkdir x86-64
           cd x86-64
-          cmake .. -DENABLE_TESTS=0 -DCONFIG_AV2_ENCODER=0
+          cmake .. -DAVM_TARGET_CPU=x86_64 -DENABLE_TESTS=0 -DCONFIG_AV2_ENCODER=0
           make -j$(nproc) avmdec
           cd ../..
         - |
