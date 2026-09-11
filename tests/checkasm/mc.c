@@ -741,14 +741,43 @@ static void check_sad_refine_mv(Dav2dMCDSPContext *const c) {
     report("sad_refine_mv");
 }
 
-static void check_opfl_refine_mv(Dav2dMCDSPContext *const c) {
-    ALIGN_STK_64(pixel, src1, 64 * 16,);
-    ALIGN_STK_64(pixel, src2, 64 * 16,);
-
+static void check_opfl_refine_mv_case(const pixel *const src1,
+                                      const pixel *const src2,
+                                      const int w, const int h, const int bs,
+                                      const int d0, const int d1,
+                                      const char *const input_type,
+                                      const int do_bench HIGHBD_DECL_SUFFIX)
+{
     declare_func(void, struct OpflRegressionData *out,
                  const pixel *p0, ptrdiff_t p0_stride,
                  const pixel *p1, ptrdiff_t p1_stride, int w, int h,
                  int bs, const union aliasi16 d HIGHBD_DECL_SUFFIX);
+    const union aliasi16 d = { .i8 = { d0, d1 } };
+    struct OpflRegressionData c_o[16], a_o[16];
+
+    call_ref(c_o, src1, w * sizeof(pixel), src2, 64 * sizeof(pixel),
+             w, h, bs, d HIGHBD_TAIL_SUFFIX);
+    call_new(a_o, src1, w * sizeof(pixel), src2, 64 * sizeof(pixel),
+             w, h, bs, d HIGHBD_TAIL_SUFFIX);
+    const int cnt = (w * h) / (bs * bs);
+    for (int n = 0; n < cnt; n++)
+        if (memcmp(&c_o[n], &a_o[n], sizeof(*a_o)) && fail())
+            fprintf(stderr, "c:u2=%d,uv=%d,v2=%d,uw=%d,vw=%d != "
+                    "simd:u2=%d,uv=%d,v2=%d,uw=%d,vw=%d "
+                    "for %sn=%d/%d,bs=%d,sz=%dx%d,d=%d|%d\n",
+                    c_o[n].su2, c_o[n].suv, c_o[n].sv2,
+                    c_o[n].suw, c_o[n].svw, a_o[n].su2,
+                    a_o[n].suv, a_o[n].sv2, a_o[n].suw,
+                    a_o[n].svw, input_type, n, cnt, bs, w, h,
+                    d0, d1);
+    if (do_bench)
+        bench_new(c_o, src1, w * sizeof(pixel), src2, 64 * sizeof(pixel),
+                  w, h, bs, d HIGHBD_TAIL_SUFFIX);
+}
+
+static void check_opfl_refine_mv(Dav2dMCDSPContext *const c) {
+    ALIGN_STK_64(pixel, src1, 64 * 16,);
+    ALIGN_STK_64(pixel, src2, 64 * 16,);
 
     for (int bs = 4; bs <= 8; bs <<= 1)
         for (int w = 8; w <= (bs == 4 ? 8 : 64); w <<= 1)
@@ -771,25 +800,47 @@ static void check_opfl_refine_mv(Dav2dMCDSPContext *const c) {
                     int d1 = d0 == 2 ? 1 : 1 + (rnd() & 1);
                     if (rnd() & 1) d0 = -d0;
                     if (rnd() & 1) d1 = -d1;
-                    const union aliasi16 d = { .i8 = { d0, d1 } };
-                    struct OpflRegressionData c_o[16], a_o[16];
-                    call_ref(c_o, src1, w * sizeof(pixel), src2, 64 * sizeof(pixel),
-                             w, h, bs, d HIGHBD_TAIL_SUFFIX);
-                    call_new(a_o, src1, w * sizeof(pixel), src2, 64 * sizeof(pixel),
-                             w, h, bs, d HIGHBD_TAIL_SUFFIX);
-                    const int cnt = (w * h) / (bs * bs);
-                    for (int n = 0; n < cnt; n++)
-                        if (memcmp(&c_o[n], &a_o[n], sizeof(*a_o)) && fail())
-                            fprintf(stderr, "c:u2=%d,uv=%d,v2=%d,uw=%d,vw=%d != "
-                                    "simd:u2=%d,uv=%d,v2=%d,uw=%d,vw=%d "
-                                    "for n=%d/%d,bs=%d,sz=%dx%d,d=%d|%d\n",
-                                    c_o[n].su2, c_o[n].suv, c_o[n].sv2,
-                                    c_o[n].suw, c_o[n].svw, a_o[n].su2,
-                                    a_o[n].suv, a_o[n].sv2, a_o[n].suw,
-                                    a_o[n].svw, n, cnt, bs, w, h, d0, d1);
-                    if (w == h || (w >= 32 && h == 16))
-                        bench_new(c_o, src1, w * sizeof(pixel), src2, 64 * sizeof(pixel),
-                                  w, h, bs, d HIGHBD_TAIL_SUFFIX);
+                    check_opfl_refine_mv_case(src1, src2, w, h, bs, d0, d1,
+                                              "generic input ",
+                                              w == h || (w >= 32 && h == 16)
+                                              HIGHBD_TAIL_SUFFIX);
+
+                    // Case: Extreme inputs to test intermediate gradient overflow.
+                    // Create a pattern that will output the maximum (worstcase) theoretical
+                    // value for `(p2 - p1) * 42 - (p3 - p0) * 5`, overflowing a 16-bit value.
+                    // Calling max_tmp0 the maximum value that can be output by the tmp0
+                    // calculation, choose p{0,1,2,3} such that:
+                    // `(p2 - p1) * 42 - (p3 - p0) * 5` = `47 * max_tmp0`,
+                    // which means:
+                    // p0 = max_tmp0, p1 = 0, p2 = max_tmp0, p3 = 0.
+                    // To get the highest max_tmp0 choose d0 and d1 such that abs(d0) +
+                    // abs(d1) == 3.
+                    // Set the input values in the top-left 8x8 block to trigger the case
+                    // described above when computing the horizontal gradients at coordinates
+                    // (6,3) and (7, 3), and the vertical gradients at coordinates (3, 6) and
+                    // (3, 7). All elements of the block will be 0 except for the p0 and p2
+                    // values that correspond to the coordinates above.
+                    for (int y = 0; y < h; y++) {
+                        for (int x = 0; x < w; x++) {
+                            const int high =
+                                (y == 6 && (x == 1 || x == 4)) ||
+                                (y == 7 && (x == 2 || x == 5)) ||
+                                (x == 6 && (y == 1 || y == 4)) ||
+                                (x == 7 && (y == 2 || y == 5));
+                            src1[y * w + x] = high ? bitdepth_max : 0;
+                            src2[y * 64 + x] = high ? bitdepth_max : 0;
+                        }
+                    }
+                    // Select an extreme d value with abs(d0) + abs(d1) == 3.
+                    d0 = (rnd() & 1) ? 2 : 1;
+                    d1 = d0 == 2 ? 1 : 2;
+                    if (rnd() & 1) {
+                        d0 = -d0;
+                        d1 = -d1;
+                    }
+                    check_opfl_refine_mv_case(src1, src2, w, h, bs, d0, d1,
+                                              "extreme input ", 0
+                                              HIGHBD_TAIL_SUFFIX);
                 }
     report("opfl");
 }
