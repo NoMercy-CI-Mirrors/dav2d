@@ -3755,7 +3755,7 @@ endconst
         // out: line 2: tmp0 [v1,  v2],  tmp1 [v8,  v21]
         //      line 3: tmp0 [v20, v22], tmp1 [v23, v13]
         ldr             q21, [x10]
-        ldr             q7, [x11]
+        ldr             q7,  [x11]
         ldr             q13, [x10, x2]
         ldr             q14, [x11, x4]
         add             x10, x10, x2, lsl #1
@@ -4056,7 +4056,7 @@ endconst
         ldr             d22, [x1]
         ldr             d23, [x3]
         ldr             d21, [x1, x2]
-        ldr             d3, [x3, x4]
+        ldr             d3,  [x3, x4]
         uxtl            v22.8h,  v22.8b
         uxtl            v23.8h,  v23.8b
         uxtl            v21.8h,  v21.8b
@@ -4156,11 +4156,11 @@ endconst
         b.ne            2b
 .endm
 
-// void dav2d_opfl_refine_mv_8bpc_neon(struct OpflRegressionData *out,
-//                                     const pixel *p0, const ptrdiff_t p0_stride,
-//                                     const pixel *p1, const ptrdiff_t p1_stride,
-//                                     const int w, const int h, const int bs,
-//                                     const union aliasi16 d HIGHBD_DECL_SUFFIX)
+// void opfl_refine_mv_8bpc_neon(struct OpflRegressionData *out,
+//                               const pixel *p0, const ptrdiff_t p0_stride,
+//                               const pixel *p1, const ptrdiff_t p1_stride,
+//                               const int w, const int h, const int bs,
+//                               const union aliasi16 d)
 function opfl_refine_mv_8bpc_neon, export=1
         ldr             h0, [sp]
         stp             d8,  d9,  [sp, #-80]!

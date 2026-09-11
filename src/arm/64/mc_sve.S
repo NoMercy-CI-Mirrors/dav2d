@@ -296,8 +296,8 @@ endconst
         sub             v24.8h,  v27.8h,  v24.8h        // q3 - q0 (lo line 0)
         sub             v19.8h,  v27.8h,  v26.8h        // q2 - q1 (lo line 1)
         sub             v25.8h,  v27.8h,  v25.8h        // q3 - q0 (lo line 1)
-        mul             z5.h,    z5.h,   #42            // (q2 - q1) * 42 (lo line 0)
-        mul             z19.h,   z19.h,  #42            // (q2 - q1) * 42 (lo line 1)
+        mul             z5.h,    z5.h,    #42           // (q2 - q1) * 42 (lo line 0)
+        mul             z19.h,   z19.h,   #42           // (q2 - q1) * 42 (lo line 1)
         mls             v5.8h,   v24.8h,  v11.8h        // y0 (lo line 0)
         mls             v19.8h,  v25.8h,  v11.8h        // y0 (lo line 1)
         ssra            v5.8h,   v5.8h,   #15           // Adjust for SRSHR rounding up (lo line 0)
@@ -312,8 +312,8 @@ endconst
         sub             v28.8h,  v31.8h,  v28.8h        // q3 - q0 (hi line 0)
         sub             v15.8h,  v31.8h,  v30.8h        // q2 - q1 (hi line 1)
         sub             v29.8h,  v31.8h,  v29.8h        // q3 - q0 (hi line 1)
-        mul             z14.h,   z14.h,  #42            // (q2 - q1) * 42 (hi line 0)
-        mul             z15.h,   z15.h,  #42            // (q2 - q1) * 42 (hi line 1)
+        mul             z14.h,   z14.h,   #42           // (q2 - q1) * 42 (hi line 0)
+        mul             z15.h,   z15.h,   #42           // (q2 - q1) * 42 (hi line 1)
         mls             v14.8h,  v28.8h,  v11.8h        // y0 (hi line 0)
         mls             v15.8h,  v29.8h,  v11.8h        // y0 (hi line 1)
         ssra            v14.8h,  v14.8h,  #15           // Adjust for SRSHR rounding up (hi line 0)
@@ -362,8 +362,8 @@ endconst
         sub             v24.8h,  v1.8h,   v24.8h        // q3 - q0 (lo line 0)
         sub             v19.8h,  v1.8h,   v26.8h        // q2 - q1 (lo line 1)
         sub             v25.8h,  v20.8h,  v25.8h        // q3 - q0 (lo line 1)
-        mul             z5.h,    z5.h,   #42            // (q2 - q1) * 42 (lo line 0)
-        mul             z19.h,   z19.h,  #42            // (q2 - q1) * 42 (lo line 1)
+        mul             z5.h,    z5.h,    #42           // (q2 - q1) * 42 (lo line 0)
+        mul             z19.h,   z19.h,   #42           // (q2 - q1) * 42 (lo line 1)
         mls             v5.8h,   v24.8h,  v11.8h        // y0 (lo line 0)
         mls             v19.8h,  v25.8h,  v11.8h        // y0 (lo line 1)
         ssra            v5.8h,   v5.8h,   #15           // Adjust for SRSHL rounding up (lo line 0)
@@ -383,8 +383,8 @@ endconst
         mov             v27.16b, v20.16b
         sub             v15.8h,  v2.8h,   v30.8h        // q2 - q1 (hi line 1)
         sub             v29.8h,  v22.8h,  v29.8h        // q3 - q0 (hi line 1)
-        mul             z14.h,   z14.h,  #42            // (q2 - q1) * 42 (hi line 0)
-        mul             z15.h,   z15.h,  #42            // (q2 - q1) * 42 (hi line 1)
+        mul             z14.h,   z14.h,   #42           // (q2 - q1) * 42 (hi line 0)
+        mul             z15.h,   z15.h,   #42           // (q2 - q1) * 42 (hi line 1)
         mls             v14.8h,  v28.8h,  v11.8h        // y0 (hi line 0)
         mls             v15.8h,  v29.8h,  v11.8h        // y0 (hi line 1)
         mov             v28.16b, v30.16b
@@ -585,8 +585,8 @@ endconst
         sub             v1.8h,   v31.8h,  v28.8h             // q3 - q0 (line 0)
         sub             v22.8h,  v31.8h,  v30.8h             // q2 - q1 (line 1)
         sub             v23.8h,  v31.8h,  v29.8h             // q3 - q0 (line 1)
-        mul             z24.h,  z24.h,  #42                  // (q2 - q1) * 42 (line 0)
-        mul             z22.h,  z22.h,  #42                  // (q2 - q1) * 42 (line 1)
+        mul             z24.h,   z24.h,   #42                // (q2 - q1) * 42 (line 0)
+        mul             z22.h,   z22.h,   #42                // (q2 - q1) * 42 (line 1)
         mls             v24.8h,  v1.8h,   v9.8h              // y0 (line 0)
         mls             v22.8h,  v23.8h,  v9.8h              // y0 (line 1)
         ssra            v24.8h,  v24.8h,  #15                // Adjust for SRSHR rounding up (line 0)
@@ -626,8 +626,8 @@ endconst
         sub             v23.8h,  v6.8h,   v29.8h             // q3 - q0 (line 1)
         // For all lines after y = 0 use the regular shift value.
         mov             w12, #-7
-        mul             z24.h,  z24.h,  #42                  // (q2 - q1) * 42 (line 0)
-        mul             z22.h,  z22.h,  #42                  // (q2 - q1) * 42 (line 1)
+        mul             z24.h,   z24.h,   #42                // (q2 - q1) * 42 (line 0)
+        mul             z22.h,   z22.h,   #42                // (q2 - q1) * 42 (line 1)
         mls             v24.8h,  v1.8h,   v9.8h              // y0 (line 0)
         mls             v22.8h,  v23.8h,  v9.8h              // y0 (line 1)
         ssra            v24.8h,  v24.8h,  #15                // Adjust for SRSHL rounding up (line 0)
@@ -691,11 +691,11 @@ endconst
 
 .endm
 
-// void dav2d_opfl_refine_mv_8bpc_sve(struct OpflRegressionData *out,
-//                                     const pixel *p0, const ptrdiff_t p0_stride,
-//                                     const pixel *p1, const ptrdiff_t p1_stride,
-//                                     const int w, const int h, const int bs,
-//                                     const union aliasi16 d HIGHBD_DECL_SUFFIX)
+// void opfl_refine_mv_8bpc_sve(struct OpflRegressionData *out,
+//                              const pixel *p0, const ptrdiff_t p0_stride,
+//                              const pixel *p1, const ptrdiff_t p1_stride,
+//                              const int w, const int h, const int bs,
+//                              const union aliasi16 d)
 function opfl_refine_mv_8bpc_sve, export=1
         ldr             h0, [sp]
         stp             d8,  d9,  [sp, #-80]!
