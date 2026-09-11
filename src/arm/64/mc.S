@@ -3542,10 +3542,11 @@ L(morph_4xh):
         ret
 endfunc
 
-// Replace the shift right by 7 with a shift right by 6 when e1 = 1, allowing
-// to skip the multiplication by (e1 + 1).
-const shift_large
-        .word -6, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -6
+// After SHSUB has consumed one right shift, replace the shift right by 6
+// with a shift right by 5 when e1 = 1, allowing to skip the multiplication
+// by (e1 + 1).
+const shift_large, align=4
+        .short -5, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -5
 endconst
 
 // Process a 16-pixel-wide stripe as two adjacent 8x8 subblocks. Compute and
@@ -3564,12 +3565,12 @@ endconst
         mov             x10, x1                          // p0_ptr
         mov             x11, x3                          // p1_ptr
         mov             x15, x0
-        // This decides how much to shift y0 when computing the vertical
-        // gradient. It's a shift right by 7 in most cases, unless e2 is 1 in
-        // which case a shift right by 6 allows to skip the multiplication by
-        // (1 + e2). This is true for y = 0, so initialize for this special
+        // This decides how much to shift y0 after SHSUB has consumed one
+        // right shift. It's a shift right by 6 in most cases, unless e2 is 1
+        // in which case a shift right by 5 allows to skip the multiplication
+        // by (1 + e2). This is true for y = 0, so initialize for this special
         // case, then later overwrite it for the general case.
-        mov             w19, #-6
+        mov             w19, #-5
 
         // Compute tmp0/tmp1 for the first two lines.
         // in:  line 0: [v4, v6]   (p0, p1)
@@ -3665,40 +3666,40 @@ endconst
         sub             v15.8h,  v15.8h,  v7.8h         // p3 - p0 (hi line 0)
         mul             v14.8h,  v14.8h,  v16.8h        // (p2 - p1) * 42 (hi line 0)
         mul             v19.8h,  v19.8h,  v16.8h        // (p2 - p1) * 42 (hi line 1)
-        ssubl           v1.4s,   v22.4h,  v17.4h        // x0 (lo line 0) lo
-        ssubl2          v2.4s,   v22.8h,  v17.8h        // x0 (lo line 0) hi
-        ssubl           v21.4s,  v20.4h,  v5.4h         // x0 (lo line 1) lo
-        ssubl2          v23.4s,  v20.8h,  v5.8h         // x0 (lo line 1) hi
-        ldp             q12, q5, [x8]                   // shift_lo
-        ldp             q13, q8, [x8, #32]              // shift_hi
+        ldp             q12, q13, [x8]                  // shift
         mul             v15.8h,  v15.8h,  v11.8h        // (p3 - p0) * 5 (hi line 0)
         mul             v6.8h,   v6.8h,   v11.8h        // (p3 - p0) * 5 (hi line 1)
-        ssra            v1.4s,   v1.4s,   #31           // Adjust for SRSHL rounding up (lo line 0)
-        ssra            v2.4s,   v2.4s,   #31
-        ssra            v21.4s,  v21.4s,  #31           // Adjust for SRSHL rounding up (lo line 1)
-        ssra            v23.4s,  v23.4s,  #31
-        srshl           v1.4s,   v1.4s,   v12.4s        // x0 (lo line 0) lo
-        srshl           v2.4s,   v2.4s,   v5.4s         // x0 (lo line 0) hi
-        srshl           v21.4s,  v21.4s,  v12.4s        // x0 (lo line 1) lo
-        srshl           v23.4s,  v23.4s,  v5.4s         // x0 (lo line 1) hi
-        uzp1            v22.8h,  v1.8h,   v2.8h         // x0 (lo line 0)
-        uzp1            v20.8h,  v21.8h,  v23.8h        // x0 (lo line 1)
-        ssubl           v1.4s,   v14.4h,  v15.4h        // x0 (hi line 0) lo
-        ssubl2          v2.4s,   v14.8h,  v15.8h        // x0 (hi line 0) hi
-        ssubl           v21.4s,  v19.4h,  v6.4h         // x0 (hi line 1) lo
-        ssubl2          v23.4s,  v19.8h,  v6.8h         // x0 (hi line 1) hi
-        ssra            v1.4s,   v1.4s,   #31           // Adjust for SRSHL rounding up (hi line 0)
-        ssra            v2.4s,   v2.4s,   #31
-        ssra            v21.4s,  v21.4s,  #31           // Adjust for SRSHL rounding up (hi line 1)
-        ssra            v23.4s,  v23.4s,  #31
-        srshl           v1.4s,   v1.4s,   v13.4s        // x0 (hi line 0) lo
-        srshl           v2.4s,   v2.4s,   v8.4s         // x0 (hi line 0) hi
-        srshl           v21.4s,  v21.4s,  v13.4s        // x0 (hi line 1) lo
-        srshl           v23.4s,  v23.4s,  v8.4s         // x0 (hi line 1) hi
+        // Form x0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening:
+        // SHSUB computes floor(x0 / 2), avoiding the potentially 17-bit
+        // subtraction and consuming one bit of the final right shift.
+        //
+        // The *42 term is always even, so x0 has the same parity as the *5
+        // term. For negative odd x0, SHSUB's rounding already accounts for
+        // the -(x0 < 0) correction; only negative even x0 needs an extra -1.
+        // Move the parity bit to the sign bit, use BIC to retain a sign only
+        // for negative even x0, then use SSRA to apply that correction.
+        shsub           v22.8h,  v22.8h,  v17.8h        // x0 / 2 (lo line 0)
+        shsub           v20.8h,  v20.8h,  v5.8h         // x0 / 2 (lo line 1)
+        shsub           v14.8h,  v14.8h,  v15.8h        // x0 / 2 (hi line 0)
+        shsub           v19.8h,  v19.8h,  v6.8h         // x0 / 2 (hi line 1)
+        shl             v17.8h,  v17.8h,  #15           // Move x0 parity to sign bit (lo line 0)
+        shl             v5.8h,   v5.8h,   #15           // Move x0 parity to sign bit (lo line 1)
+        shl             v15.8h,  v15.8h,  #15           // Move x0 parity to sign bit (hi line 0)
+        shl             v6.8h,   v6.8h,   #15           // Move x0 parity to sign bit (hi line 1)
+        bic             v17.16b, v22.16b, v17.16b       // Sign set if x0 < 0 and even (lo line 0)
+        bic             v5.16b,  v20.16b, v5.16b        // Sign set if x0 < 0 and even (lo line 1)
+        bic             v15.16b, v14.16b, v15.16b       // Sign set if x0 < 0 and even (hi line 0)
+        bic             v6.16b,  v19.16b, v6.16b        // Sign set if x0 < 0 and even (hi line 1)
+        ssra            v22.8h,  v17.8h,  #15           // Adjust for SRSHL rounding up (lo line 0)
+        ssra            v20.8h,  v5.8h,   #15           // Adjust for SRSHL rounding up (lo line 1)
+        ssra            v14.8h,  v15.8h,  #15           // Adjust for SRSHL rounding up (hi line 0)
+        ssra            v19.8h,  v6.8h,   #15           // Adjust for SRSHL rounding up (hi line 1)
+        srshl           v22.8h,  v22.8h,  v12.8h        // x0 (lo line 0)
+        srshl           v20.8h,  v20.8h,  v12.8h        // x0 (lo line 1)
+        srshl           v14.8h,  v14.8h,  v13.8h        // x0 (hi line 0)
+        srshl           v19.8h,  v19.8h,  v13.8h        // x0 (hi line 1)
         ldp             q11, q16, [sp]                  // su2_0, su2_1
         ldp             q17, q18, [sp, #96]             // suw_0, suw_1
-        uzp1            v14.8h,  v1.8h,   v2.8h         // x0 (hi line 0)
-        uzp1            v19.8h,  v21.8h,  v23.8h        // x0 (hi line 1)
 
         // Start accumulating the results that don't need the vertical gradient
         // (su2 and suw).
@@ -3747,42 +3748,45 @@ endconst
         mul             v24.8h,  v24.8h,  v11.8h         // (q3 - q0) * 5  (lo line 0)
         mul             v19.8h,  v19.8h,  v16.8h         // (q2 - q1) * 42 (lo line 1)
         mul             v25.8h,  v25.8h,  v11.8h         // (q3 - q0) * 5  (lo line 1)
-        ssubl           v1.4s,   v5.4h,   v24.4h         // y0 (lo line 0) lo
-        ssubl2          v2.4s,   v5.8h,   v24.8h         // y0 (lo line 0) hi
-        ssubl           v6.4s,   v19.4h,  v25.4h         // y0 (lo line 1) lo
-        ssubl2          v7.4s,   v19.8h,  v25.8h         // y0 (lo line 1) hi
-        ssra            v1.4s,   v1.4s,   #31            // Adjust for SRSHR rounding up (lo line 0)
-        ssra            v6.4s,   v6.4s,   #31            // Adjust for SRSHR rounding up (lo line 1)
-        ssra            v2.4s,   v2.4s,   #31
-        ssra            v7.4s,   v7.4s,   #31
-        rshrn           v5.4h,   v1.4s,   #7             // y0 (lo line 0)
-        rshrn           v19.4h,  v6.4s,   #6             // y0 (lo line 1)
+        // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
+        // SHSUB computes floor(y0 / 2), avoiding the 17-bit subtraction and
+        // consuming one bit of the final right shift.
+        //
+        // The *42 term is even, so the *5 term determines y0 parity. SHSUB
+        // already applies the required correction for negative odd y0; use
+        // the parity and sign bits to subtract one only for negative even y0.
+        shsub           v5.8h,   v5.8h,   v24.8h         // y0 / 2 (lo line 0)
+        shsub           v19.8h,  v19.8h,  v25.8h         // y0 / 2 (lo line 1)
+        shl             v24.8h,  v24.8h,  #15            // Move y0 parity to sign bit (lo line 0)
+        shl             v25.8h,  v25.8h,  #15            // Move y0 parity to sign bit (lo line 1)
+        bic             v24.16b, v5.16b,  v24.16b        // Sign set if y0 < 0 and even (lo line 0)
+        bic             v25.16b, v19.16b, v25.16b        // Sign set if y0 < 0 and even (lo line 1)
+        ssra            v5.8h,   v24.8h,  #15            // Adjust for SRSHR rounding up (lo line 0)
+        ssra            v19.8h,  v25.8h,  #15            // Adjust for SRSHR rounding up (lo line 1)
+        srshr           v5.8h,   v5.8h,   #6             // y0 (lo line 0)
+        srshr           v19.8h,  v19.8h,  #5             // y0 (lo line 1)
         // Compute the vertical gradient for the high halves of the current two lines.
         // in:  line 0: [-, v28], line 1: [-, v29], line 2: [-, v30],
         //      line 3: [-, v31], line 4: [-, v31], line 5: [-, v31]
         // out: line 0: [-,  v14], line 1: [-,  v15]
         sub             v14.8h,  v31.8h,  v29.8h         // q2 - q1 (hi line 0)
         sub             v28.8h,  v31.8h,  v28.8h         // q3 - q0 (hi line 0)
-        rshrn2          v5.8h,   v2.4s,   #7             // y0 (lo line 0)
-        rshrn2          v19.8h,  v7.4s,   #6             // y0 (lo line 1)
         sub             v15.8h,  v31.8h,  v30.8h         // q2 - q1 (hi line 1)
         sub             v29.8h,  v31.8h,  v29.8h         // q3 - q0 (hi line 1)
         mul             v14.8h,  v14.8h,  v16.8h         // (q2 - q1) * 42 (hi line 0)
         mul             v28.8h,  v28.8h,  v11.8h         // (q3 - q0) * 5  (hi line 0)
         mul             v15.8h,  v15.8h,  v16.8h         // (q2 - q1) * 42 (hi line 1)
         mul             v29.8h,  v29.8h,  v11.8h         // (q3 - q0) * 5  (hi line 1)
-        ssubl           v1.4s,   v14.4h,  v28.4h         // y0 (hi line 0) lo
-        ssubl2          v2.4s,   v14.8h,  v28.8h         // y0 (hi line 0) hi
-        ssubl           v6.4s,   v15.4h,  v29.4h         // y0 (hi line 1) lo
-        ssubl2          v7.4s,   v15.8h,  v29.8h         // y0 (hi line 1) hi
-        ssra            v1.4s,   v1.4s,   #31            // Adjust for SRSHR rounding up (hi line 0)
-        ssra            v2.4s,   v2.4s,   #31
-        ssra            v6.4s,   v6.4s,   #31            // Adjust for SRSHR rounding up (hi line 1)
-        ssra            v7.4s,   v7.4s,   #31
-        rshrn           v14.4h,  v1.4s,   #7             // y0 (hi line 0)
-        rshrn           v15.4h,  v6.4s,   #6             // y0 (hi line 1)
-        rshrn2          v14.8h,  v2.4s,   #7             // y0 (hi line 0)
-        rshrn2          v15.8h,  v7.4s,   #6             // y0 (hi line 1)
+        shsub           v14.8h,  v14.8h,  v28.8h         // y0 / 2 (hi line 0)
+        shsub           v15.8h,  v15.8h,  v29.8h         // y0 / 2 (hi line 1)
+        shl             v28.8h,  v28.8h,  #15            // Move y0 parity to sign bit (hi line 0)
+        shl             v29.8h,  v29.8h,  #15            // Move y0 parity to sign bit (hi line 1)
+        bic             v28.16b, v14.16b, v28.16b        // Sign set if y0 < 0 and even (hi line 0)
+        bic             v29.16b, v15.16b, v29.16b        // Sign set if y0 < 0 and even (hi line 1)
+        ssra            v14.8h,  v28.8h,  #15            // Adjust for SRSHR rounding up (hi line 0)
+        ssra            v15.8h,  v29.8h,  #15            // Adjust for SRSHR rounding up (hi line 1)
+        srshr           v14.8h,  v14.8h,  #6             // y0 (hi line 0)
+        srshr           v15.8h,  v15.8h,  #5             // y0 (hi line 1)
         b               6f
 
 5:
@@ -3817,7 +3821,7 @@ endconst
         sub             v21.8h,  v21.8h,  v6.8h          // tmp1 (hi line 2)
         sub             v23.8h,  v23.8h,  v7.8h          // tmp1 (lo line 3)
         sub             v13.8h,  v13.8h,  v14.8h         // tmp1 (hi line 3)
-        dup             v17.4s,  w19
+        dup             v17.8h,  w19
 
         // Compute the vertical gradient for the low halves of the current two lines.
         // in:  line 0: [v24, -], line 1: [v25, -], line 2: [v26, -],
@@ -3831,23 +3835,26 @@ endconst
         mul             v24.8h,  v24.8h,  v11.8h         // (q3 - q0) * 5  (lo line 0)
         mul             v19.8h,  v19.8h,  v16.8h         // (q2 - q1) * 42 (lo line 1)
         mul             v25.8h,  v25.8h,  v11.8h         // (q3 - q0) * 5  (lo line 1)
-        ssubl           v6.4s,   v5.4h,   v24.4h         // y0 (lo line 0) lo
-        ssubl2          v7.4s,   v5.8h,   v24.8h         // y0 (lo line 0) hi
-        ssubl           v12.4s,  v19.4h,  v25.4h         // y0 (lo line 1) lo
-        ssubl2          v18.4s,  v19.8h,  v25.8h         // y0 (lo line 1) hi
-        ssra            v6.4s,   v6.4s,   #31            // Adjust for SRSHL rounding up (lo line 0)
-        ssra            v7.4s,   v7.4s,   #31
-        ssra            v12.4s,  v12.4s,  #31            // Adjust for SRSHR rounding up (lo line 1)
-        ssra            v18.4s,  v18.4s,  #31
+        // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
+        // SHSUB computes floor(y0 / 2), avoiding the 17-bit subtraction and
+        // consuming one bit of the final right shift.
+        //
+        // The *42 term is even, so the *5 term determines y0 parity. SHSUB
+        // already applies the required correction for negative odd y0; use
+        // the parity and sign bits to subtract one only for negative even y0.
+        shsub           v5.8h,   v5.8h,   v24.8h         // y0 / 2 (lo line 0)
+        shsub           v19.8h,  v19.8h,  v25.8h         // y0 / 2 (lo line 1)
+        shl             v24.8h,  v24.8h,  #15            // Move y0 parity to sign bit (lo line 0)
+        shl             v25.8h,  v25.8h,  #15            // Move y0 parity to sign bit (lo line 1)
+        bic             v24.16b, v5.16b,  v24.16b        // Sign set if y0 < 0 and even (lo line 0)
+        bic             v25.16b, v19.16b, v25.16b        // Sign set if y0 < 0 and even (lo line 1)
+        ssra            v5.8h,   v24.8h,  #15            // Adjust for SRSHL rounding up (lo line 0)
+        ssra            v19.8h,  v25.8h,  #15            // Adjust for SRSHR rounding up (lo line 1)
         mov             v24.16b, v26.16b
         mov             v25.16b, v27.16b
-        srshl           v6.4s,   v6.4s,   v17.4s         // y0 (lo line 0) lo
-        srshl           v7.4s,   v7.4s,   v17.4s         // y0 (lo line 0) hi
-        // For all lines after y = 0 use the regular shift value.
-        rshrn           v19.4h,  v12.4s,  #7             // y0 (lo line 1)
+        srshl           v5.8h,   v5.8h,   v17.8h         // y0 (lo line 0)
+        srshr           v19.8h,  v19.8h,  #6             // y0 (lo line 1)
         mov             v26.16b, v1.16b
-        uzp1            v5.8h,   v6.8h,   v7.8h          // y0 (lo line 0)
-        rshrn2          v19.8h,  v18.4s,  #7             // y0 (lo line 1)
         // Compute the vertical gradient for the high halves of the current two lines.
         // in:  line 0: [-, v28], line 1: [-, v29], line 2: [-, v30],
         //      line 3: [-, v31], line 4: [-,  v2], line 5: [-, v22]
@@ -3861,22 +3868,20 @@ endconst
         mul             v28.8h,  v28.8h,  v11.8h         // (q3 - q0) * 5  (hi line 0)
         mul             v15.8h,  v15.8h,  v16.8h         // (q2 - q1) * 42 (hi line 1)
         mul             v29.8h,  v29.8h,  v11.8h         // (q3 - q0) * 5  (hi line 1)
-        ssubl           v6.4s,   v14.4h,  v28.4h         // y0 (hi line 0) lo
-        ssubl2          v7.4s,   v14.8h,  v28.8h         // y0 (hi line 0) hi
-        ssubl           v12.4s,  v15.4h,  v29.4h         // y0 (hi line 1) lo
-        ssubl2          v18.4s,  v15.8h,  v29.8h         // y0 (hi line 1) hi
-        ssra            v6.4s,   v6.4s,   #31            // Adjust for SRSHL rounding up (hi line 0)
-        ssra            v7.4s,   v7.4s,   #31
-        ssra            v12.4s,  v12.4s,  #31            // Adjust for SRSHR rounding up (hi line 1)
-        ssra            v18.4s,  v18.4s,  #31
-        srshl           v6.4s,   v6.4s,   v17.4s         // y0 (hi line 0) lo
-        srshl           v7.4s,   v7.4s,   v17.4s         // y0 (hi line 0) hi
+        shsub           v14.8h,  v14.8h,  v28.8h         // y0 / 2 (hi line 0)
+        shsub           v15.8h,  v15.8h,  v29.8h         // y0 / 2 (hi line 1)
+        shl             v28.8h,  v28.8h,  #15            // Move y0 parity to sign bit (hi line 0)
+        shl             v29.8h,  v29.8h,  #15            // Move y0 parity to sign bit (hi line 1)
+        bic             v28.16b, v14.16b, v28.16b        // Sign set if y0 < 0 and even (hi line 0)
+        bic             v29.16b, v15.16b, v29.16b        // Sign set if y0 < 0 and even (hi line 1)
+        ssra            v14.8h,  v28.8h,  #15            // Adjust for SRSHL rounding up (hi line 0)
+        ssra            v15.8h,  v29.8h,  #15            // Adjust for SRSHR rounding up (hi line 1)
+        srshl           v14.8h,  v14.8h,  v17.8h         // y0 (hi line 0)
+        srshr           v15.8h,  v15.8h,  #6             // y0 (hi line 1)
         mov             v28.16b, v30.16b
         mov             v29.16b, v31.16b
-        rshrn           v15.4h,  v12.4s,  #7             // y0 (hi line 1)
-        uzp1            v14.8h,  v6.8h,   v7.8h          // y0 (hi line 0)
-        mov             w19, #-7
-        rshrn2          v15.8h,  v18.4s,  #7             // y0 (hi line 1)
+        // For all lines after y = 0 use the regular shift value.
+        mov             w19, #-6
         mov             v30.16b, v2.16b
         mov             v31.16b, v22.16b
 6:
@@ -3975,10 +3980,11 @@ endconst
         add             sp,  sp,  #224
 .endm
 
-// Replace the shift right by 7 with a shift right by 6 when e1 = 1, allowing
-// to skip the multiplication by (e1 + 1).
-const shift_small
-        .word -6, -7, -7, -7, -7, -7, -7, -6
+// After SHSUB has consumed one right shift, replace the shift right by 6
+// with a shift right by 5 when e1 = 1, allowing to skip the multiplication
+// by (e1 + 1).
+const shift_small, align=4
+        .short -5, -6, -6, -6, -6, -6, -6, -5
 endconst
 
 // Process the 8-pixel-wide block two lines at a time. For bs == 4, the low
@@ -4009,7 +4015,7 @@ endconst
         mla             v4.8h,   v3.8h,   v0.h[1]    // d.i8[0] * p0p + d.i8[1] * p1p (line 0)
         mla             v6.8h,   v9.8h,   v0.h[1]    // d.i8[0] * p0p + d.i8[1] * p1p (line 1)
         mov             w9,  #0                      // y = 0
-        movrel          x8,  shift_small
+        ldrel           q8,  x8,  shift_small
         mul             w16, w7,  w7                 // bs * bs
 
         mov             v28.16b, v4.16b
@@ -4018,12 +4024,12 @@ endconst
         mov             v31.16b, v6.16b
         movi            v9.8h,   #42
         movi            v27.8h,  #5
-        // This decides how much to shift y0 when computing the vertical
-        // gradient. It's a shift right by 7 in most cases, unless e2 is 1 in
-        // which case a shift right by 6 allows to skip the multiplication by
-        // (1 + e2). This is true for y = 0, so initialize for this special
+        // This decides how much to shift y0 after SHSUB has consumed one
+        // right shift. It's a shift right by 6 in most cases, unless e2 is 1
+        // in which case a shift right by 5 allows to skip the multiplication
+        // by (1 + e2). This is true for y = 0, so initialize for this special
         // case, then later overwrite it for the general case.
-        mov             w12, #-6
+        mov             w12, #-5
 2:
         mov             w10, w9                      // py = y
         movi            v10.4s,  #0                  // su2_0
@@ -4060,23 +4066,25 @@ endconst
         mul             v3.8h,   v3.8h,   v27.8h         // (p3 - p0) * 5  (line 0)
         sub             v25.8h,  v25.8h,  v24.8h         // p2 - p1 (line 1)
         sub             v26.8h,  v26.8h,  v23.8h         // p3 - p0 (line 1)
-        ldp             q20, q21, [x8]
         mul             v25.8h,  v25.8h,  v9.8h          // (p2 - p1) * 42 (line 1)
         mul             v26.8h,  v26.8h,  v27.8h         // (p3 - p0) * 5  (line 1)
-        ssubl           v1.4s,   v2.4h,   v3.4h          // y0 (line 0) lo
-        ssubl2          v22.4s,  v2.8h,   v3.8h          // y0 (line 0) hi
-        ssubl           v4.4s,   v25.4h,  v26.4h         // y0 (line 1) lo
-        ssubl2          v6.4s,   v25.8h,  v26.8h         // y0 (line 1) hi
-        ssra            v1.4s,   v1.4s,   #31            // Adjust for SRSHL rounding up (line 0)
-        ssra            v22.4s,  v22.4s,  #31
-        ssra            v4.4s,   v4.4s,   #31            // Adjust for SRSHL rounding up (line 1)
-        ssra            v6.4s,   v6.4s,   #31
-        srshl           v1.4s,   v1.4s,   v20.4s         // x0 (line 0) lo
-        srshl           v22.4s,  v22.4s,  v21.4s         // x0 (line 0) hi
-        srshl           v4.4s,   v4.4s,   v20.4s         // x0 (line 1) lo
-        srshl           v6.4s,   v6.4s,   v21.4s         // x0 (line 1) hi
-        uzp1            v2.8h,   v1.8h,   v22.8h         // x0 (line 0)
-        uzp1            v25.8h,  v4.8h,   v6.8h          // x0 (line 1)
+        // Form x0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
+        // SHSUB computes floor(x0 / 2), avoiding the 17-bit subtraction and
+        // consuming one bit of the final right shift.
+        //
+        // The *42 term is even, so the *5 term determines x0 parity. SHSUB
+        // already applies the required correction for negative odd x0; use
+        // the parity and sign bits to subtract one only for negative even x0.
+        shsub           v2.8h,   v2.8h,   v3.8h          // x0 / 2 (line 0)
+        shsub           v25.8h,  v25.8h,  v26.8h         // x0 / 2 (line 1)
+        shl             v3.8h,   v3.8h,   #15            // Move x0 parity to sign bit (line 0)
+        shl             v26.8h,  v26.8h,  #15            // Move x0 parity to sign bit (line 1)
+        bic             v3.16b,  v2.16b,  v3.16b         // Sign set if x0 < 0 and even (line 0)
+        bic             v26.16b, v25.16b, v26.16b        // Sign set if x0 < 0 and even (line 1)
+        ssra            v2.8h,   v3.8h,   #15            // Adjust for SRSHL rounding up (line 0)
+        ssra            v25.8h,  v26.8h,  #15            // Adjust for SRSHL rounding up (line 1)
+        srshl           v2.8h,   v2.8h,   v8.8h          // x0 (line 0)
+        srshl           v25.8h,  v25.8h,  v8.8h          // x0 (line 1)
 
         cmp             w10, w11                         // py < h - 2
         // Start accumulating the results that don't need the vertical gradient
@@ -4107,18 +4115,23 @@ endconst
         mul             v1.8h,   v1.8h,   v27.8h         // (q3 - q0) * 5  (line 0)
         mul             v22.8h,  v22.8h,  v9.8h          // (q2 - q1) * 42 (line 1)
         mul             v23.8h,  v23.8h,  v27.8h         // (q3 - q0) * 5  (line 1)
-        ssubl           v20.4s,  v24.4h,  v1.4h          // y0 (line 0) lo
-        ssubl2          v21.4s,  v24.8h,  v1.8h          // y0 (line 0) hi
-        ssubl           v3.4s,   v22.4h,  v23.4h         // y0 (line 1) lo
-        ssubl2          v4.4s,   v22.8h,  v23.8h         // y0 (line 1) hi
-        ssra            v20.4s,  v20.4s,  #31            // Adjust for SRSHR rounding up (line 0)
-        ssra            v21.4s,  v21.4s,  #31
-        ssra            v3.4s,   v3.4s,   #31            // Adjust for SRSHR rounding up (line 1)
-        ssra            v4.4s,   v4.4s,   #31
-        rshrn           v24.4h,  v20.4s,  #7             // y0 (line 0)
-        rshrn           v26.4h,  v3.4s,   #6             // y0 (line 1)
-        rshrn2          v24.8h,  v21.4s,  #7
-        rshrn2          v26.8h,  v4.4s,   #6
+        // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
+        // SHSUB computes floor(y0 / 2), avoiding the 17-bit subtraction and
+        // consuming one bit of the final right shift.
+        //
+        // The *42 term is even, so the *5 term determines y0 parity. SHSUB
+        // already applies the required correction for negative odd y0; use
+        // the parity and sign bits to subtract one only for negative even y0.
+        shsub           v24.8h,  v24.8h,  v1.8h          // y0 / 2 (line 0)
+        shsub           v22.8h,  v22.8h,  v23.8h         // y0 / 2 (line 1)
+        shl             v1.8h,   v1.8h,   #15            // Move y0 parity to sign bit (line 0)
+        shl             v23.8h,  v23.8h,  #15            // Move y0 parity to sign bit (line 1)
+        bic             v1.16b,  v24.16b, v1.16b         // Sign set if y0 < 0 and even (line 0)
+        bic             v23.16b, v22.16b, v23.16b        // Sign set if y0 < 0 and even (line 1)
+        ssra            v24.8h,  v1.8h,   #15            // Adjust for SRSHR rounding up (line 0)
+        ssra            v22.8h,  v23.8h,  #15            // Adjust for SRSHR rounding up (line 1)
+        srshr           v24.8h,  v24.8h,  #6             // y0 (line 0)
+        srshr           v26.8h,  v22.8h,  #5             // y0 (line 1)
         // No need to move anything, it's the last iteration.
         b               5f
 
@@ -4151,28 +4164,32 @@ endconst
         sub             v24.8h,  v31.8h,  v29.8h        // q2 - q1 (line 0)
         sub             v22.8h,  v4.8h,   v30.8h        // q2 - q1 (line 1)
         sub             v23.8h,  v6.8h,   v29.8h        // q3 - q0 (line 1)
-        dup             v28.4s,  w12
+        dup             v28.8h,  w12
         // For all lines after y = 0 use the regular shift value.
-        mov             w12, #-7
+        mov             w12, #-6
         mul             v24.8h,  v24.8h,  v9.8h         // (q2 - q1) * 42 (line 0)
         mul             v1.8h,   v1.8h,   v27.8h        // (q3 - q0) * 5  (line 0)
         mul             v22.8h,  v22.8h,  v9.8h         // (q2 - q1) * 42 (line 1)
         mul             v23.8h,  v23.8h,  v27.8h        // (q3 - q0) * 5  (line 1)
-        ssubl           v3.4s,   v24.4h,  v1.4h         // y0 (line 0) lo
-        ssubl2          v24.4s,  v24.8h,  v1.8h         // y0 (line 0) hi
-        ssubl           v1.4s,   v22.4h,  v23.4h        // y0 (line 1) lo
-        ssubl2          v23.4s,  v22.8h,  v23.8h        // y0 (line 1) hi
-        ssra            v3.4s,   v3.4s,   #31           // Adjust for SRSHL rounding up (line 0)
-        ssra            v24.4s,  v24.4s,  #31
-        ssra            v1.4s,   v1.4s,   #31           // Adjust for SRSHR rounding up (line 1)
-        ssra            v23.4s,  v23.4s,  #31
-        srshl           v3.4s,   v3.4s,   v28.4s
-        srshl           v24.4s,  v24.4s,  v28.4s
-        rshrn           v26.4h,  v1.4s,   #7            // y0 (line 1)
-        uzp1            v24.8h,  v3.8h,   v24.8h        // y0 (line 0)
+        // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
+        // SHSUB computes floor(y0 / 2), avoiding the 17-bit subtraction and
+        // consuming one bit of the final right shift.
+        //
+        // The *42 term is even, so the *5 term determines y0 parity. SHSUB
+        // already applies the required correction for negative odd y0; use
+        // the parity and sign bits to subtract one only for negative even y0.
+        shsub           v24.8h,  v24.8h,  v1.8h         // y0 / 2 (line 0)
+        shsub           v22.8h,  v22.8h,  v23.8h        // y0 / 2 (line 1)
+        shl             v1.8h,   v1.8h,   #15           // Move y0 parity to sign bit (line 0)
+        shl             v23.8h,  v23.8h,  #15           // Move y0 parity to sign bit (line 1)
+        bic             v1.16b,  v24.16b, v1.16b        // Sign set if y0 < 0 and even (line 0)
+        bic             v23.16b, v22.16b, v23.16b       // Sign set if y0 < 0 and even (line 1)
+        ssra            v24.8h,  v1.8h,   #15           // Adjust for SRSHL rounding up (line 0)
+        ssra            v22.8h,  v23.8h,  #15           // Adjust for SRSHR rounding up (line 1)
+        srshl           v24.8h,  v24.8h,  v28.8h        // y0 (line 0)
+        srshr           v26.8h,  v22.8h,  #6            // y0 (line 1)
         mov             v28.16b, v30.16b
         mov             v29.16b, v31.16b
-        rshrn2          v26.8h,  v23.4s,  #7           // y0 (line 1)
         mov             v30.16b, v4.16b
         mov             v31.16b, v6.16b
 5:
