@@ -37,6 +37,7 @@ extern "C" {
 
 // Constants from Section 3. "Symbols and abbreviated terms"
 #define DAV2D_MAX_CDEF_STRENGTHS 8
+#define DAV2D_MAX_MFH_NUM 16
 #define DAV2D_MAX_OPERATING_POINTS 64
 #define DAV2D_MAX_TILE_COLS 64
 #define DAV2D_MAX_TILE_ROWS 64
@@ -458,7 +459,7 @@ typedef struct Dav2dFilmGrainData {
 } Dav2dFilmGrainData;
 
 typedef struct Dav2dFrameHeader {
-    uint8_t id;
+    uint8_t multi_frame_hdr_id;
     enum Dav2dFrameType frame_type; ///< type of the picture
     int width, height;
     uint8_t frame_offset; ///< frame number
@@ -586,6 +587,26 @@ typedef struct Dav2dFrameHeader {
         unsigned seed;
     } film_grain; ///< film grain parameters
 } Dav2dFrameHeader;
+
+typedef struct Dav2dMultiFrameHeader {
+    struct {
+        int width, height;
+        uint8_t present;
+    } size;
+    struct {
+        uint8_t level_y[2 /* dir */];
+        uint8_t level_u, level_v;
+        uint8_t present;
+    } deblock;
+    struct {
+        uint8_t allow_change;
+        uint8_t ext;
+        uint8_t present;
+    } segmentation;
+
+    uint8_t seq_hdr_id;
+    uint8_t id;
+} Dav2dMultiFrameHeader;
 
 #ifdef __cplusplus
 } /* extern "C" */

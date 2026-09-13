@@ -33,6 +33,7 @@
 #include <stdio.h>
 
 #include "dav2d/data.h"
+#include "dav2d/headers.h"
 
 #include "common/frame.h"
 #include "common/intops.h"
@@ -1049,13 +1050,23 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     const Dav2dSequenceHeader *const seqhdr = c->seq_hdr;
     Dav2dFrameHeader *const hdr = c->frame_hdr;
 
-    hdr->id = dav2d_get_vlc(gb);
-    if (hdr->id) goto error;
-    const int seqhdr_idx = dav2d_get_vlc(gb);
+    if (obu_type == DAV2D_OBU_BRIDGE) hdr->multi_frame_hdr_id = 0;
+    else hdr->multi_frame_hdr_id = dav2d_get_vlc(gb);
+
+    int seqhdr_idx;
+    if (hdr->multi_frame_hdr_id) {
+        if (hdr->multi_frame_hdr_id >= DAV2D_MAX_MFH_NUM) goto error;
+        const Dav2dMultiFrameHeader *const multi_frame_hdr =
+            c->multi_frame_hdrs[hdr->multi_frame_hdr_id];
+        if (!multi_frame_hdr) goto error;
+        seqhdr_idx = multi_frame_hdr->seq_hdr_id;
+    }
+    else seqhdr_idx = dav2d_get_vlc(gb);
+
     if (seqhdr_idx != seqhdr->id) goto error;
 #if DEBUG_FRAME_HDR
     printf("HDR: post-ids[f:%d,s:%d]: off=%td\n",
-           hdr->id, seqhdr->id,
+           hdr->multi_frame_hdr_id, seqhdr->id,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
@@ -2378,6 +2389,60 @@ static void parse_tile_hdr(Dav2dContext *const c, GetBits *const gb) {
     }
 }
 
+static void parse_multi_frame_hdr(Dav2dMultiFrameHeader *const hdr, GetBits *const gb) {
+#define DEBUG_MULTI_FRAME_HDR 0
+
+#if DEBUG_MULTI_FRAME_HDR
+    const uint8_t *const init_ptr = &gb->ptr[-!!(gb->bits_left & 7)];
+#endif
+
+    memset(hdr, 0, sizeof(*hdr));
+    hdr->seq_hdr_id = dav2d_get_vlc(gb);
+    hdr->id = dav2d_get_vlc(gb) + 1;
+#if DEBUG_MULTI_FRAME_HDR
+    printf("MULTIFRAMEHDR: post-ids[s:%d,f:%d]: off=%td\n",
+           hdr->seq_hdr_id, hdr->id, (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+
+    hdr->size.present = dav2d_get_bit(gb);
+    if (hdr->size.present) {
+        const int n_width_bits = dav2d_get_bits(gb, 4) + 1;
+        const int n_height_bits = dav2d_get_bits(gb, 4) + 1;
+        hdr->size.width = dav2d_get_bits(gb, n_width_bits) + 1;
+        hdr->size.height = dav2d_get_bits(gb, n_height_bits) + 1;
+    }
+#if DEBUG_MULTI_FRAME_HDR
+    printf("MULTIFRAMEHDR: post-size[%d,w:%d,h:%d]: off=%td\n",
+           hdr->size.present, hdr->size.width, hdr->size.height,
+           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+
+    hdr->deblock.present = dav2d_get_bit(gb);
+    if (hdr->deblock.present) {
+        hdr->deblock.level_y[0] = dav2d_get_bit(gb);
+        hdr->deblock.level_y[1] = dav2d_get_bit(gb);
+        hdr->deblock.level_u = dav2d_get_bit(gb);
+        hdr->deblock.level_v = dav2d_get_bit(gb);
+    }
+#if DEBUG_MULTI_FRAME_HDR
+    printf("MULTIFRAMEHDR: post-deblock[%d,y:%d|%d,u:%d,v:%d]: off=%td\n",
+           hdr->deblock.present, hdr->deblock.level_y[0],
+           hdr->deblock.level_y[1], hdr->deblock.level_u, hdr->deblock.level_v,
+           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+
+    hdr->segmentation.present = dav2d_get_bit(gb);
+    if (hdr->segmentation.present) {
+        hdr->segmentation.ext = dav2d_get_bit(gb);
+        hdr->segmentation.allow_change = dav2d_get_bit(gb);
+    }
+#if DEBUG_MULTI_FRAME_HDR
+    printf("MULTIFRAMEHDR: post-segmentation[%d,ext:%d,allow_change:%d]: off=%td\n",
+           hdr->seg.present, hdr->seg.ext, hdr->seg.allow_change,
+           (gb->ptr - init_ptr) * 8 - gb->bits_left);
+#endif
+}
+
 ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
     GetBits gb;
     int res;
@@ -2767,6 +2832,20 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
     case DAV2D_OBU_PADDING:
         // ignore OBUs we don't care about
         break;
+    case DAV2D_OBU_MULTI_FRAME_HDR: {
+        Dav2dMultiFrameHeader *multi_frame_hdr =
+            dav2d_malloc(ALLOC_OBU_HDR, sizeof(Dav2dMultiFrameHeader));
+        if (!multi_frame_hdr) return DAV2D_ERR(ENOMEM);
+        parse_multi_frame_hdr(multi_frame_hdr, &gb);
+        if (multi_frame_hdr->id >= DAV2D_MAX_MFH_NUM) {
+            dav2d_free(multi_frame_hdr);
+            goto error;
+        }
+        if (c->multi_frame_hdrs[multi_frame_hdr->id])
+            dav2d_free(c->multi_frame_hdrs[multi_frame_hdr->id]);
+        c->multi_frame_hdrs[multi_frame_hdr->id] = multi_frame_hdr;
+        break;
+    }
     default:
         // print a warning but don't fail for unknown types
         dav2d_log(c, "Unknown OBU type %d of size %td\n", type, gb.ptr_end - gb.ptr);

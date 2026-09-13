@@ -1,4 +1,4 @@
-From 8dd5a4860f1e56f38ed4988a3be67507a67b515b Mon Sep 17 00:00:00 2001
+From 93da0eef0012a288eefacd52dd67a1e1d7ca81bc Mon Sep 17 00:00:00 2001
 From: Luc Trudeau <ltrudeau@twoorioles.com>
 Date: Wed, 17 Sep 2025 16:53:29 -0400
 Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
@@ -17,7 +17,7 @@ Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
  10 files changed, 319 insertions(+), 24 deletions(-)
 
 diff --git a/av2/common/idct.c b/av2/common/idct.c
-index 9af6944168..699c7c3b2f 100644
+index 9af694416..699c7c3b2 100644
 --- a/av2/common/idct.c
 +++ b/av2/common/idct.c
 @@ -995,7 +995,8 @@ static void av2_highbd_inv_txfm_add_master(const tran_low_t *input,
@@ -74,7 +74,7 @@ index 9af6944168..699c7c3b2f 100644
    }
  }
 diff --git a/av2/common/idct.h b/av2/common/idct.h
-index 7e4c02b15c..1cf9317670 100644
+index 7e4c02b15..1cf931767 100644
 --- a/av2/common/idct.h
 +++ b/av2/common/idct.h
 @@ -21,6 +21,8 @@
@@ -106,7 +106,7 @@ index 7e4c02b15c..1cf9317670 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av2/common/reconintra.c b/av2/common/reconintra.c
-index be6528d678..b40226d390 100644
+index be6528d67..b40226d39 100644
 --- a/av2/common/reconintra.c
 +++ b/av2/common/reconintra.c
 @@ -27,6 +27,8 @@
@@ -394,7 +394,7 @@ index be6528d678..b40226d390 100644
          tx_size, disable_edge_filter, have_top ? AVMMIN(txwpx, xr + txwpx) : 0,
          n_topright_px, have_left ? AVMMIN(txhpx, yd + txhpx) : 0,
 diff --git a/av2/common/reconintra.h b/av2/common/reconintra.h
-index 4c03af11df..8593e253e0 100644
+index 4c03af11d..8593e253e 100644
 --- a/av2/common/reconintra.h
 +++ b/av2/common/reconintra.h
 @@ -16,6 +16,7 @@
@@ -415,7 +415,7 @@ index 4c03af11df..8593e253e0 100644
      int dst_stride, PREDICTION_MODE mode, int p_angle, int angle_delta,
      TX_SIZE tx_size, int disable_edge_filter, int n_top_px, int n_topright_px,
 diff --git a/av2/common/tip.c b/av2/common/tip.c
-index caaaf46d9f..8a062d7909 100644
+index caaaf46d9..8a062d790 100644
 --- a/av2/common/tip.c
 +++ b/av2/common/tip.c
 @@ -15,6 +15,8 @@
@@ -446,7 +446,7 @@ index caaaf46d9f..8a062d7909 100644
 +#endif
  }
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index ff724ab69a..6ebe3808ec 100644
+index f37b10870..d8aa59120 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -209,11 +209,25 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -516,7 +516,7 @@ index ff724ab69a..6ebe3808ec 100644
  
  static AVM_INLINE void copy_frame_mvs_inter_block(AV2_COMMON *const cm,
 diff --git a/av2/encoder/encodemb.c b/av2/encoder/encodemb.c
-index c2cf414e58..2dd31408e9 100644
+index c2cf414e5..2dd31408e 100644
 --- a/av2/encoder/encodemb.c
 +++ b/av2/encoder/encodemb.c
 @@ -1029,7 +1029,7 @@ static void encode_block(int plane, int block, int blk_row, int blk_col,
@@ -563,7 +563,7 @@ index c2cf414e58..2dd31408e9 100644
          AVMMAX(*eob_c1, *eob_c2),
          replace_adst_by_ddt(cm->seq_params.enable_inter_ddt,
 diff --git a/av2/encoder/tpl_model.c b/av2/encoder/tpl_model.c
-index ab118c5e01..e3c60f9950 100644
+index ab118c5e0..e3c60f995 100644
 --- a/av2/encoder/tpl_model.c
 +++ b/av2/encoder/tpl_model.c
 @@ -187,7 +187,7 @@ static AVM_INLINE void txfm_quant_rdcost(
@@ -576,7 +576,7 @@ index ab118c5e01..e3c60f9950 100644
  }
  
 diff --git a/av2/encoder/tx_search.c b/av2/encoder/tx_search.c
-index 559c7d1da9..3420c3f82a 100644
+index 559c7d1da..3420c3f82 100644
 --- a/av2/encoder/tx_search.c
 +++ b/av2/encoder/tx_search.c
 @@ -884,7 +884,7 @@ static AVM_INLINE void inverse_transform_block_facade(
@@ -614,10 +614,10 @@ index 559c7d1da9..3420c3f82a 100644
        max_chroma_eob,
        replace_adst_by_ddt(cpi->common.seq_params.enable_inter_ddt,
 diff --git a/avm/debug.h b/avm/debug.h
-index ae277ab7a6..99ef4c1f95 100644
+index d6da5d8ac..1a2b2e1ef 100644
 --- a/avm/debug.h
 +++ b/avm/debug.h
-@@ -28,10 +28,15 @@
+@@ -28,11 +28,16 @@
  #ifndef AVM_DEBUG_H
  #define AVM_DEBUG_H
  
@@ -628,12 +628,13 @@ index ae277ab7a6..99ef4c1f95 100644
  #define DEBUG_OBU_HDR 0
  #define DEBUG_SEQ_HDR 0
  #define DEBUG_FRAME_HDR 0
+ #define DEBUG_MULTI_FRAME_HDR 0
  #define DEBUG_BLOCK_INFO 0
 +#define DEBUG_B_PIXELS 0
  #if DEBUG_BLOCK_INFO
  #define DB_ONLY(x...) x,
  #define BLOCK_TO_DEBUG \
-@@ -41,6 +46,50 @@
+@@ -42,6 +47,50 @@
      if (BLOCK_TO_DEBUG) printf(fmt)
  #define DEBUG_CF_printf(fmt...) \
      if (BLOCK_TO_DEBUG && plane > -1 && 1) printf(fmt)
@@ -685,5 +686,5 @@ index ae277ab7a6..99ef4c1f95 100644
  #define DB_ONLY(x...)
  #define BLOCK_TO_DEBUG 0
 -- 
-2.48.1
+2.54.0
 

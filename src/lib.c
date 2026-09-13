@@ -724,6 +724,8 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
     }
     for (int i = 0; i < 8; i++)
         dav2d_ref_dec(&c->fgm[i]);
+    for (int i = 0; i < DAV2D_MAX_MFH_NUM; i++)
+        dav2d_free(c->multi_frame_hdrs[i]);
     dav2d_ref_dec(&c->seq_hdr_ref);
     dav2d_ref_dec(&c->frame_hdr_ref);
 

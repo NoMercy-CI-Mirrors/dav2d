@@ -1,4 +1,4 @@
-From c04cc6d9da2c055568981021a7bafe7d5c63e3d7 Mon Sep 17 00:00:00 2001
+From 9447c536bc0047d6cf7ac742905061ab3cf129bb Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Mon, 1 Sep 2025 09:39:53 -0400
 Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
@@ -23,7 +23,7 @@ Subject: [PATCH 3/5] Partitioning, block and coefficient decoding debugging
  15 files changed, 1845 insertions(+), 299 deletions(-)
 
 diff --git a/av2/common/av2_common_int.h b/av2/common/av2_common_int.h
-index 83394d3efd..d6e8714c9e 100644
+index 83394d3ef..d6e8714c9 100644
 --- a/av2/common/av2_common_int.h
 +++ b/av2/common/av2_common_int.h
 @@ -4304,7 +4304,9 @@ static INLINE void av2_reset_refmv_bank(const AV2_COMMON *const cm,
@@ -37,7 +37,7 @@ index 83394d3efd..d6e8714c9e 100644
        const int col_aligned_to_8x8 = ((mi_col >> 1) << 1);
        const int mi_grid_idx = get_mi_grid_idx(mi_params, sb_mi_row - 1,
 diff --git a/av2/common/mvref_common.c b/av2/common/mvref_common.c
-index e48d39ba71..1d5ef2ba72 100644
+index e48d39ba7..1d5ef2ba7 100644
 --- a/av2/common/mvref_common.c
 +++ b/av2/common/mvref_common.c
 @@ -12,6 +12,8 @@
@@ -1627,7 +1627,7 @@ index e48d39ba71..1d5ef2ba72 100644
                             cand_from_sb_above,
  #endif  // COMPOUND_WARP_LINE_BUFFER_REDUCTION
 diff --git a/av2/common/mvref_common.h b/av2/common/mvref_common.h
-index 6637975ff5..0b395a50d6 100644
+index 6637975ff..0b395a50d 100644
 --- a/av2/common/mvref_common.h
 +++ b/av2/common/mvref_common.h
 @@ -16,6 +16,8 @@
@@ -1649,7 +1649,7 @@ index 6637975ff5..0b395a50d6 100644
      MV_REFERENCE_FRAME ref_frame, uint8_t ref_mv_count[MODE_CTX_REF_FRAMES],
      CANDIDATE_MV ref_mv_stack[][MAX_REF_MV_STACK_SIZE],
 diff --git a/av2/common/tip.c b/av2/common/tip.c
-index a46176bf84..caaaf46d9f 100644
+index a46176bf8..caaaf46d9 100644
 --- a/av2/common/tip.c
 +++ b/av2/common/tip.c
 @@ -759,6 +759,8 @@ static AVM_INLINE void tip_component_build_inter_predictors(
@@ -1662,7 +1662,7 @@ index a46176bf84..caaaf46d9f 100644
        cm, xd, plane, tip_plane, mv, bw, bh, mi_x, mi_y, mc_buf, tmp_conv_dst,
        calc_subpel_params_func);
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 7d6fc6ab76..ff724ab69a 100644
+index 8ad0064ce..f37b10870 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -222,7 +222,7 @@ static AVM_INLINE void inverse_transform_block(DecoderCodingBlock *dcb,
@@ -2236,7 +2236,7 @@ index 7d6fc6ab76..ff724ab69a 100644
        avm_merge_corrupted_flag(&pbi->dcb.corrupted, td->dcb.corrupted);
        if (pbi->dcb.corrupted)
 diff --git a/av2/decoder/decodemv.c b/av2/decoder/decodemv.c
-index 78b9c4358d..7df1aebe75 100644
+index 78b9c4358..7df1aebe7 100644
 --- a/av2/decoder/decodemv.c
 +++ b/av2/decoder/decodemv.c
 @@ -42,7 +42,8 @@
@@ -4115,7 +4115,7 @@ index 78b9c4358d..7df1aebe75 100644
    }
  }
 diff --git a/av2/decoder/decodemv.h b/av2/decoder/decodemv.h
-index ca6a4a65fb..9869e5d737 100644
+index ca6a4a65f..9869e5d73 100644
 --- a/av2/decoder/decodemv.h
 +++ b/av2/decoder/decodemv.h
 @@ -21,7 +21,11 @@
@@ -4162,7 +4162,7 @@ index ca6a4a65fb..9869e5d737 100644
 +              AV2_COMMON *cm, avm_reader *r, MACROBLOCKD *const xd);
  #endif  // AVM_AV2_DECODER_DECODEMV_H_
 diff --git a/av2/decoder/decoder.c b/av2/decoder/decoder.c
-index 634230f3f9..383910149e 100644
+index 634230f3f..383910149 100644
 --- a/av2/decoder/decoder.c
 +++ b/av2/decoder/decoder.c
 @@ -471,7 +471,8 @@ void av2_decoder_remove(AV2Decoder *pbi) {
@@ -4185,7 +4185,7 @@ index 634230f3f9..383910149e 100644
          assert(xd->mi[0]->palette_mode_info.palette_size[plane] == 0);
        }
 diff --git a/av2/decoder/decoder.h b/av2/decoder/decoder.h
-index 278ecf797e..6c8b4619a2 100644
+index 278ecf797..6c8b4619a 100644
 --- a/av2/decoder/decoder.h
 +++ b/av2/decoder/decoder.h
 @@ -103,7 +103,8 @@ typedef struct DecoderCodingBlock {
@@ -4219,7 +4219,7 @@ index 278ecf797e..6c8b4619a2 100644
                                     PARTITION_TYPE partition, BLOCK_SIZE bsize,
                                     PARTITION_TREE *parent, int index);
 diff --git a/av2/decoder/decodetxb.c b/av2/decoder/decodetxb.c
-index 8db11062fc..f5aacd6ea3 100644
+index 8db11062f..f5aacd6ea 100644
 --- a/av2/decoder/decodetxb.c
 +++ b/av2/decoder/decodetxb.c
 @@ -115,7 +115,11 @@ static int read_adaptive_hr(MACROBLOCKD *xd, avm_reader *r, int ctx) {
@@ -4839,7 +4839,7 @@ index 8db11062fc..f5aacd6ea3 100644
    avm_usec_timer_mark(&timer);
    const int64_t elapsed_time = avm_usec_timer_elapsed(&timer);
 diff --git a/av2/decoder/decodetxb.h b/av2/decoder/decodetxb.h
-index 8c76e5734a..460cba70c4 100644
+index 8c76e5734..460cba70c 100644
 --- a/av2/decoder/decodetxb.h
 +++ b/av2/decoder/decodetxb.h
 @@ -15,12 +15,15 @@
@@ -4887,7 +4887,7 @@ index 8c76e5734a..460cba70c4 100644
                                   struct avm_reader *const r, const int blk_row,
                                   const int blk_col, const int plane,
 diff --git a/av2/decoder/detokenize.c b/av2/decoder/detokenize.c
-index 89ab0a121d..99ba3f988b 100644
+index 89ab0a121..99ba3f988 100644
 --- a/av2/decoder/detokenize.c
 +++ b/av2/decoder/detokenize.c
 @@ -109,7 +109,8 @@ static int decode_color_map_tokens(Av2ColorMapParam *param, avm_reader *r) {
@@ -4911,7 +4911,7 @@ index 89ab0a121d..99ba3f988b 100644
 +#endif
  }
 diff --git a/av2/decoder/detokenize.h b/av2/decoder/detokenize.h
-index 56da03552b..b89610dbdc 100644
+index 56da03552..b89610dbd 100644
 --- a/av2/decoder/detokenize.h
 +++ b/av2/decoder/detokenize.h
 @@ -22,7 +22,8 @@
@@ -4925,7 +4925,7 @@ index 56da03552b..b89610dbdc 100644
  #ifdef __cplusplus
  }  // extern "C"
 diff --git a/av2/encoder/rdopt.c b/av2/encoder/rdopt.c
-index 98c6a9a16a..79a706efbf 100644
+index 98c6a9a16..79a706efb 100644
 --- a/av2/encoder/rdopt.c
 +++ b/av2/encoder/rdopt.c
 @@ -814,7 +814,7 @@ static AVM_INLINE void setup_buffer_ref_mvs_inter(
@@ -4967,13 +4967,13 @@ index 98c6a9a16a..79a706efbf 100644
            xd->weight, NULL, mbmi_ext->global_mvs, xd->warp_param_stack,
            ref_frame < INTER_REFS_PER_FRAME ? MAX_WARP_REF_CANDIDATES : 0,
 diff --git a/avm/debug.h b/avm/debug.h
-index b605a9125c..ae277ab7a6 100644
+index 6a1bb0994..d6da5d8ac 100644
 --- a/avm/debug.h
 +++ b/avm/debug.h
-@@ -31,5 +31,21 @@
- #define DEBUG_OBU_HDR 0
+@@ -32,5 +32,21 @@
  #define DEBUG_SEQ_HDR 0
  #define DEBUG_FRAME_HDR 0
+ #define DEBUG_MULTI_FRAME_HDR 0
 +#define DEBUG_BLOCK_INFO 0
 +#if DEBUG_BLOCK_INFO
 +#define DB_ONLY(x...) x,

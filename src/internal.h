@@ -225,6 +225,8 @@ struct Dav2dContext {
 
     Dav2dMemPool *picture_pool;
     Dav2dMemPool *pic_ctx_pool;
+
+    Dav2dMultiFrameHeader *multi_frame_hdrs[DAV2D_MAX_MFH_NUM];
 };
 
 struct Dav2dTask {
