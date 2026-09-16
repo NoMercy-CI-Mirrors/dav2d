@@ -56,6 +56,8 @@ decl_fn(w_mask, dav2d_w_mask_444);
 decl_fn(blend, dav2d_blend);
 decl_fn(warp8x8, dav2d_warp_affine_8x8);
 decl_fn(warp8x8t, dav2d_warp_affine_8x8t);
+decl_fn(ext_warp4x4, dav2d_ext_warp4x4);
+decl_fn(ext_warp4x4t, dav2d_ext_warp4x4t);
 decl_fn(emu_edge, dav2d_emu_edge);
 decl_fn(morph, dav2d_morph);
 decl_fn(sad_refine_mv, dav2d_sad_refine_mv);
@@ -88,5 +90,7 @@ static ALWAYS_INLINE void mc_dsp_init_x86(Dav2dMCDSPContext *const c) {
     c->sad_refine_mv = BF(dav2d_sad_refine_mv, avx2);
     c->opfl_refine_mv = BF(dav2d_opfl_refine_mv, avx2);
     c->sad8x8 = BF(dav2d_sad8x8, avx2);
+    c->ext_warp4x4  = BF(dav2d_ext_warp4x4, avx2);
+    c->ext_warp4x4t = BF(dav2d_ext_warp4x4t, avx2);
 #endif
 }
