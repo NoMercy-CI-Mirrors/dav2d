@@ -611,6 +611,44 @@ static void check_ext_warp4x4(Dav2dMCDSPContext *const c) {
     report("ext_warp4x4");
 }
 
+static void check_ext_warp4x4t(Dav2dMCDSPContext *const c) {
+    ALIGN_STK_64(pixel, src_buf, 11 * 11,);
+    ALIGN_STK_16(int16_t, c_tmp,  4 *  4,);
+    ALIGN_STK_16(int16_t, a_tmp,  4 *  4,);
+    const pixel *const src = src_buf + 11 * 3 + 3;
+    const ptrdiff_t src_stride = 11 * sizeof(pixel);
+
+    declare_func(void, int16_t *tmp, ptrdiff_t tmp_stride, const pixel *src,
+                 ptrdiff_t src_stride, int mx, int my HIGHBD_DECL_SUFFIX);
+
+    for (int mxy = 0; mxy < 4; mxy++)
+        if (check_func(c->ext_warp4x4t, "ext_warp4x4t_%s_%dbpc", mxy_names[mxy],
+                       BITDEPTH)) {
+#if BITDEPTH == 16
+            const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
+#else
+            const int bitdepth_max = 0xff;
+#endif
+            const int mx = (mxy & 1) ? rnd() % 63 + 1 : 0;
+            const int my = (mxy & 2) ? rnd() % 63 + 1 : 0;
+
+            for (int i = 0; i < 11 * 11; i++)
+                src_buf[i] = rnd() & bitdepth_max;
+
+            memset(c_tmp, 0xaa, sizeof(c_tmp));
+            memset(a_tmp, 0xaa, sizeof(a_tmp));
+
+            call_ref(c_tmp, 4, src, src_stride, mx, my HIGHBD_TAIL_SUFFIX);
+            call_new(a_tmp, 4, src, src_stride, mx, my HIGHBD_TAIL_SUFFIX);
+            checkasm_check(int16_t, c_tmp, 4 * sizeof(*c_tmp),
+                                    a_tmp, 4 * sizeof(*a_tmp),
+                                    4, 4, "tmp");
+
+            bench_new(a_tmp, 4, src, src_stride, mx, my HIGHBD_TAIL_SUFFIX);
+        }
+    report("ext_warp4x4t");
+}
+
 enum EdgeFlags {
     HAVE_TOP = 1,
     HAVE_BOTTOM = 2,
@@ -938,6 +976,7 @@ void bitfn(checkasm_check_mc)(void) {
     check_warp8x8(&c);
     check_warp8x8t(&c);
     check_ext_warp4x4(&c);
+    check_ext_warp4x4t(&c);
     check_emuedge(&c);
     check_morph(&c);
     check_sad_refine_mv(&c);
