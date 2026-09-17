@@ -4053,17 +4053,18 @@ void bytefn(dav2d_filter_slice_cdef)(Dav2dTaskContext *const tc, const int by64)
     const Dav2dFrameContext *const f = tc->f;
     if (!(f->c->inloop_filters & (DAV2D_INLOOPFILTER_CDEF | DAV2D_INLOOPFILTER_CCSO))) return;
 
-    const size_t cdef_bak_sz = f->cur.p.stride[0] * 4 + f->cur.p.stride[1] * 8;
+    const size_t cdef_bak_sz = 64 + f->cur.p.stride[0] * 4 + f->cur.p.stride[1] * 8;
     if (cdef_bak_sz > tc->lf.cdef_line_sz) {
         dav2d_free_aligned(tc->lf.cdef_line_buf);
-        tc->lf.cdef_line_buf = dav2d_alloc_aligned(ALLOC_CDEF, cdef_bak_sz, 32);
-        tc->lf.cdef_line[0][0] = tc->lf.cdef_line_buf;
-        tc->lf.cdef_line[1][0] = tc->lf.cdef_line_buf + PXSTRIDE(f->cur.p.stride[0]) * 2;
-        pixel *ptr = tc->lf.cdef_line_buf + PXSTRIDE(f->cur.p.stride[0]) * 4;
-        tc->lf.cdef_line[0][1] = ptr;
-        tc->lf.cdef_line[1][1] = ptr + PXSTRIDE(f->cur.p.stride[1]) * 2;
-        tc->lf.cdef_line[0][2] = ptr + PXSTRIDE(f->cur.p.stride[1]) * 4;
-        tc->lf.cdef_line[1][2] = ptr + PXSTRIDE(f->cur.p.stride[1]) * 6;
+        uint8_t *ptr = dav2d_alloc_aligned(ALLOC_CDEF, cdef_bak_sz, 32) + 32;
+        tc->lf.cdef_line_buf = (pixel *) (ptr - 32);
+        tc->lf.cdef_line[0][0] = (pixel *) ptr;
+        tc->lf.cdef_line[1][0] = (pixel *) (ptr + f->cur.p.stride[0] * 2);
+        ptr += f->cur.p.stride[0] * 4;
+        tc->lf.cdef_line[0][1] = (pixel *) ptr;
+        tc->lf.cdef_line[1][1] = (pixel *) (ptr + f->cur.p.stride[1] * 2);
+        tc->lf.cdef_line[0][2] = (pixel *) (ptr + f->cur.p.stride[1] * 4);
+        tc->lf.cdef_line[1][2] = (pixel *) (ptr + f->cur.p.stride[1] * 6);
         tc->lf.cdef_line_sz = cdef_bak_sz;
     }
 
