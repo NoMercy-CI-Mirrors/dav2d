@@ -1147,12 +1147,10 @@ inv_dst_col_wrapper_s16 inv_flipddt16_1d_col_8bpc_neon, 4, ddt16_coeffs_s16, 15,
 // x6: howmany
 function inv_dct4_1d_row_8bpc_neon, export=1
         lsl             x12, x3,  #1
-
         cbz             w6,  99f
-        cbz             w5,  1f
+
         mov             w15, #RECT2_SCALE
         dup             v30.4h,  w15
-1:
         movi            v4.4h,   #83  // dct_qtable_s16[0]
         movi            v5.4h,   #35  // dct_qtable_s16[1]
         lsl             x15, x1,  #1
@@ -1218,12 +1216,10 @@ endfunc
 function inv_dct8_1d_row_8bpc_neon, export=1
         stp             d8,  d9,  [sp, #-16]!
         lsl             x13, x3,  #1
-
         cbz             w6,  99f
-        cbz             w5,  1f
+
         mov             w15, #RECT2_SCALE
         dup             v30.4h,  w15
-1:
         ldrel           q8,  x8,  dct_qtable_s16
         lsl             x15, x1,  #1
         neg             w14, w4
@@ -1302,12 +1298,10 @@ function inv_dct16_1d_row_8bpc_neon, export=1
         stp             d10, d11, [sp, #16]
         stp             d12, d13, [sp, #32]
         stp             d14, d15, [sp, #48]
-
         cbz             w6,  99f
-        cbz             w5,  1f
+
         mov             w15, #RECT2_SCALE
         dup             v30.4h,  w15
-1:
         neg             w14, w4
         dup             v31.4s,  w14
 
