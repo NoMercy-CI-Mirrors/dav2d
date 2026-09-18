@@ -132,9 +132,10 @@ typedef decl_cfl_mh_gen_mat_fn(*cfl_mh_gen_mat_fn);
 
 /*
  * alpha[3] = gauss elimination
+ *  NB: for SIMD convenience we use [4]
  */
 #define decl_cfl_mh_calc_alphas_fn(name) \
-void (name)(int alpha[3], const pixel *c, const pixel *top_sb_edge, \
+void (name)(int alpha[4], const pixel *c, const pixel *top_sb_edge, \
             ptrdiff_t stride, int refw, int refh, const int32_t mat[3][4], \
             const pixel imat[2][CFL_MH_MAX_EDGE_SAMPLES], \
             int edge_flags HIGHBD_DECL_SUFFIX)
@@ -147,7 +148,7 @@ typedef decl_cfl_mh_calc_alphas_fn(*cfl_mh_calc_alphas_fn);
  */
 #define decl_cfl_mh_pred_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, const pixel *src, \
-            int w, int h, const int alpha[3], int edge_flags HIGHBD_DECL_SUFFIX)
+            int w, int h, const int alpha[4], int edge_flags HIGHBD_DECL_SUFFIX)
 typedef decl_cfl_mh_pred_fn(*cfl_mh_pred_fn);
 
 /*

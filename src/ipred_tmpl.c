@@ -1355,7 +1355,7 @@ static int mul32(int a, int b, int sh) {
 }
 
 static void
-cfl_mh_calc_alphas_c(int alpha[3], const pixel *const c,
+cfl_mh_calc_alphas_c(int alpha[4], const pixel *const c,
                      const pixel *const top_sb_edge, const ptrdiff_t stride,
                      const int refw, const int refh,
                      const int32_t mat[3][4], const pixel imat[2][CFL_MH_MAX_EDGE_SAMPLES],
@@ -1426,7 +1426,7 @@ cfl_mh_calc_alphas_c(int alpha[3], const pixel *const c,
 
 static void
 cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *src,
-              const int w, const int h, const int alpha[3], const int edge_flags,
+              const int w, const int h, const int alpha[4], const int edge_flags,
               const enum CflMhDir dir HIGHBD_DECL_SUFFIX)
 {
     const int bd = bitdepth_from_max(bitdepth_max);
@@ -1472,7 +1472,7 @@ cfl_mh_pred_c(pixel *dst, const ptrdiff_t dst_stride, const pixel *src,
 #define cfl_mh_pred_fn(name, dir) \
 static void \
 cfl_mh_pred_##name##_c(pixel *dst, ptrdiff_t dst_stride,  const pixel *src, \
-                       int w, int h, const int alpha[3], int edge_flags \
+                       int w, int h, const int alpha[4], int edge_flags \
                        HIGHBD_DECL_SUFFIX) \
 { \
     cfl_mh_pred_c(dst, PXSTRIDE(dst_stride), src, w, h, alpha, edge_flags, dir \

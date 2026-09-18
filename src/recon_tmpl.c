@@ -3113,7 +3113,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
             dsp->ipred.cfl_mh_gen_mat(mat, imat, luma, refw, refh, flags HIGHBD_CALL_SUFFIX);
 
         for (int pl = 1; pl <= 2; pl++) {
-            int alpha[3];
+            int alpha[4]; // last entry is unused, for SIMD convenience
             pixel *chroma = ((pixel *) f->cur.p.data[pl]) +
                 4 * (ssby * PXSTRIDE(cstride) + ssbx);
             const pixel *const ctop_sb_edge = is_top_sb_edge ?

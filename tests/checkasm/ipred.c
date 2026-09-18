@@ -492,9 +492,9 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
 #endif
     const int bd = bitdepth_from_max(bitdepth_max);
     const int mid = 1 << (bd - 1);
-    int c_alpha[3], a_alpha[3];
+    int c_alpha[4], a_alpha[4];
 
-    declare_func(void, int alpha[3], const pixel *c, const pixel *top_sb_edge,
+    declare_func(void, int alpha[4], const pixel *c, const pixel *top_sb_edge,
                  ptrdiff_t stride, int refw, int refh, const int32_t mat[3][4],
                  const uint16_t imat[2][CFL_MH_MAX_EDGE_SAMPLES],
                  int edge_flags HIGHBD_DECL_SUFFIX);
@@ -553,8 +553,8 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
         call_new(a_alpha, chroma, itse ? chroma + PXSTRIDE(chroma_stride) : NULL,
                  chroma_stride, refw, refh, mat, imat, edge_flags HIGHBD_TAIL_SUFFIX);
 
-        if (memcmp(c_alpha, a_alpha, sizeof(c_alpha)) && fail())
-            fprintf(stderr, "expected { %d, %d, %d }, got { %d, %d, %d }\n",
+        if (memcmp(c_alpha, a_alpha, 3 * sizeof(*c_alpha)) && fail())
+            fprintf(stderr, "expected { %x, %x, %x }, got { %x, %x, %x }\n",
                     c_alpha[0], c_alpha[1], c_alpha[2],
                     a_alpha[0], a_alpha[1], a_alpha[2]);
 
@@ -569,7 +569,7 @@ static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
     ALIGN_STK_64(pixel, luma_buf, CFL_MH_MAX_LUMA_SIZE,);
     PIXEL_RECT(c_chroma, 32, 32);
     PIXEL_RECT(a_chroma, 32, 32);
-    int alpha[3];
+    int alpha[4];
 #if BITDEPTH == 16
     const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
@@ -584,7 +584,7 @@ static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
         alpha[i] = (rnd() & 1 ? -1 : 1) * rnd() % (0x1000000);
 
     declare_func(void, pixel *dst, ptrdiff_t dst_stride, const pixel *src,
-                 int w, int h, const int alpha[3], int edge_flags HIGHBD_DECL_SUFFIX);
+                 int w, int h, const int alpha[4], int edge_flags HIGHBD_DECL_SUFFIX);
 
     for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++)
         for (int w = 4; w <= 32; w <<= 1)
