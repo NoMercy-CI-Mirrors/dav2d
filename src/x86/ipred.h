@@ -73,6 +73,7 @@
 #define init_cfl_mh_fns(suffix) \
     init_cfl_mh_gen_y_fns(420, suffix); \
     c->cfl_mh_gen_mat = BF(dav2d_cfl_mh_gen_mat, suffix); \
+    c->cfl_mh_calc_alphas = BF(dav2d_cfl_mh_calc_alphas, suffix); \
     init_cfl_mh_pred_fns(suffix)
 
 decl_fn(angular_ipred, ipred_dc);
@@ -90,15 +91,16 @@ decl_fn(angular_ipred, ipred_z2);
 decl_fn(angular_ipred, ipred_z3);
 decl_fn(angular_ipred, ipred_dip);
 
-decl_fn(cfl_pred,       cfl_explicit_420);
-decl_fn(cfl_pred,       cfl_implicit_420);
-decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_uniform);
-decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_vstrip);
-decl_fn(cfl_mh_gen_y,   cfl_mh_gen_y_420_gauss);
-decl_fn(cfl_mh_gen_mat, cfl_mh_gen_mat);
-decl_fn(cfl_mh_pred,    cfl_mh_pred_c);
-decl_fn(cfl_mh_pred,    cfl_mh_pred_t);
-decl_fn(cfl_mh_pred,    cfl_mh_pred_l);
+decl_fn(cfl_pred,           cfl_explicit_420);
+decl_fn(cfl_pred,           cfl_implicit_420);
+decl_fn(cfl_mh_gen_y,       cfl_mh_gen_y_420_uniform);
+decl_fn(cfl_mh_gen_y,       cfl_mh_gen_y_420_vstrip);
+decl_fn(cfl_mh_gen_y,       cfl_mh_gen_y_420_gauss);
+decl_fn(cfl_mh_gen_mat,     cfl_mh_gen_mat);
+decl_fn(cfl_mh_calc_alphas, cfl_mh_calc_alphas);
+decl_fn(cfl_mh_pred,        cfl_mh_pred_c);
+decl_fn(cfl_mh_pred,        cfl_mh_pred_t);
+decl_fn(cfl_mh_pred,        cfl_mh_pred_l);
 
 decl_fn(pal_pred, pal_pred);
 

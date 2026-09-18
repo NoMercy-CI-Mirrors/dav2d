@@ -1315,7 +1315,6 @@ static void get_div_scale_sh(int d, int *scale, int *sh) {
     // 2. Clip the scaled value to make sure it's within the valid range
     // [1, 2), represented as： [1 << 14, (1 << 15) - 1].
     // The rounding in 1. may push the value out of range, so clipping is needed.
-    // XXX looks like this could just be an imin
     d = iclip(d, 1, 0x7fff);
     // 3. Extract the fractional part of the normalized denominator d.
     d &= (1 << 14) - 1;
@@ -1400,27 +1399,35 @@ cfl_mh_calc_alphas_c(int alpha[4], const pixel *const c,
 
     // Gaussian elimination
     int tmp[3][2], scale, sh;
-    // row0
+    // col0
     get_div_scale_sh(mat[0][0], &scale, &sh);
+    //   row0 /= row0[0]
     tmp[0][0] = mul32(mat[0][1], scale, sh);
     tmp[0][1] = mul32(mat[0][2], scale, sh);
     alpha[0]  = mul32(alpha[0],  scale, sh);
+    //   row1 -= row1[0] * row0
     tmp[1][0] = mat[1][1] - mul32(mat[1][0], tmp[0][0], 16);
     tmp[1][1] = mat[1][2] - mul32(mat[1][0], tmp[0][1], 16);
     alpha[1]  -= mul32(mat[1][0], alpha[0],  16);
+    //   row2 -= row2[0] * row0
     tmp[2][0] = mat[2][1] - mul32(mat[2][0], tmp[0][0], 16);
     tmp[2][1] = mat[2][2] - mul32(mat[2][0], tmp[0][1], 16);
     alpha[2]  -= mul32(mat[2][0], alpha[0],  16);
-    // row1
+    // col1
     get_div_scale_sh(tmp[1][0], &scale, &sh);
+    //   row1 /= row1[1]
     tmp[1][1] = mul32(tmp[1][1], scale, sh);
     alpha[1]  = mul32(alpha[1],  scale, sh);
+    //   row2 -= row2[1] * row1
     tmp[2][1] -= mul32(tmp[2][0], tmp[1][1], 16);
     alpha[2]  -= mul32(tmp[2][0], alpha[1],  16);
-    // row2
+    // col2
     get_div_scale_sh(tmp[2][1], &scale, &sh);
+    //   a2 /= row2[2]
     alpha[2] = mul32(alpha[2], scale, sh);
+    //   a1 -= row1[2] * a2
     alpha[1] -= mul32(tmp[1][1], alpha[2], 16);
+    //   a0 -= row0[1] * a1 + row0[2] * a2
     alpha[0] -= mul32(tmp[0][0], alpha[1], 16) + mul32(tmp[0][1], alpha[2], 16);
 }
 

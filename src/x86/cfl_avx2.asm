@@ -69,9 +69,11 @@ pb_flt2: times 2 db 4, 1
          times 2 db 6, 1
 pw_128:  times 2 dw 128
 pw_1024: times 2 dw 1024
+pd_1:            dd 1
 pd_18:           dd 18
 pd_29:           dd 29
 pd_126:          dd 126
+pd_281:          dd 281
 pd_511:          dd 511
 
 %macro JMP_TABLE 1-*
@@ -129,6 +131,9 @@ JMP_TABLE2 cfl_mh_gen_y_420_gauss_8bpc_avx2, blk, 2, \
     blk.w4, blk.w8, blk.w16, blk.w32
 
 cextern div_recip
+cextern div_scale_sh_coefw
+cextern div_scale_sh_bias
+cextern div_scale_sh_offset
 
 SECTION .text
 
@@ -5100,6 +5105,288 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     mova             [matq+16], xm1
     mova             [matq+32], xm0
     RET
+
+cglobal cfl_mh_calc_alphas_8bpc, 4, 15, 15, a, src, tse, ss, refw, refh, mat, \
+                                            imat, flags, n, top
+ DECLARE_REG_TMP 12, 13, 14
+    mov                 flagsd, flagsm
+    mov                  refwd, refwm
+    mov                  refhd, refhm
+    mov                  imatq, imatmp
+    mov                   matq, matmp
+    lea                     nd, [refwq+refhq]
+    pxor                    m0, m0
+    test                flagsb, 0x4             ; has_t
+    jz .left
+
+;.top:
+    lea                    r11, [mh_smpl_msk]
+%define base r11-mh_smpl_msk
+    vpbroadcastd           m13, [base+pw_128]
+    mov                     t0, ssq
+    neg                     t0
+    lea                   topq, [srcq+t0]
+    test                flagsb, 0x10            ; is_top_sb_edge
+    cmovnz                topq, tseq
+    xor                    t0d, t0d
+    xor                    t1d, t1d
+    test                flagsb, 0x8             ; has_l
+    setnz                  t0b
+    setz                   t1b
+    sub                   topq, t0
+    add                   topq, t1
+    mov                    t2d, refwd
+    add                   topq, refwq
+    add                  imatq, refwq
+    mov                    t1d, 32
+    and                    t2d, 31
+    xor                    t0d, t0d
+    sub                    t1d, t2d
+    neg                  refwq
+    mov                     t2, refwq
+    pxor                   m10, m10
+    pxor                    m1, m1
+    pxor                    m2, m2
+
+.top.loop:
+    cmp                  refwd, -31
+    cmovae                  t0, t1
+    movu                   m14, [base+mh_smpl_msk+t0]
+    pand                    m3, m14, [topq+refwq]
+    pand                    m4, m14, [imatq+  0+refwq]
+    pand                    m5, m14, [imatq+386+refwq]
+    punpcklbw               m6, m3, m10
+    punpcklbw               m7, m4, m10
+    punpcklbw               m8, m5, m10
+    punpckhbw               m3, m10
+    punpckhbw               m4, m10
+    punpckhbw               m5, m10
+    REPX       {pmaddwd x, m6}, m7, m8
+    REPX       {pmaddwd x, m3}, m4, m5
+    REPX      {pmaddwd x, m13}, m6, m3
+    REPX         {paddd m0, x}, m6, m3
+    REPX         {paddd m1, x}, m7, m4
+    REPX         {paddd m2, x}, m8, m5
+    add                  refwq, 32
+    jl .top.loop
+    vextracti128           xm3, m0, 1
+    vextracti128           xm4, m1, 1
+    vextracti128           xm5, m2, 1
+    paddd                  xm0, xm3
+    paddd                  xm1, xm4
+    paddd                  xm2, xm5
+    punpckhqdq             xm3, xm0, xm0
+    punpckhqdq             xm4, xm1, xm1
+    punpckhqdq             xm5, xm2, xm2
+    paddd                  xm0, xm3
+    paddd                  xm1, xm4
+    paddd                  xm2, xm5
+    punpcklqdq             xm1, xm2
+    psrlq                  xm3, xm0, 32
+    psrlq                  xm2, xm1, 32
+    paddd                  xm0, xm3
+    paddd                  xm1, xm2
+    shufps                 xm0, xm1, xm0, q2020
+
+ INIT_XMM avx2
+ DEFINE_ARGS a, src, _, ss, _, refh, mat, imat, flags, n, _
+ DECLARE_REG_TMP 2, 4, 11, 12, 13, 14
+.left:
+    test                flagsb, 0x8
+    jz .shift
+    xor                    t0d, t0d
+    test                flagsb, 0x4
+    cmovz                   t0, ssq
+    add                  imatq, refhq
+    neg                  refhq
+    add                   srcq, t0
+    ; todo try a simd version where we load every 16 rows
+    xor                    t0d, t0d
+    xor                    t1d, t1d
+    xor                    t2d, t2d
+.left.loop:
+    movzx                  t3d, byte [srcq-1]
+    movzx                  t4d, byte [imatq+  0+refhq]
+    movzx                  t5d, byte [imatq+386+refhq]
+    add                   srcq, ssq
+    imul                   t4d, t3d
+    imul                   t5d, t3d
+    add                    t2d, t3d
+    add                    t0d, t4d
+    add                    t1d, t5d
+    inc                  refhq
+    jl .left.loop
+    shl                    t2d, 7
+    movd                    m1, t0d
+    pinsrd                  m1, t1d, 1
+    pinsrd                  m1, t2d, 2
+    paddd                   m0, m1
+
+.shift:
+    mov                    t1d, -1
+    lzcnt                  t0d, nd
+    xor                    t0d, 31              ; nl2
+    bzhi                   t1d, t1d, t0d
+    mov                    t3d, 6
+    test                    nd, t1d
+    setnz                  t1b                  ; !!(n & ((1 << nl2) - 1))
+    sub                    t3d, t0d
+    sub                    t3d, t1d             ; mat_sh
+    jl .rshift
+;.lshift:
+    movd                    m1, t3d
+    pslld                   m0, m1
+    jmp .gauss_elim
+.rshift:
+    neg                    t3d
+    movd                    m1, t3d
+    psrld                   m0, m1
+
+ DEFINE_ARGS a, coef, _, bias, _, off, mat, imat, flags, n, _
+.gauss_elim:
+    mova                    m3, [matq+ 0]
+    mova                    m1, [matq+16]
+    mova                    m2, [matq+32]
+    pslldq                  m4, m0, 8
+    pslldq                  m5, m0, 4
+    pslldq                  m0, 12
+    lea                  coefq, [div_scale_sh_coefw]
+    lea                  biasq, [div_scale_sh_bias]
+    lea                   offq, [div_scale_sh_offset]
+    movd                   t0d, m3
+    call .get_div_scale_sh                      ; row0[0] div scale / sh
+    vpbroadcastd            m6, [pd_281]
+    vpbroadcastd           m14, [pd_1]
+    movd                    m7, t1d             ; scale
+    movd                    m8, t0d             ; sh
+    vpblendd                m0, m3, 0x7         ; row0
+    vpblendd                m1, m4, 0x8         ; row1
+    vpblendd                m2, m5, 0x8         ; row2
+    vpbroadcastd            m7, m7
+    vpbroadcastd            m8, m8
+    call .mul32                                 ; row0 /= row0[0]
+    vpbroadcastd            m0, m1
+    pslld                   m8, m14, 4          ; pd_16
+    mova                    m7, m10
+    mova                   m13, m10
+    call .mul32
+    psubd                   m1, m10             ; row1 -= row1[0] * row0
+    vpbroadcastd            m0, m2
+    call .mul32
+    psubd                   m2, m10             ; row2 -= row2[0] * row0
+    pextrd                 t0d, m1, 1
+    call .get_div_scale_sh                      ; row1[1] div scale / sh
+    mova                   m11, m8
+    mova                    m0, m1
+    movd                    m7, t1d
+    movd                    m8, t0d
+    vpbroadcastd            m7, m7
+    vpbroadcastd            m8, m8
+    call .mul32                                 ; row1 /= row1[1]
+    psrlq                   m0, m2, 32
+    vpbroadcastd            m0, m0
+    mova                    m7, m10
+    mova                    m8, m11
+    mova                   m12, m10
+    call .mul32
+    psubd                   m0, m2, m10         ; row2 -= row2[1] * row1
+    pextrd                 t0d, m0, 2
+    call .get_div_scale_sh                      ; row2[2] div scale / sh
+    psrldq                  m0, 12
+    movd                    m7, t1d
+    movd                    m8, t0d
+    call .mul32                                 ; a2 /= row2[2]
+    psrldq                  m0, xm12, 8
+    mova                    m7, xm10
+    mova                    m8, xm11
+    call .mul32
+    psrldq                  m0, m12, 12
+    psubd                   m0, m10             ; a1 -= row1[2] * a2
+    shufps                  m7, m0, xm7, q0000  ; _, a1, a2, _
+    mova                    m0, m13
+    call .mul32
+    psrlq                   m1, m10, 32
+    psrldq                  m2, m10, 8
+    psrldq                  m3, m13, 12
+    paddd                   m1, m2              ; a0 -= row0[1] * a1 +
+    psubd                   m3, m1              ;       row0[2] * a2
+    vpblendd                m7, m3, 0x1
+    mova                  [aq], m7
+ INIT_YMM avx2
+    RET
+ INIT_XMM avx2
+
+.mul32: ; in m0, m7 - out m10
+    pabsd                   m3, m0
+    pabsd                   m4, m7
+    REPX       {cvtdq2ps x, x}, m3, m4
+    REPX         {psrld x, 23}, m3, m4
+    paddw                   m3, m4
+    psubusw                 m3, m6              ; drop
+    psrld                   m4, m3, 1           ; ash
+    psubd                   m5, m3, m4          ; bsh
+    vpsravd                 m9, m0, m4
+    vpsravd                m10, m7, m5
+    pmulld                  m9, m10
+    pcmpgtd                 m4, m8, m3          ; adj > 0
+    psubd                   m3, m8, m3          ; adj
+    pabsd                  m10, m9
+    psubd                   m5, m3, m14
+    vpsllvd                 m5, m14, m5         ; bias
+    paddd                  m10, m5
+    vpsrlvd                m10, m3              ; (mul + bias) >> adj
+    psignd                 m10, m9
+    pand                   m10, m4
+    pandn                   m4, m9
+    por                    m10, m4
+    ret
+ INIT_YMM avx2
+
+.get_div_scale_sh:
+    xor                    t1d, t1d
+    mov                    t2d, 1
+    sub                    t1d, t0d
+    cmovs                  t1d, t0d
+    cmovz                  t1d, t2d             ; d = imax(1, abs(d))
+    lzcnt                  t0d, t1d
+    xor                    t0d, 31              ; sh
+    mov                    t2d, t0d
+    sub                    t2d, 14              ; nsh
+    jle .lshift
+;.rshift:
+    mov                    t3d, 1
+    lea                    t4d, [t2-1]
+    shlx                   t3d, t3d, t4d
+    add                    t1d, t3d
+    shrx                   t1d, t1d, t2d
+    jmp .clip
+.lshift:
+    neg                    t2d
+    shlx                   t1d, t1d, t2d
+.clip:
+    mov                    t2d, 1
+    mov                    t3d, 0x7fff
+    cmp                    t1d, t2d
+    cmovb                  t1d, t2d
+    cmp                    t3d, t1d
+    cmovb                  t1d, t3d             ; d = iclip(d, 1, (1 << 15) - 1)
+    and                    t1d, 0x3fff          ; d &= (1 << 14) - 1
+    mov                    t2d, t1d
+    shr                    t2d, 11
+    movzx                  t3d, word [offq+t2*2]
+    movzx                  t4d, byte [coefq+t2]
+    movzx                  t5d, word [biasq+t2*2]
+    sub                    t1d, t3d
+    mov                    t2d, t1d
+    imul                   t1d, t1d
+    shr                    t1d, 14
+    imul                   t1d, t4d
+    shr                    t2d, 1
+    shr                    t1d, 8
+    sub                    t2d, t5d
+    sub                    t1d, t2d
+    shl                    t1d, 2               ; scale
+    ret
 
 cglobal cfl_mh_pred_c_8bpc, 4, 13, 16, dst, ds, src, w, h, a, _, a2, _
  DECLARE_REG_TMP 9, 10, 11, 12

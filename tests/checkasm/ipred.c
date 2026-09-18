@@ -492,7 +492,8 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
 #endif
     const int bd = bitdepth_from_max(bitdepth_max);
     const int mid = 1 << (bd - 1);
-    int c_alpha[4], a_alpha[4];
+    ALIGN_STK_16(int, c_alpha, 4,);
+    ALIGN_STK_16(int, a_alpha, 4,);
 
     declare_func(void, int alpha[4], const pixel *c, const pixel *top_sb_edge,
                  ptrdiff_t stride, int refw, int refh, const int32_t mat[3][4],
@@ -505,8 +506,8 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
     if (check_func(c->cfl_mh_calc_alphas, "cfl_mh_calc_alphas_%dbpc", BITDEPTH)) {
         const int has_t = rnd() & 1;
         const int has_l = has_t ? rnd() & 1 : 1;
-        const int edge_flags = (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
-        const int itse = rnd() & 1;
+        const int itse = rnd() & CFL_IS_TOP_SB_EDGE;
+        const int edge_flags = itse | (has_t * CFL_HAS_TOP) | (has_l * CFL_HAS_LEFT);
         const int dir = rnd() % 3;
         int refw = 4 + 4 * (rnd() & 15) + has_l - 1 - !has_l;
         int refh = 4 + 4 * (rnd() & 15) - 1 - !has_t;
@@ -558,6 +559,9 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
                     c_alpha[0], c_alpha[1], c_alpha[2],
                     a_alpha[0], a_alpha[1], a_alpha[2]);
 
+        // Most common ref values are 16 and 8
+        refw = 1 << (3 + (rnd() & 1));
+        refh = (1 << (3 + (rnd() & 1))) - 1;
         bench_new(a_alpha, chroma, itse ? chroma + PXSTRIDE(chroma_stride) : NULL,
                   chroma_stride, refw, refh, mat, imat, edge_flags HIGHBD_TAIL_SUFFIX);
     }
@@ -567,9 +571,9 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
 
 static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
     ALIGN_STK_64(pixel, luma_buf, CFL_MH_MAX_LUMA_SIZE,);
+    ALIGN_STK_16(int, alpha, 4,);
     PIXEL_RECT(c_chroma, 32, 32);
     PIXEL_RECT(a_chroma, 32, 32);
-    int alpha[4];
 #if BITDEPTH == 16
     const int bitdepth_max = rnd() & 1 ? 0x3ff : 0xfff;
 #else
