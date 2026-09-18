@@ -4056,8 +4056,8 @@ void bytefn(dav2d_filter_slice_cdef)(Dav2dTaskContext *const tc, const int by64)
     const size_t cdef_bak_sz = 64 + f->cur.p.stride[0] * 4 + f->cur.p.stride[1] * 8;
     if (cdef_bak_sz > tc->lf.cdef_line_sz) {
         dav2d_free_aligned(tc->lf.cdef_line_buf);
-        uint8_t *ptr = dav2d_alloc_aligned(ALLOC_CDEF, cdef_bak_sz, 32) + 32;
-        tc->lf.cdef_line_buf = (pixel *) (ptr - 32);
+        tc->lf.cdef_line_buf = dav2d_alloc_aligned(ALLOC_CDEF, cdef_bak_sz, 32);
+        uint8_t *ptr = (uint8_t *) tc->lf.cdef_line_buf + 32;
         tc->lf.cdef_line[0][0] = (pixel *) ptr;
         tc->lf.cdef_line[1][0] = (pixel *) (ptr + f->cur.p.stride[0] * 2);
         ptr += f->cur.p.stride[0] * 4;
