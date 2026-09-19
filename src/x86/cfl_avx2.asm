@@ -70,9 +70,8 @@ pb_flt2: times 2 db 4, 1
 pw_128:  times 2 dw 128
 pw_1024: times 2 dw 1024
 pd_1:            dd 1
+pd_16:           dd 16
 pd_18:           dd 18
-pd_29:           dd 29
-pd_126:          dd 126
 pd_281:          dd 281
 pd_511:          dd 511
 
@@ -5392,13 +5391,13 @@ cglobal cfl_mh_pred_c_8bpc, 4, 13, 16, dst, ds, src, w, h, a, _, a2, _
  DECLARE_REG_TMP 9, 10, 11, 12
     movifnidn               aq, amp
     movifnidn               hd, hm
-    lea                     r8, [pd_126]
-%define base r8-pd_126
+    lea                     r8, [pd_281]
+%define base r8-pd_281
     call .prep_a0_a1
     call .calc_a2v2
     movd                  xm15, a2d
-    vpbroadcastd            m9, [base+pd_126]
-    vpbroadcastd           m10, [base+pd_29]
+    vpbroadcastd            m9, [base+pd_281]
+    vpbroadcastd           m10, [base+pd_16]
     vpbroadcastd           m15, xm15
     cmp                     wd, 8
     je .w8
@@ -5454,19 +5453,14 @@ cglobal cfl_mh_pred_c_8bpc, 4, 13, 16, dst, ds, src, w, h, a, _, a2, _
     RET
 
 .pred:
-    pcmpeqd                 m7, m7
-    psrld                   m7, 31              ; pd_1
-    pslld                   m8, m7, 4           ; pd_16
     psllw                   m3, m1, 7
     pmulhrsw                m1, m3
-    por                     m2, m0, m7
-    por                     m3, m1, m7
-    REPX       {cvtdq2ps x, x}, m2, m3
+    cvtdq2ps                m2, m0
+    cvtdq2ps                m3, m1
     REPX         {psrld x, 23}, m2, m3
-    REPX         {psubd x, m9}, m2, m3
-    paddd                   m2, m11
-    paddd                   m3, m12
-    REPX      {psubusw x, m10}, m2, m3          ; drop
+    paddw                   m2, m11
+    paddw                   m3, m12
+    REPX       {psubusw x, m9}, m2, m3          ; drop
     psrld                   m4, m2, 1           ; ash
     psrld                   m5, m3, 1
     psubd                   m6, m2, m4          ; bsh
@@ -5477,11 +5471,11 @@ cglobal cfl_mh_pred_c_8bpc, 4, 13, 16, dst, ds, src, w, h, a, _, a2, _
     vpsravd                 m5, m14, m5
     pmulld                  m0, m4
     pmulld                  m1, m5
-    psubd                   m2, m8, m2          ; adj
-    psubd                   m3, m8, m3
+    psubd                   m2, m10, m2          ; adj
+    psubd                   m3, m10, m3
     pabsd                   m4, m0
     pabsd                   m5, m1
-    psrld                   m8, 4
+    psrld                   m8, m10, 4
     psubd                   m6, m2, m8
     psubd                   m7, m3, m8
     vpsllvd                 m6, m8, m6
@@ -5500,17 +5494,11 @@ cglobal cfl_mh_pred_c_8bpc, 4, 13, 16, dst, ds, src, w, h, a, _, a2, _
 .prep_a0_a1:
     vpbroadcastd           m13, [aq+0]
     vpbroadcastd           m14, [aq+4]
-    pcmpeqd                m10, m10
-    psrld                   m9, m10, 31         ; pd_1
-    psrld                  m10, 25              ; pd_127
     pabsd                  m11, m13
     pabsd                  m12, m14
     REPX          {pabsd x, x}, m11, m12
-    REPX           {por x, m9}, m11, m12
     REPX       {cvtdq2ps x, x}, m11, m12
     REPX         {psrld x, 23}, m11, m12
-    REPX        {psubd x, m10}, m11, m12
-    REPX         {paddd x, m9}, m11, m12
     ret
 
 .calc_a2v2:
@@ -5555,13 +5543,13 @@ cglobal cfl_mh_pred_t_8bpc, 4, 13, 16, dst, ds, src, w, h, a, flags, a2, _
     mov                 flagsd, flagsm
     movifnidn               aq, amp
     movifnidn               hd, hm
-    lea                     r8, [pd_126]
-%define base r8-pd_126
+    lea                     r8, [pd_281]
+%define base r8-pd_281
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).prep_a0_a1
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).calc_a2v2
     movd                  xm15, a2d
-    vpbroadcastd            m9, [base+pd_126]
-    vpbroadcastd           m10, [base+pd_29]
+    vpbroadcastd            m9, [base+pd_281]
+    vpbroadcastd           m10, [base+pd_16]
     vpbroadcastd           m15, xm15
     mov                     t1, -64
     xor                    t2d, t2d
@@ -5641,13 +5629,13 @@ cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
     mov                 flagsd, flagsm
     movifnidn               aq, amp
     movifnidn               hd, hm
-    lea                     r8, [pd_126]
-%define base r8-pd_126
+    lea                     r8, [pd_281]
+%define base r8-pd_281
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).prep_a0_a1
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).calc_a2v2
     movd                  xm15, a2d
-    vpbroadcastd            m9, [base+pd_126]
-    vpbroadcastd           m10, [base+pd_29]
+    vpbroadcastd            m9, [base+pd_281]
+    vpbroadcastd           m10, [base+pd_16]
     vpbroadcastd           m15, xm15
     test                flagsb, 0x8
     jz .no_left
