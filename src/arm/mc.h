@@ -49,6 +49,9 @@ decl_w_mask_fn(BF(dav2d_w_mask_420, neon));
 
 decl_warp8x8_fn(BF(dav2d_warp_affine_8x8, neon));
 decl_warp8x8t_fn(BF(dav2d_warp_affine_8x8t, neon));
+#if ARCH_AARCH64 && BITDEPTH == 8
+decl_ext_warp4x4_fn(BF(dav2d_ext_warp4x4, neon));
+#endif
 
 decl_emu_edge_fn(BF(dav2d_emu_edge, neon));
 
@@ -91,6 +94,9 @@ static ALWAYS_INLINE void mc_dsp_init_arm(Dav2dMCDSPContext *const c) {
     c->sad_refine_mv = BF(dav2d_sad_refine_mv, neon);
     c->sad8x8 = BF(dav2d_sad8x8, neon);
     c->opfl_refine_mv = BF(dav2d_opfl_refine_mv, neon);
+#if BITDEPTH == 8
+    c->ext_warp4x4 = BF(dav2d_ext_warp4x4, neon);
+#endif
 #endif  // ARCH_AARCH64
 
 #if ARCH_AARCH64

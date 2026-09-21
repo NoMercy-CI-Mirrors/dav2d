@@ -3709,3 +3709,334 @@ L(end):
         ldp             d8,  d9,  [sp], #80
         ret
 endfunc
+
+const ext_warp4x4_h_store_tbl, align=4
+        // Pack col0|col2 and col1|col3 into four 32-bit rows:
+        // rowN = col0[N], col1[N], col2[N], col3[N].
+        .byte 0, 16, 4, 20, 1, 17, 5, 21, 2, 18, 6, 22, 3, 19, 7, 23
+endconst
+
+// Horizontal 4x4 filter over 8 rows in parallel.
+// Computes taps 1..3 and 4..6 in signed 16-bit partial sums,
+// then combines them with a halving add into 16-bit accumulators.
+// Temp registers v24-v27.
+.macro warp_4x4_16b_convolve_neon acc0, acc1, acc2, acc3, f, \
+                                  s0, s1, s2, s3, s4, s5, s6, s7, s8
+        mul             v24.8h,  \s0\().8h,  \f\().h[1]
+        mul             v25.8h,  \s3\().8h,  \f\().h[4]
+        mul             v26.8h,  \s1\().8h,  \f\().h[1]
+        mul             v27.8h,  \s4\().8h,  \f\().h[4]
+        mla             v24.8h,  \s1\().8h,  \f\().h[2]
+        mla             v25.8h,  \s4\().8h,  \f\().h[5]
+        mla             v26.8h,  \s2\().8h,  \f\().h[2]
+        mla             v27.8h,  \s5\().8h,  \f\().h[5]
+        mla             v24.8h,  \s2\().8h,  \f\().h[3]
+        mla             v25.8h,  \s5\().8h,  \f\().h[6]
+        mla             v26.8h,  \s3\().8h,  \f\().h[3]
+        mla             v27.8h,  \s6\().8h,  \f\().h[6]
+        shadd           \acc0\().8h,  v24.8h,  v25.8h
+        shadd           \acc1\().8h,  v26.8h,  v27.8h
+
+        mul             v24.8h,  \s2\().8h,  \f\().h[1]
+        mul             v25.8h,  \s5\().8h,  \f\().h[4]
+        mul             v26.8h,  \s3\().8h,  \f\().h[1]
+        mul             v27.8h,  \s6\().8h,  \f\().h[4]
+        mla             v24.8h,  \s3\().8h,  \f\().h[2]
+        mla             v25.8h,  \s6\().8h,  \f\().h[5]
+        mla             v26.8h,  \s4\().8h,  \f\().h[2]
+        mla             v27.8h,  \s7\().8h,  \f\().h[5]
+        mla             v24.8h,  \s4\().8h,  \f\().h[3]
+        mla             v25.8h,  \s7\().8h,  \f\().h[6]
+        mla             v26.8h,  \s5\().8h,  \f\().h[3]
+        mla             v27.8h,  \s8\().8h,  \f\().h[6]
+        shadd           \acc2\().8h,  v24.8h,  v25.8h
+        shadd           \acc3\().8h,  v26.8h,  v27.8h
+.endm
+
+// Vertical 4x4 filter with s0..s7 packed as s0|s4, s1|s5, s2|s6, s3|s7.
+.macro warp_4x4_32b_convolve_neon acc0, acc1, acc2, acc3, f, \
+                                  s04, s15, s26, s37, s8
+        smull           \acc0\().4s,  \s04\().4h,  \f\().h[1]
+        smull           \acc1\().4s,  \s15\().4h,  \f\().h[1]
+        smull           \acc2\().4s,  \s26\().4h,  \f\().h[1]
+        smull           \acc3\().4s,  \s37\().4h,  \f\().h[1]
+        smlal           \acc0\().4s,  \s15\().4h,  \f\().h[2]
+        smlal           \acc1\().4s,  \s26\().4h,  \f\().h[2]
+        smlal           \acc2\().4s,  \s37\().4h,  \f\().h[2]
+        smlal2          \acc3\().4s,  \s04\().8h,  \f\().h[2]
+        smlal           \acc0\().4s,  \s26\().4h,  \f\().h[3]
+        smlal           \acc1\().4s,  \s37\().4h,  \f\().h[3]
+        smlal2          \acc2\().4s,  \s04\().8h,  \f\().h[3]
+        smlal2          \acc3\().4s,  \s15\().8h,  \f\().h[3]
+        smlal           \acc0\().4s,  \s37\().4h,  \f\().h[4]
+        smlal2          \acc1\().4s,  \s04\().8h,  \f\().h[4]
+        smlal2          \acc2\().4s,  \s15\().8h,  \f\().h[4]
+        smlal2          \acc3\().4s,  \s26\().8h,  \f\().h[4]
+        smlal2          \acc0\().4s,  \s04\().8h,  \f\().h[5]
+        smlal2          \acc1\().4s,  \s15\().8h,  \f\().h[5]
+        smlal2          \acc2\().4s,  \s26\().8h,  \f\().h[5]
+        smlal2          \acc3\().4s,  \s37\().8h,  \f\().h[5]
+        smlal2          \acc0\().4s,  \s15\().8h,  \f\().h[6]
+        smlal2          \acc1\().4s,  \s26\().8h,  \f\().h[6]
+        smlal2          \acc2\().4s,  \s37\().8h,  \f\().h[6]
+        smlal           \acc3\().4s,  \s8\().4h,   \f\().h[6]
+.endm
+
+.macro ext_warp4x4x2_h_filter_8bpc_neon acc0, acc1, acc2, acc3
+        sub             x6,  x2,  #1                   // src - 1
+        sub             x8,  x2,  #2                   // src - 2
+        add             x7,  x6,  x3, lsl #1           // src + 2 * src_stride - 1
+        add             x9,  x8,  x3, lsl #1           // src + 2 * src_stride - 2
+
+        ldrb            w13, [x8]                      // src[0 * src_stride - 2]
+        ldrb            w10, [x8, x3]                  // src[1 * src_stride - 2]
+        sxtl            v0.8h,   v0.8b
+        ldrb            w11, [x9]                      // src[2 * src_stride - 2]
+        ldrb            w12, [x9, x3]                  // src[3 * src_stride - 2]
+        orr             w13, w13, w10, lsl #16         // src[0 * src_stride - 2] | (src[1 * src_stride - 2] << 16)
+        ldr             d3,  [x6]                      // r0 = src[0 * src_stride - 1]
+        ldr             d4,  [x6, x3]                  // r1 = src[1 * src_stride - 1]
+        orr             w11, w11, w12, lsl #16         // src[2 * src_stride - 2] | (src[3 * src_stride - 2] << 16)
+        add             x8,  x8,  x3, lsl #2
+        ldr             d5,  [x7]                      // r2 = src[2 * src_stride - 1]
+        ldr             d6,  [x7, x3]                  // r3 = src[3 * src_stride - 1]
+        add             x9,  x9,  x3, lsl #2
+        orr             x13, x13, x11, lsl #32         // s0.h[0..3] = src[(0..3) * src_stride - 2]
+        ldrb            w14, [x8]                      // src[4 * src_stride - 2]
+        ldrb            w15, [x8, x3]                  // src[5 * src_stride - 2]
+        add             x6,  x6,  x3, lsl #2
+        add             x7,  x7,  x3, lsl #2
+        ldrb            w10, [x9]                      // src[6 * src_stride - 2]
+        ldrb            w12, [x9, x3]                  // src[7 * src_stride - 2]
+        orr             w14, w14, w15, lsl #16         // src[4 * src_stride - 2] | (src[5 * src_stride - 2] << 16)
+        orr             w10, w10, w12, lsl #16         // src[6 * src_stride - 2] | (src[7 * src_stride - 2] << 16)
+        ldr             d16, [x6]                      // r4 = src[4 * src_stride - 1]
+        ldr             d17, [x6, x3]                  // r5 = src[5 * src_stride - 1]
+        orr             x14, x14, x10, lsl #32         // s0.h[4..7] = src[(4..7) * src_stride - 2]
+        fmov            d2,  x13
+        ldr             d18, [x7]                      // r6 = src[6 * src_stride - 1]
+        ldr             d19, [x7, x3]                  // r7 = src[7 * src_stride - 1]
+        mov             v2.d[1], x14
+        transpose_8x8b_xtl v3, v4, v5, v6, v16, v17, v18, v19, uxtl
+
+        // Input: v0.h[1..6] filter, v2/v3/v4/v5/v6/v16/v17/v18/v19 sample columns.
+        // Output: \acc0..\acc3 contain 16-bit half-scaled columns for 8 rows.
+        warp_4x4_16b_convolve_neon \acc0, \acc1, \acc2, \acc3, v0, \
+                                   v2,  v3,  v4,  v5,  v6,  v16, v17, v18, v19
+.endm
+
+.macro ext_warp4x4_h_8bpc_neon
+        movrel          x7,  X(ext_warp_filter), -8
+        sub             x6,  x2,  #1                   // src - 1
+        ldr             d0,  [x7, w4, uxtw #3]         // fh = dav2d_ext_warp_filter[mx - 1]
+        add             x7,  x6,  x3, lsl #1           // src + 2 * src_stride - 1
+        ldr             d3,  [x6]                      // r0 = src[0 * src_stride - 1]
+        ldr             d4,  [x6, x3]                  // r1 = src[1 * src_stride - 1]
+        sub             x8,  x2,  #2                   // src - 2
+        ldr             d5,  [x7]                      // r2 = src[2 * src_stride - 1]
+        ldr             d6,  [x7, x3]                  // r3 = src[3 * src_stride - 1]
+        add             x9,  x8,  x3, lsl #1           // src + 2 * src_stride - 2
+        zip1            v3.16b,  v3.16b,  v4.16b
+        zip1            v5.16b,  v5.16b,  v6.16b
+        ldrb            w13, [x8]                      // src[0 * src_stride - 2]
+        ldrb            w10, [x8, x3]                  // src[1 * src_stride - 2]
+        trn1            v22.8h,  v3.8h,   v5.8h        // s1 | s3 | s5 | s7
+        trn2            v23.8h,  v3.8h,   v5.8h        // s2 | s4 | s6 | s8
+        ldrb            w11, [x9]                      // src[2 * src_stride - 2]
+        ldrb            w12, [x9, x3]                  // src[3 * src_stride - 2]
+        sxtl            v0.8h,   v0.8b
+        orr             w13, w13, w10, lsl #16         // src[0 * src_stride - 2] | (src[1 * src_stride - 2] << 16)
+        orr             w11, w11, w12, lsl #16         // src[2 * src_stride - 2] | (src[3 * src_stride - 2] << 16)
+        uxtl            v16.8h,  v22.8b                // s1 | s3
+        uxtl2           v17.8h,  v22.16b               // s5 | s7
+        orr             x13, x13, x11, lsl #32         // s0.h[0..3] = src[(0..3) * src_stride - 2]
+        movi            v25.8h,  #68
+        uxtl            v18.8h,  v23.8b                // s2 | s4
+        uxtl2           v19.8h,  v23.16b               // s6 | s8
+        fmov            d2,  x13                       // s0
+        movi            v27.8h,  #68
+        ext             v20.16b, v16.16b, v17.16b, #8  // s3 | s5
+        // 4x4_16b_convolve - Computes taps 1..3 and 4..6 in signed 16-bit
+        // partial sums, then combines them with a halving add into 16-bit
+        // accumulators.
+        // v24/v25 -> cols 0|2, v26/v27 -> cols 1|3.
+        mul             v24.8h,  v16.8h,  v0.h[2]      // (s1|s3) * h2
+        mul             v26.8h,  v16.8h,  v0.h[1]      // (s1|s3) * h1
+        mla             v25.8h,  v17.8h,  v0.h[6]      // (s5|s7) * h6
+        mla             v27.8h,  v17.8h,  v0.h[5]      // (s5|s7) * h5
+        ext             v21.16b, v18.16b, v19.16b, #8  // s4 | s6
+        mov             v2.d[1],  v18.d[0]             // s0 | s2
+        mla             v24.8h,  v18.8h,  v0.h[3]      // (s2|s4) * h3
+        mla             v25.8h,  v20.8h,  v0.h[4]      // (s3|s5) * h4
+        mla             v26.8h,  v18.8h,  v0.h[2]      // (s2|s4) * h2
+        mla             v27.8h,  v19.8h,  v0.h[6]      // (s6|s8) * h6
+        mla             v24.8h,  v2.8h,   v0.h[1]      // (s0|s2) * h1
+        mla             v25.8h,  v21.8h,  v0.h[5]      // (s4|s6) * h5
+        mla             v26.8h,  v20.8h,  v0.h[3]      // (s3|s5) * h3
+        mla             v27.8h,  v21.8h,  v0.h[4]      // (s4|s6) * h4
+        shadd           v20.8h,  v24.8h,  v25.8h       // cols 0|2
+        shadd           v21.8h,  v26.8h,  v27.8h       // cols 1|3
+
+        ldrel           q31, x9, ext_warp4x4_h_store_tbl
+        sqshrun         v20.8b,  v20.8h,  #6
+        sqshrun         v21.8b,  v21.8h,  #6
+        add             x6,  x0,  x1, lsl #1
+        tbl             v20.16b, {v20.16b, v21.16b}, v31.16b
+
+        // v20 contains four packed output rows.
+        str             s20, [x0]                      // dst[0 * dst_stride]
+        add             x0,  x0,  x1
+        st1             {v20.s}[2], [x6], x1           // dst[2 * dst_stride]
+        st1             {v20.s}[1], [x0]               // dst[1 * dst_stride]
+        st1             {v20.s}[3], [x6]               // dst[3 * dst_stride]
+.endm
+
+.macro ext_warp4x4_v_8bpc_neon
+        movrel          x7,  X(ext_warp_filter), -8
+        sub             x6,  x2,  x3, lsl #1           // src - 2 * src_stride
+        ldr             d0,  [x7, w5, uxtw #3]         // fv = dav2d_ext_warp_filter[my - 1]
+
+        ldr             s2,  [x6]                      // s0 = src[-2 * src_stride]
+        ldr             s3,  [x6, x3]                  // s1 = src[-1 * src_stride]
+        add             x6,  x6,  x3, lsl #2
+        ldr             s4,  [x2]                      // s2 = src[0 * src_stride]
+        ldr             s5,  [x2, x3]                  // s3 = src[1 * src_stride]
+        sxtl            v0.8h,   v0.8b
+        add             x2,  x2,  x3, lsl #2
+        mov             v2.s[1],  v4.s[0]              // s0 | s2
+        mov             v3.s[1],  v5.s[0]              // s1 | s3
+        ldr             s6,  [x6]                      // s4 = src[2 * src_stride]
+        ldr             s7,  [x6, x3]                  // s5 = src[3 * src_stride]
+        uxtl            v2.8h,   v2.8b
+        uxtl            v3.8h,   v3.8b
+        mov             v4.s[1],  v6.s[0]              // s2 | s4
+        mov             v5.s[1],  v7.s[0]              // s3 | s5
+        add             x6,  x6,  x3, lsl #2
+        ldr             s16, [x2]                      // s6 = src[4 * src_stride]
+        ldr             s17, [x2, x3]                  // s7 = src[5 * src_stride]
+        mul             v24.8h,  v2.8h,   v0.h[1]
+        mul             v26.8h,  v3.8h,   v0.h[1]
+        uxtl            v4.8h,   v4.8b
+        uxtl            v5.8h,   v5.8b
+        ldr             s18, [x6]                      // s8 = src[6 * src_stride]
+        mov             v6.s[1],  v16.s[0]             // s4 | s6
+        mov             v7.s[1],  v17.s[0]             // s5 | s7
+        mov             v16.s[1], v18.s[0]             // s6 | s8
+        uxtl            v6.8h,   v6.8b
+        uxtl            v7.8h,   v7.8b
+        uxtl            v16.8h,  v16.8b
+        // 4x4_16b_convolve - Computes taps 1..3 and 4..6 in signed 16-bit
+        // partial sums, then combines them with a halving add into 16-bit
+        // accumulators.
+        mul             v25.8h,  v5.8h,   v0.h[4]
+        mul             v27.8h,  v6.8h,   v0.h[4]
+        mla             v24.8h,  v3.8h,   v0.h[2]
+        mla             v25.8h,  v6.8h,   v0.h[5]
+        mla             v26.8h,  v4.8h,   v0.h[2]
+        mla             v27.8h,  v7.8h,   v0.h[5]
+        mla             v24.8h,  v4.8h,   v0.h[3]
+        mla             v25.8h,  v7.8h,   v0.h[6]
+        mla             v26.8h,  v5.8h,   v0.h[3]
+        mla             v27.8h,  v16.8h,  v0.h[6]
+        shadd           v20.8h,  v24.8h,  v25.8h       // rows 0 | 2
+        shadd           v21.8h,  v26.8h,  v27.8h       // rows 1 | 3
+
+        sqrshrun        v20.8b,  v20.8h,  #6
+        sqrshrun        v21.8b,  v21.8h,  #6
+
+        add             x6,  x0,  x1, lsl #1
+        str             s20, [x0]                      // dst[0 * dst_stride]
+        st1             {v20.s}[1], [x6], x1           // dst[2 * dst_stride]
+        str             s21, [x0, x1]                  // dst[1 * dst_stride]
+        st1             {v21.s}[1], [x6]               // dst[3 * dst_stride]
+.endm
+
+.macro ext_warp4x4_hv_8bpc_neon
+        movrel          x6,  X(ext_warp_filter), -8
+        sub             x2,  x2,  x3, lsl #1           // src - 2 * src_stride
+        ldr             d0,  [x6, w4, uxtw #3]         // fh = dav2d_ext_warp_filter[mx - 1]
+        ldr             d1,  [x6, w5, uxtw #3]         // fv = dav2d_ext_warp_filter[my - 1]
+
+        // Do two horizontal 4x4 filters.
+        ext_warp4x4x2_h_filter_8bpc_neon v20, v21, v22, v23
+        add             x2,  x2,  x3, lsl #3           // src + 6 * src_stride
+        ldur            d2,  [x2, #-2]                 // src[-2..5]
+        ldur            s3,  [x2, #3]                  // src[3..6]
+        transpose_4x8h  v20, v21, v22, v23, v28, v29, v30, v31
+        uxtl            v2.8h,   v2.8b
+        uxtl            v3.8h,   v3.8b
+
+        // Inline warp4x1_h filter for the final horizontal row.
+        // Interleave the pending srshr #2 with the MAC chain before the vertical filter.
+        ext             v6.16b,  v2.16b,  v2.16b,  #6  // src[1..4]
+        ext             v4.16b,  v2.16b,  v2.16b,  #2  // src[-1..2]
+        mul             v24.4h,  v2.4h,   v0.h[1]
+        mul             v25.4h,  v6.4h,   v0.h[4]
+        ext             v5.16b,  v2.16b,  v2.16b,  #4  // src[0..3]
+        mov             v7.d[0], v2.d[1]               // src[2..5]
+        mla             v24.4h,  v4.4h,   v0.h[2]
+        mla             v25.4h,  v7.4h,   v0.h[5]
+        srshr           v20.8h,  v20.8h,  #2
+        srshr           v21.8h,  v21.8h,  #2
+        mla             v24.4h,  v5.4h,   v0.h[3]
+        mla             v25.4h,  v3.4h,   v0.h[6]
+        sxtl            v1.8h,   v1.8b
+        srshr           v22.8h,  v22.8h,  #2
+        shadd           v24.4h,  v24.4h,  v25.4h
+        srshr           v23.8h,  v23.8h,  #2
+        srshr           v24.4h,  v24.4h,  #2
+
+        warp_4x4_32b_convolve_neon v2,  v3,  v4,  v5,  v1, \
+                                   v20, v21, v22, v23, v24
+
+        shrn            v2.4h,   v2.4s,   #10
+        shrn            v3.4h,   v3.4s,   #10
+        shrn2           v2.8h,   v4.4s,   #10
+        shrn2           v3.8h,   v5.4s,   #10
+        sqrshrun        v2.8b,   v2.8h,   #1
+        sqrshrun        v3.8b,   v3.8h,   #1
+
+        add             x6,  x0,  x1, lsl #1
+        str             s2,  [x0]                      // dst[0 * dst_stride]
+        st1             {v2.s}[1], [x6], x1            // dst[2 * dst_stride]
+        str             s3,  [x0, x1]                  // dst[1 * dst_stride]
+        st1             {v3.s}[1], [x6]                // dst[3 * dst_stride]
+.endm
+
+// void ext_warp4x4_8bpc_neon(pixel *dst, ptrdiff_t dst_stride,
+//                            const pixel *src, ptrdiff_t src_stride,
+//                            int mx, int my)
+function ext_warp4x4_8bpc_neon, export=1
+        cbz             w4,  L(ext_warp4x4_v)
+        cbz             w5,  L(ext_warp4x4_h)
+
+        // mx != 0 && my != 0
+        ext_warp4x4_hv_8bpc_neon
+        ret
+
+L(ext_warp4x4_h):
+        // mx != 0 && my == 0
+        ext_warp4x4_h_8bpc_neon
+        ret
+
+L(ext_warp4x4_v):
+        cbz             w5,  L(ext_warp4x4_copy)
+
+        // mx == 0 && my != 0
+        ext_warp4x4_v_8bpc_neon
+        ret
+
+L(ext_warp4x4_copy):
+        // mx == 0 && my == 0
+        ldr             w6,  [x2]
+        add             x4,  x2,  x3, lsl #1
+        ldr             w7,  [x2, x3]
+        add             x5,  x0,  x1, lsl #1
+        str             w6,  [x0]
+        str             w7,  [x0, x1]
+        ldr             w8,  [x4]
+        ldr             w9,  [x4, x3]
+        str             w8,  [x5]
+        str             w9,  [x5, x1]
+        ret
+endfunc
