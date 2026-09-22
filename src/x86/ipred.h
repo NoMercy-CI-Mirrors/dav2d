@@ -159,6 +159,8 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
     init_angular_ipred_fn(DIP_PRED,      ipred_dip,      avx2);
     init_cfl_fns(420, avx2);
     init_cfl_mh_fns(avx2);
+#else
+    c->cfl_mh_calc_alphas = dav2d_cfl_mh_calc_alphas_16bpc_avx2;
 #endif
 
     c->pal_pred = BF(dav2d_pal_pred, avx2);

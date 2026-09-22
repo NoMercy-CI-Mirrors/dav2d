@@ -5067,7 +5067,7 @@ cglobal cfl_mh_calc_alphas_8bpc, 4, 14, 15, a, src, tse, ss, refw, refh, mat, \
  DEFINE_ARGS a, src, _, ss, _, refh, mat, imat, flags, n, _
  DECLARE_REG_TMP 2, 4, 8, 10
     test                flagsb, 0x8
-    jz .acc_shift
+    jz ._acc_shift
 .left:
     xor                    t0d, t0d
     test                flagsb, 0x4
@@ -5110,7 +5110,8 @@ cglobal cfl_mh_calc_alphas_8bpc, 4, 14, 15, a, src, tse, ss, refw, refh, mat, \
     add                  refhq, 16
     jl .left.loop
 
-.acc_shift:
+._acc_shift:
+    mov                    t3d, 6
     vextracti128           xm3, m0, 1
     vextracti128           xm4, m1, 1
     vextracti128           xm5, m2, 1
@@ -5121,6 +5122,7 @@ cglobal cfl_mh_calc_alphas_8bpc, 4, 14, 15, a, src, tse, ss, refw, refh, mat, \
     punpckhwd              xm0, xm10
     paddd                  xm0, xm3
     pslld                  xm0, 7
+cglobal_label .acc_shift
     punpckhqdq             xm3, xm0, xm0
     punpckhqdq             xm4, xm1, xm1
     punpckhqdq             xm5, xm2, xm2
@@ -5138,7 +5140,6 @@ cglobal cfl_mh_calc_alphas_8bpc, 4, 14, 15, a, src, tse, ss, refw, refh, mat, \
     lzcnt                  t0d, nd
     xor                    t0d, 31              ; nl2
     bzhi                   t1d, t1d, t0d
-    mov                    t3d, 6
     test                    nd, t1d
     setnz                  t1b                  ; !!(n & ((1 << nl2) - 1))
     sub                    t3d, t0d
