@@ -563,7 +563,9 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
         refw = 1 << (3 + (rnd() & 1));
         refh = (1 << (3 + (rnd() & 1))) - 1;
         bench_new(a_alpha, chroma, itse ? chroma + PXSTRIDE(chroma_stride) : NULL,
-                  chroma_stride, refw, refh, mat, imat, edge_flags HIGHBD_TAIL_SUFFIX);
+                  chroma_stride, refw, refh, mat, imat,
+                  itse | CFL_HAS_TOP | CFL_HAS_LEFT
+                  HIGHBD_TAIL_SUFFIX);
     }
 
     report("cfl_calc_alphas");
