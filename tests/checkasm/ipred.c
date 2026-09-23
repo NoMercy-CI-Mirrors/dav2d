@@ -511,8 +511,8 @@ static void check_cfl_mh_calc_alphas(Dav2dIntraPredDSPContext *const c) {
         const int dir = rnd() % 3;
         int refw = 4 + 4 * (rnd() & 15) + has_l - 1 - !has_l;
         int refh = 4 + 4 * (rnd() & 15) - 1 - !has_t;
-        refw = has_t * imin(refw, 63);
-        refh = has_l * imin(refh, 63 - has_t);
+        refw = has_t * imin(refw, 64);
+        refh = has_l * imin(refh, 64 - 1 - !has_t);
         int n;
 
         for (n = 0; n < refw + refh; n++) {
