@@ -5403,8 +5403,8 @@ cglobal cfl_mh_calc_alphas_8bpc, 4, 14, 15, a, src, tse, ss, refw, refh, mat, \
     shl                    t1d, 2               ; scale
     ret
 
-cglobal cfl_mh_pred_c_8bpc, 4, 13, 16, dst, ds, src, w, h, a, _, a2, _
- DECLARE_REG_TMP 9, 10, 11, 12
+cglobal cfl_mh_pred_c_8bpc, 4, 12, 16, dst, ds, src, w, h, a, _, a2, _
+ DECLARE_REG_TMP 9, 10, 11, 6
     movifnidn               aq, amp
     movifnidn               hd, hm
     lea                     r8, [pd_281]
@@ -5528,17 +5528,12 @@ cglobal cfl_mh_pred_c_8bpc, 4, 13, 16, dst, ds, src, w, h, a, _, a2, _
     sub                    t1d, t0d
     cmovb                  t1d, t2d             ; drop
     mov                    t0d, t1d
-    shr                    t1d, 1               ; ash
-    sub                    t0d, t1d             ; bsh
-    mov                    t3d, 0x80
-    sarx                   a2d, a2d, t1d
-    shrx                   t3d, t3d, t0d
-    imul                   a2d, t3d
-    lea                    t2d, [t0+t1-16]
-    neg                    t2d                  ; adj
-    jg .calc_a2v2.shift
-    ret
-.calc_a2v2.shift:
+    neg                    t1d
+    shr                    t0d, 1
+    lea                    t2d, [t1+16]         ; adj
+    lea                    t3d, [t1+7+t0]
+    sarx                   a2d, a2d, t0d
+    shlx                   a2d, a2d, t3d
     mov                    t1d, 1
     lea                    t0d, [t2-1]
     shlx                   t1d, t1d, t0d
@@ -5554,15 +5549,15 @@ cglobal cfl_mh_pred_c_8bpc, 4, 13, 16, dst, ds, src, w, h, a, _, a2, _
     neg                    a2d
     ret
 
-cglobal cfl_mh_pred_t_8bpc, 4, 13, 16, dst, ds, src, w, h, a, flags, a2, _
- DECLARE_REG_TMP 9, 10, 11, 12
-    mov                 flagsd, flagsm
+cglobal cfl_mh_pred_t_8bpc, 4, 12, 16, dst, ds, src, w, h, a, flags, a2, _
+ DECLARE_REG_TMP 9, 10, 11, 6
     movifnidn               aq, amp
     movifnidn               hd, hm
     lea                     r8, [pd_281]
 %define base r8-pd_281
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).prep_a0_a1
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).calc_a2v2
+    mov                 flagsd, flagsm
     movd                  xm15, a2d
     vpbroadcastd            m9, [base+pd_281]
     vpbroadcastd           m10, [base+pd_16]
@@ -5640,15 +5635,15 @@ cglobal cfl_mh_pred_t_8bpc, 4, 13, 16, dst, ds, src, w, h, a, flags, a2, _
     jg .w16.yloop
     jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
 
-cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
- DECLARE_REG_TMP 10, 11, 12, 13
-    mov                 flagsd, flagsm
+cglobal cfl_mh_pred_l_8bpc, 4, 12, 16, dst, ds, src, w, h, a, flags, a2, _, l
+ DECLARE_REG_TMP 10
     movifnidn               aq, amp
     movifnidn               hd, hm
     lea                     r8, [pd_281]
 %define base r8-pd_281
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).prep_a0_a1
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).calc_a2v2
+    mov                 flagsd, flagsm
     movd                  xm15, a2d
     vpbroadcastd            m9, [base+pd_281]
     vpbroadcastd           m10, [base+pd_16]
@@ -5677,7 +5672,7 @@ cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
     lea                   dstq, [dstq+dsq*2]
     sub                     hd, 2
     jg .w4
-    jmp .ret
+    jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
 
 .w8:
     movd                   xm2, [lq]
@@ -5694,7 +5689,7 @@ cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
     add                   dstq, dsq
     dec                     hd
     jg .w8
-    jmp .ret
+    jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
 
 .w16:
     mov                     wd, wd
@@ -5702,7 +5697,6 @@ cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
     neg                     wq
 .w16.yloop:
     sub                   srcq, wq
-    add                     t1, srcq
     mov                     t0, wq
     movd                   xm2, [lq]
     pmovzxbd               xm2, xm2
@@ -5724,8 +5718,7 @@ cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
     add                   dstq, dsq
     dec                     hd
     jg .w16.yloop
-.ret:
-    RET
+    jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
 
 .no_left:
     cmp                     wd, 8
@@ -5743,12 +5736,11 @@ cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
     vextracti128           xm1, m0, 1
     movd          [dstq+dsq*0], xm0
     movd          [dstq+dsq*1], xm1
-    add                     lq, 4
     add                   srcq, 8
     lea                   dstq, [dstq+dsq*2]
     sub                     hd, 2
     jg .no_left.w4
-    jmp .ret
+    jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
 
 .no_left.w8:
     vbroadcasti128          m2, [base+pb_0to15]
@@ -5761,12 +5753,11 @@ cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
     vpermq                  m0, m0, q3220
     packuswb               xm0, xm0
     movq                [dstq], xm0
-    add                     lq, 2
     add                   srcq, 8
     add                   dstq, dsq
     dec                     hd
     jg .no_left.w8
-    jmp .ret
+    jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
 
 .no_left.w16:
     mov                     wd, wd
@@ -5775,7 +5766,6 @@ cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
 .no_left.w16.yloop:
     vbroadcasti128          m2, [base+pb_0to15]
     sub                   srcq, wq
-    add                     t1, srcq
     mov                     t0, wq
     pmovzxbd                m0, [srcq+t0-1]
     pmovzxbd                m1, [srcq+t0]
@@ -5796,6 +5786,6 @@ cglobal cfl_mh_pred_l_8bpc, 4, 14, 16, dst, ds, src, w, h, a, flags, a2, _, l
     add                   dstq, dsq
     dec                     hd
     jg .no_left.w16.yloop
-    jmp .ret
+    jmp mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).ret
 
 %endif ; ARCH_X86_64
