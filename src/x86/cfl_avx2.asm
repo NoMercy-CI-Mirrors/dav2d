@@ -40,26 +40,27 @@ t64f1smplCshuf:db  0, -1,  8, -1,  4, -1, 12, -1,  1, -1,  9, -1,  5, -1, 13, -1
 dcCshuf: times 4 db 0, -1
          times 4 db 8, -1
 l_smpl_msk0: times 4 dd 0
-l_smpl_msk1: dd -1, -1, -1, -1
-l_smpl_msk2: dd  0, -1,  0, -1
-l_smpl_msk4: dd  0,  0, -1,  0
-l_smpl_msk8: dd -1,  0,  0,  0
-t_smpl_msk1: dw -1, -1, -1, -1, -1, -1, -1, -1
-t_smpl_msk2: dw  0, -1,  0, -1,  0, -1,  0, -1
-t_smpl_msk4: dw  0,  0, -1,  0,  0,  0, -1,  0
-t_smpl_msk8: dw  0,  0,  0,  0, -1,  0,  0,  0
+l_smpl_msk1:   dd -1, -1, -1, -1
+l_smpl_msk2:   dd  0, -1,  0, -1
+l_smpl_msk4:   dd  0,  0, -1,  0
+l_smpl_msk8:   dd -1,  0,  0,  0
+t_smpl_msk1:   dw -1, -1, -1, -1, -1, -1, -1, -1
+t_smpl_msk2:   dw  0, -1,  0, -1,  0, -1,  0, -1
+t_smpl_msk4:   dw  0,  0, -1,  0,  0,  0, -1,  0
+t_smpl_msk8:   dw  0,  0,  0,  0, -1,  0,  0,  0
 ; w64 t_smpl_msk4
-; for f0-lum;    0,  0,  0,  0, -1, -1, -1, -1 ; 4 4 4 4 6 6 6 6
-; for f0-chr;    0,  0, -1, -1,  0,  0, -1, -1 ; 0 0 2 2 4 4 6 6
-; for f1/2  ;    0,  0,  0,  0, -1, -1, -1, -1 ; 0 4 0 4 2 6 2 6
+; for f0-lum;      0,  0,  0,  0, -1, -1, -1, -1 ; 4 4 4 4 6 6 6 6
+; for f0-chr;      0,  0, -1, -1,  0,  0, -1, -1 ; 0 0 2 2 4 4 6 6
+; for f1/2  ;      0,  0,  0,  0, -1, -1, -1, -1 ; 0 4 0 4 2 6 2 6
 ; w64 t_smpl_msk8
-; for f0    ;   -1, -1, -1, -1,  0,  0,  0,  0 ; 4 4 4 4 6 6 6 6
-; for f0-chr;    0,  0,  0,  0, -1, -1,  0,  0 ; 0 0 2 2 4 4 6 6
-; for f1/2  ;    0, -1,  0, -1,  0,  0,  0,  0 ; 0 4 0 4 2 6 2 6
-mh_lshuf1:   db  0,  2,  4,  6
-mh_lshuf2:   db  0,  1,  2,  3,  4,  5,  6,  7
+; for f0    ;     -1, -1, -1, -1,  0,  0,  0,  0 ; 4 4 4 4 6 6 6 6
+; for f0-chr;      0,  0,  0,  0, -1, -1,  0,  0 ; 0 0 2 2 4 4 6 6
+; for f1/2  ;      0, -1,  0, -1,  0,  0,  0,  0 ; 0 4 0 4 2 6 2 6
+mh_lshuf1:     db  0,  2,  4,  6
+mh_lshuf2:     db  0,  1,  2,  3,  4,  5,  6,  7
+mh_rev_bytes:  db 15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,  3,  2,  1,  0
 mh_smpl_msk: times 32 db -1
-             times 32 db 0 ; smallest possible refw/h is 2
+             times 32 db 0
 
 pb_left_flt1:    db 0, 1, 2, 1
 pb_left_flt2:    db 0, 1, 4, 1
@@ -5105,23 +5106,25 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     mova             [matq+32], xm0
     RET
 
-cglobal cfl_mh_calc_alphas_8bpc, 4, 15, 15, a, src, tse, ss, refw, refh, mat, \
+cglobal cfl_mh_calc_alphas_8bpc, 4, 14, 15, a, src, tse, ss, refw, refh, mat, \
                                             imat, flags, n, top
- DECLARE_REG_TMP 12, 13, 14
+ DECLARE_REG_TMP 12, 13
     mov                 flagsd, flagsm
     mov                  refwd, refwm
     mov                  refhd, refhm
     mov                  imatq, imatmp
     mov                   matq, matmp
     lea                     nd, [refwq+refhq]
+    lea                    r11, [mh_smpl_msk]
+%define base r11-mh_smpl_msk
     pxor                    m0, m0
+    pxor                    m1, m1
+    pxor                    m2, m2
+    pxor                   m10, m10
     test                flagsb, 0x4             ; has_t
     jz .left
 
 ;.top:
-    lea                    r11, [mh_smpl_msk]
-%define base r11-mh_smpl_msk
-    vpbroadcastd           m13, [base+pw_128]
     mov                     t0, ssq
     neg                     t0
     lea                   topq, [srcq+t0]
@@ -5134,18 +5137,14 @@ cglobal cfl_mh_calc_alphas_8bpc, 4, 15, 15, a, src, tse, ss, refw, refh, mat, \
     setz                   t1b
     sub                   topq, t0
     add                   topq, t1
-    mov                    t2d, refwd
+    mov                    t0d, refwd
     add                   topq, refwq
     add                  imatq, refwq
     mov                    t1d, 32
-    and                    t2d, 31
+    and                    t0d, 31
+    sub                    t1d, t0d
     xor                    t0d, t0d
-    sub                    t1d, t2d
     neg                  refwq
-    mov                     t2, refwq
-    pxor                   m10, m10
-    pxor                    m1, m1
-    pxor                    m2, m2
 
 .top.loop:
     cmp                  refwd, -31
@@ -5162,18 +5161,69 @@ cglobal cfl_mh_calc_alphas_8bpc, 4, 15, 15, a, src, tse, ss, refw, refh, mat, \
     punpckhbw               m5, m10
     REPX       {pmaddwd x, m6}, m7, m8
     REPX       {pmaddwd x, m3}, m4, m5
-    REPX      {pmaddwd x, m13}, m6, m3
-    REPX         {paddd m0, x}, m6, m3
+    REPX         {paddw m0, x}, m6, m3
     REPX         {paddd m1, x}, m7, m4
     REPX         {paddd m2, x}, m8, m5
     add                  refwq, 32
     jl .top.loop
+
+ DEFINE_ARGS a, src, _, ss, _, refh, mat, imat, flags, n, _
+ DECLARE_REG_TMP 2, 4, 8, 10
+    test                flagsb, 0x8
+    jz .acc_shift
+.left:
+    xor                    t0d, t0d
+    test                flagsb, 0x4
+    cmovz                   t0, ssq
+    mov                    t1d, refhd
+    add                  imatq, refhq
+    add                   srcq, t0
+    mov                    t0d, 16
+    and                    t1d, 15
+    neg                  refhq
+    sub                    t0d, t1d
+    xor                    t1d, t1d
+
+.left.loop:
+    mov                    t2d, -16
+    cmp                    t2d, refhd
+    cmovb                  t2d, refhd
+    lea                    t3d, [t2+16]
+    movd                   xm3, [srcq-1]
+.left.loop.load_chroma:
+    add                   srcq, ssq
+    inc                    t2d
+    jz .left.loop.main
+    palignr                xm3, [srcq-16], 15
+    jmp .left.loop.load_chroma
+.left.loop.main:
+    pshufb                 xm3, [base+mh_rev_bytes+t3]
+    cmp                  refhd, -15
+    cmovae                  t1, t0
+    movu                   m14, [base+mh_smpl_msk+t1]
+    pand                   xm4, xm14, [imatq+  0+refhq]
+    pand                   xm5, xm14, [imatq+386+refhq]
+    pmovzxbw                m3, xm3
+    pmovzxbw                m4, xm4
+    pmovzxbw                m5, xm5
+    REPX       {pmaddwd x, m3}, m4, m5
+    paddw                   m0, m3
+    paddd                   m1, m4
+    paddd                   m2, m5
+    add                  refhq, 16
+    jl .left.loop
+
+.acc_shift:
     vextracti128           xm3, m0, 1
     vextracti128           xm4, m1, 1
     vextracti128           xm5, m2, 1
-    paddd                  xm0, xm3
+    paddw                  xm0, xm3
     paddd                  xm1, xm4
     paddd                  xm2, xm5
+    punpcklwd              xm3, xm0, xm10
+    punpckhwd              xm0, xm10
+    paddd                  xm0, xm3
+    pslld                  xm0, 7
     punpckhqdq             xm3, xm0, xm0
     punpckhqdq             xm4, xm1, xm1
     punpckhqdq             xm5, xm2, xm2
@@ -5186,42 +5236,7 @@ cglobal cfl_mh_calc_alphas_8bpc, 4, 15, 15, a, src, tse, ss, refw, refh, mat, \
     paddd                  xm0, xm3
     paddd                  xm1, xm2
     shufps                 xm0, xm1, xm0, q2020
-
  INIT_XMM avx2
- DEFINE_ARGS a, src, _, ss, _, refh, mat, imat, flags, n, _
- DECLARE_REG_TMP 2, 4, 11, 12, 13, 14
-.left:
-    test                flagsb, 0x8
-    jz .shift
-    xor                    t0d, t0d
-    test                flagsb, 0x4
-    cmovz                   t0, ssq
-    add                  imatq, refhq
-    neg                  refhq
-    add                   srcq, t0
-    ; todo try a simd version where we load every 16 rows
-    xor                    t0d, t0d
-    xor                    t1d, t1d
-    xor                    t2d, t2d
-.left.loop:
-    movzx                  t3d, byte [srcq-1]
-    movzx                  t4d, byte [imatq+  0+refhq]
-    movzx                  t5d, byte [imatq+386+refhq]
-    add                   srcq, ssq
-    imul                   t4d, t3d
-    imul                   t5d, t3d
-    add                    t2d, t3d
-    add                    t0d, t4d
-    add                    t1d, t5d
-    inc                  refhq
-    jl .left.loop
-    shl                    t2d, 7
-    movd                    m1, t0d
-    pinsrd                  m1, t1d, 1
-    pinsrd                  m1, t2d, 2
-    paddd                   m0, m1
-
-.shift:
     mov                    t1d, -1
     lzcnt                  t0d, nd
     xor                    t0d, 31              ; nl2
@@ -5242,6 +5257,7 @@ cglobal cfl_mh_calc_alphas_8bpc, 4, 15, 15, a, src, tse, ss, refw, refh, mat, \
     psrld                   m0, m1
 
  DEFINE_ARGS a, coef, _, bias, _, off, mat, imat, flags, n, _
+ DECLARE_REG_TMP 2, 4, 8, 10, 12, 13
 .gauss_elim:
     mova                    m3, [matq+ 0]
     mova                    m1, [matq+16]
