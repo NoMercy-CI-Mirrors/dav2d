@@ -618,8 +618,9 @@ static void check_cfl_mh_pred(Dav2dIntraPredDSPContext *const c) {
                                                 a_chroma, a_chroma_stride, w, h, "dst");
 
                     luma = luma_buf + (1 + (dir == CFL_DIR_TOP)) * CFL_MH_TOP_STRIDE;
-                    bench_new(a_chroma, a_chroma_stride, luma, w, h, alpha,
-                              edge_flags | CFL_HAS_TOP | CFL_HAS_LEFT HIGHBD_TAIL_SUFFIX);
+                    bench_new(alternate(a_chroma, c_chroma), a_chroma_stride,
+                              luma, w, h, alpha, CFL_HAS_TOP | CFL_HAS_LEFT
+                              HIGHBD_TAIL_SUFFIX);
                 }
 
     report("cfl_mh_pred");
