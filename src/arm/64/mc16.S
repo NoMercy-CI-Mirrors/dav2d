@@ -1186,7 +1186,7 @@ endfunc
 #define SMOOTH  ((1*15<<7)|4*15)
 #define SHARP   ((2*15<<7)|3*15)
 
-.macro filter_fn type, dst, d_strd, src, s_strd, w, h, mx, xmx, my, xmy, bdmax, ds2, sr2, taps
+.macro filter_fn type, dst, d_strd, src, s_strd, w, h, mx, my, bdmax, ds2, sr2, taps
 function \type\()_\taps\()_neon
 .ifc \bdmax, w8
         ldr             w8,  [sp]
@@ -1223,7 +1223,7 @@ L(\type\()_\taps\()_h):
         mov             \mx,  w10
 4:
         tst             \my,  #(0x7f << 14)
-        add             \xmx, x11, \mx, uxtw #3
+        add             x(\mx), x11, \mx, uxtw #3
         b.ne            L(\type\()_\taps\()_hv)
 
         movrel          x10, \type\()_\taps\()_h_tbl
@@ -1244,7 +1244,7 @@ L(\type\()_\taps\()_h):
 20:     // 2xN h
         AARCH64_VALID_JUMP_TARGET
 .ifc \type, put
-        ldur            s0,  [\xmx, #2]
+        ldur            s0,  [x(\mx), #2]
         sub             \src,  \src,  #2
         add             \ds2,  \dst,  \d_strd
         add             \sr2,  \src,  \s_strd
@@ -1276,7 +1276,7 @@ L(\type\()_\taps\()_h):
 
 40:     // 4xN h
         AARCH64_VALID_JUMP_TARGET
-        ldur            s0,  [\xmx, #2]
+        ldur            s0,  [x(\mx), #2]
         sub             \src,  \src,  #2
         add             \ds2,  \dst,  \d_strd
         add             \sr2,  \src,  \s_strd
@@ -1333,7 +1333,7 @@ L(\type\()_\taps\()_h):
 320:
 640:    // 8xN, 16xN, 32xN, ... h
         AARCH64_VALID_JUMP_TARGET
-        ld1             {v0.8b}, [\xmx]
+        ld1             {v0.8b}, [x(\mx)]
 .ifc \taps, 6tap
         sub             \src,  \src,  #4
 .else
@@ -1459,7 +1459,7 @@ function L(\type\()_\taps\()_v)
         b.le            4f
         mov             \my, w10
 4:
-        add             \xmy, x11, \my, uxtw #3
+        add             x(\my), x11, \my, uxtw #3
 
 .ifc \type, prep
         dup             v30.4s,  w12           // 6 - intermediate_bits
@@ -1479,7 +1479,7 @@ function L(\type\()_\taps\()_v)
         b.gt            28f
 
         cmp             \h,  #2
-        ldur            s0,  [\xmy, #2]
+        ldur            s0,  [x(\my), #2]
         sub             \src,  \src,  \s_strd
         add             \ds2,  \dst,  \d_strd
         add             \sr2,  \src,  \s_strd
@@ -1508,7 +1508,7 @@ function L(\type\()_\taps\()_v)
         ret
 
 28:     // 2x6, 2x8, 2x12, 2x16 v
-        ld1             {v0.8b}, [\xmy]
+        ld1             {v0.8b}, [x(\my)]
         sub             \sr2,  \src,  \s_strd, lsl #1
         add             \ds2,  \dst,  \d_strd
         sub             \src,  \sr2,  \s_strd
@@ -1556,7 +1556,7 @@ function L(\type\()_\taps\()_v)
 
         // 4x2, 4x4 v
         cmp             \h,  #2
-        ldur            s0,  [\xmy, #2]
+        ldur            s0,  [x(\my), #2]
         sub             \src, \src, \s_strd
         add             \ds2, \dst, \d_strd
         add             \sr2, \src, \s_strd
@@ -1577,7 +1577,7 @@ function L(\type\()_\taps\()_v)
         ret
 
 480:    // 4x6, 4x8, 4x12, 4x16 v
-        ld1             {v0.8b}, [\xmy]
+        ld1             {v0.8b}, [x(\my)]
         sub             \sr2, \src, \s_strd, lsl #1
         add             \ds2, \dst, \d_strd
         sub             \src, \sr2, \s_strd
@@ -1620,7 +1620,7 @@ function L(\type\()_\taps\()_v)
 
         // 8x2, 8x4 v
         cmp             \h,  #2
-        ldur            s0,  [\xmy, #2]
+        ldur            s0,  [x(\my), #2]
         sub             \src, \src, \s_strd
         add             \ds2, \dst, \d_strd
         add             \sr2, \src, \s_strd
@@ -1649,7 +1649,7 @@ function L(\type\()_\taps\()_v)
 320:    // 32x8, 32x16, ...
 640:
         AARCH64_VALID_JUMP_TARGET
-        ld1             {v0.8b}, [\xmy]
+        ld1             {v0.8b}, [x(\my)]
         sub             \src, \src, \s_strd
         sub             \src, \src, \s_strd, lsl #1
         sxtl            v0.8h,   v0.8b
@@ -1692,8 +1692,8 @@ function L(\type\()_\taps\()_v)
         b.le            0f
         asr             \s_strd, \s_strd, #1
         asr             \d_strd, \d_strd, #1
-        msub            \src, \s_strd, \xmy, \src
-        msub            \dst, \d_strd, \xmy, \dst
+        msub            \src, \s_strd, x(\my), \src
+        msub            \dst, \d_strd, x(\my), \dst
         sub             \src, \src, \s_strd, lsl #3
         mov             \h,  \my
         add             \src, \src, #16
@@ -1707,7 +1707,7 @@ function L(\type\()_\taps\()_v)
         b.gt            1680b
 
         // 16x2, 16x4 v
-        ldur            s0,  [\xmy, #2]
+        ldur            s0,  [x(\my), #2]
         sub             \src, \src, \s_strd
         sxtl            v0.8h,   v0.8b
 
@@ -1748,7 +1748,7 @@ function L(\type\()_\taps\()_hv)
         b.le            4f
         mov             \my,  w10
 4:
-        add             \xmy, x11, \my, uxtw #3
+        add             x(\my), x11, \my, uxtw #3
 
         movrel          x10, \type\()_\taps\()_hv_tbl
         dup             v30.4s,  w12           // 6 - intermediate_bits
@@ -1768,9 +1768,9 @@ function L(\type\()_\taps\()_hv)
 20:
         AARCH64_VALID_JUMP_TARGET
 .ifc \type, put
-        ldur            s0,  [\xmx, #2]
+        ldur            s0,  [x(\mx), #2]
         b.gt            280f
-        ldur            s1,  [\xmy, #2]
+        ldur            s1,  [x(\my), #2]
 
         // 2x2, 2x4 hv
         sub             \sr2, \src, #2
@@ -1820,7 +1820,7 @@ function L(\type\()_\taps\()_hv)
         b               2b
 
 280:    // 2x8, 2x16, 2x32 hv
-        ld1             {v1.8b},  [\xmy]
+        ld1             {v1.8b},  [x(\my)]
         sub             \src, \src, #2
         sub             \sr2, \src, \s_strd, lsl #1
         sub             \src, \sr2, \s_strd
@@ -1913,9 +1913,9 @@ L(\type\()_\taps\()_filter_2):
 
 40:
         AARCH64_VALID_JUMP_TARGET
-        ldur            s0,  [\xmx, #2]
+        ldur            s0,  [x(\mx), #2]
         b.gt            480f
-        ldur            s1,  [\xmy, #2]
+        ldur            s1,  [x(\my), #2]
         sub             \sr2, \src, #2
         sub             \src, \sr2, \s_strd
         add             \ds2, \dst, \d_strd
@@ -1977,7 +1977,7 @@ L(\type\()_\taps\()_filter_2):
         b               4b
 
 480:    // 4x8, 4x16, 4x32 hv
-        ld1             {v1.8b},  [\xmy]
+        ld1             {v1.8b},  [x(\my)]
         sub             \src, \src, #2
 .ifc \taps, 6tap
         sub             \sr2, \src, \s_strd
@@ -2111,8 +2111,8 @@ L(\type\()_\taps\()_filter_4):
 320:
         AARCH64_VALID_JUMP_TARGET
         b.gt            880f
-        ld1             {v0.8b},  [\xmx]
-        ldur            s1,  [\xmy, #2]
+        ld1             {v0.8b},  [x(\mx)]
+        ldur            s1,  [x(\my), #2]
 .ifc \taps, 6tap
         sub             \src,  \src,  #4
 .else
@@ -2211,8 +2211,8 @@ L(\type\()_\taps\()_filter_4):
         b.le            0f
         asr             \s_strd,  \s_strd,  #1
         asr             \d_strd,  \d_strd,  #1
-        msub            \src,  \s_strd,  \xmy,  \src
-        msub            \dst,  \d_strd,  \xmy,  \dst
+        msub            \src,  \s_strd,  x(\my),  \src
+        msub            \dst,  \d_strd,  x(\my),  \dst
         sub             \src,  \src,  \s_strd,  lsl #2
         mov             \h,  \my
         add             \src,  \src,  #16
@@ -2222,8 +2222,8 @@ L(\type\()_\taps\()_filter_4):
 880:    // 8x8, 8x16, ..., 16x8, ..., 32x8, ... hv
 640:
         AARCH64_VALID_JUMP_TARGET
-        ld1             {v0.8b},  [\xmx]
-        ld1             {v1.8b},  [\xmy]
+        ld1             {v0.8b},  [x(\mx)]
+        ld1             {v1.8b},  [x(\my)]
 .ifc \taps, 6tap
         sub             \src,  \src,  #4
 .else
@@ -2383,8 +2383,8 @@ L(\type\()_\taps\()_filter_4):
         b.le            0f
         asr             \s_strd,  \s_strd,  #1
         asr             \d_strd,  \d_strd,  #1
-        msub            \src,  \s_strd,  \xmy,  \src
-        msub            \dst,  \d_strd,  \xmy,  \dst
+        msub            \src,  \s_strd,  x(\my),  \src
+        msub            \dst,  \d_strd,  x(\my),  \dst
         sub             \src,  \src,  \s_strd,  lsl #3
         mov             \h,  \my
         add             \src,  \src,  #16
@@ -2446,7 +2446,7 @@ endjumptable
 .endm
 
 
-.macro filter_bilin_fn type, dst, d_strd, src, s_strd, w, h, mx, xmx, my, xmy, bdmax, ds2, sr2
+.macro filter_bilin_fn type, dst, d_strd, src, s_strd, w, h, mx, my, bdmax, ds2, sr2
 function \type\()_bilin_16bpc_neon, export=1
 .ifc \bdmax, w8
         ldr             w8,  [sp]
@@ -2827,8 +2827,8 @@ function L(\type\()_bilin_v)
         b.le            0f
         asr             \s_strd, \s_strd, #1
         asr             \d_strd, \d_strd, #1
-        msub            \src, \s_strd, \xmy, \src
-        msub            \dst, \d_strd, \xmy, \dst
+        msub            \src, \s_strd, x(\my), \src
+        msub            \dst, \d_strd, x(\my), \dst
         sub             \src, \src, \s_strd, lsl #1
         mov             \h,  \my
         add             \src, \src, #32
@@ -3020,8 +3020,8 @@ function L(\type\()_bilin_hv)
         b.le            0f
         asr             \s_strd,  \s_strd,  #1
         asr             \d_strd,  \d_strd,  #1
-        msub            \src,  \s_strd,  \xmy,  \src
-        msub            \dst,  \d_strd,  \xmy,  \dst
+        msub            \src,  \s_strd,  x(\my),  \src
+        msub            \dst,  \d_strd,  x(\my),  \dst
         sub             \src,  \src,  \s_strd,  lsl #1
         mov             \h,  \my
         add             \src,  \src,  #16
@@ -3042,20 +3042,20 @@ endjumptable
 .endm
 
 make_8tap_fn    put,  sharp,   SHARP,   8tap
-filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 8tap
+filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, w7, w8, x9, x10, 8tap
 
 make_8tap_fn    put,  regular, REGULAR, 6tap
 make_8tap_fn    put,  smooth,  SMOOTH,  6tap
-filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 6tap
-filter_bilin_fn put,  x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10
+filter_fn       put,  x0, x1, x2, x3, w4, w5, w6, w7, w8, x9, x10, 6tap
+filter_bilin_fn put,  x0, x1, x2, x3, w4, w5, w6, w7, w8, x9, x10
 
 make_8tap_fn    prep, sharp,   SHARP,   8tap
-filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 8tap
+filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, w7, w8, x9, x10, 8tap
 
 make_8tap_fn    prep, regular, REGULAR, 6tap
 make_8tap_fn    prep, smooth,  SMOOTH,  6tap
-filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10, 6tap
-filter_bilin_fn prep, x0, x1, x2, x3, w4, w5, w6, x6, w7, x7, w8, x9, x10
+filter_fn       prep, x0, x1, x2, x3, w4, w5, w6, w7, w8, x9, x10, 6tap
+filter_bilin_fn prep, x0, x1, x2, x3, w4, w5, w6, w7, w8, x9, x10
 
 
 .macro load_filter_row dst, src, inc
