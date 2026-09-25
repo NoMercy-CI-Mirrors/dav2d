@@ -2186,6 +2186,8 @@ cglobal wiener_uv_chroma_8bpc, 8, 15, 16, \
     movd [BUF_PX(0,2)+tmpq], xm0
     ret
 .main:
+    mov             tmpq, t0
+.loop:
     ; Min (right), max (mid), range (left) for preventing overflow.
     ;     -2  -1   0   1   2       -2  -1   0   1   2       -2  -1   0   1   2
     ;    ┌───┬───┬───┬───┬───┐    ┌───┬───┬───┬───┬───┐    ┌───┬───┬───┬───┬───┐
@@ -2310,19 +2312,18 @@ cglobal wiener_uv_chroma_8bpc, 8, 15, 16, \
     add            lumaq, 64
     REPX {add x, 32}, pq, t0, t1, t2, t3, t4
     add               wd, 32
-    jl .main
+    jl .loop
     mov               wq, w_bakq
     dec         ll_maskq
     and         ll_maskq, ~1
     ; undo column increment and advance by a row
     add               pq, wq
     add               pq, strideq
-    mov             tmpq, t0
     lea               t0, [t1 + wq]
     lea               t1, [t2 + wq]
     lea               t2, [t3 + wq]
     lea               t3, [t4 + wq]
-    lea               t4, [tmpq + wq]
+    mov               t4, tmpq
     lea            lumaq, [lumaq + 2 * wq + 128]
     ret
 
@@ -2336,7 +2337,7 @@ endstruc
 
 DECLARE_REG_TMP 9, 11, 5, 4, 6
 
-cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
+cglobal wiener_uv_luma_420_8bpc, 8, 15, 15, \
                                  0 - ((WienerUVLumaStk_size + 31) & ~31), \
                                  dst, luma, stride, left, top, bot, filter, \
                                  w, h, ds_flt, edge, _, tmp, bak
@@ -2364,7 +2365,7 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
     vpbroadcastd     m12, [Stk(row_buf) + 8]
     vpbroadcastd     m13, [Stk(row_buf) + 12]
     vpermq           m14, m0, q2222
-    vpermq           m15, m0, q3333
+    vpermq            m8, m0, q3333
 
     lea             tmpq, [wiener_uv_luma_420_8bpc_jmptable]
     movsxd       ds_fltq, [tmpq+ds_fltq*4]
@@ -2384,6 +2385,9 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
 
 %assign call_depth 1
 .main:
+    mov             tmpq, t0
+    mov             bakq, t1
+.loop:
     ;     -2  -1   0   1   2
     ;    ┌───┬───┬───┬───┬───┐
     ; -2 │   │   │ B0│   │   │
@@ -2437,7 +2441,7 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
     mova              m6, [BUF_PX( 0, 2)]
     punpcklbw         m4, m5, m6
     punpckhbw         m5, m6
-    REPX {pmaddubsw x, m15}, m4, m5
+    REPX {pmaddubsw x, m8}, m4, m5
     paddw             m2, m4
     paddw             m3, m5
 
@@ -2453,14 +2457,13 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
     REPX {add x, 32}, t0, t1, t2, t3, t4
     add             dstq, 64
     add               wd, 32
-    jl .main
+    jl .loop
     mov               wq, w_bakq
-    mov             tmpq, t0
-    lea               t0, [t1 + wq]
+    mov               t0, bakq
     lea               t1, [t2 + wq]
     lea               t2, [t3 + wq]
     lea               t3, [t4 + wq]
-    lea               t4, [tmpq + wq]
+    mov               t4, tmpq
     lea             dstq, [dstq + 2*wq + 128]
     ret
 
@@ -2468,9 +2471,9 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
 %assign call_depth 0
 .ds_flt%1:
 %if %1 == 0
-    vpbroadcastd      m8, [pb_1]
+    vpbroadcastd      m7, [pb_1]
 %else
-    vpbroadcastd      m8, [pw_255]
+    vpbroadcastd      m7, [pw_255]
 %endif
     call %%load_p
     call %%load_p_lr
@@ -2566,14 +2569,14 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
     call .main
     add             lumaq, strideq
 %if %1 == 0
-    pmaddubsw         m0, [lumaq], m8
-    pmaddubsw         m1, [lumaq+32], m8
+    pmaddubsw         m0, [lumaq], m7
+    pmaddubsw         m1, [lumaq+32], m7
     REPX {psraw x, 1}, m0, m1
     packuswb          m0, m1
     vpermq            m0, m0, q3120
     mova   [BUF_PX(0,2)], m0
-    pmaddubsw         m0, [lumaq+64], m8
-    pmaddubsw         m1, [lumaq+96], m8
+    pmaddubsw         m0, [lumaq+64], m7
+    pmaddubsw         m1, [lumaq+96], m7
     REPX {psraw x, 1}, m0, m1
     packuswb          m0, m1
     vpermq            m0, m0, q3120
@@ -2592,20 +2595,20 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
 %assign call_depth 1
 %%load_p:
 %if %1 == 0
-    pmaddubsw         m3, [lumaq], m8
-    pmaddubsw         m0, [lumaq+strideq], m8
-    pmaddubsw         m4, [lumaq+32], m8
-    pmaddubsw         m1, [lumaq+32+strideq], m8
+    pmaddubsw         m3, [lumaq], m7
+    pmaddubsw         m0, [lumaq+strideq], m7
+    pmaddubsw         m4, [lumaq+32], m7
+    pmaddubsw         m1, [lumaq+32+strideq], m7
     paddw             m0, m3
     paddw             m1, m4
     REPX {psrlw x, 2}, m0, m1
     packuswb          m0, m1
     vpermq            m0, m0, q3120
     mova   [BUF_PX(0,2)], m0
-    pmaddubsw         m5, [lumaq+64], m8
-    pmaddubsw         m1, [lumaq+64+strideq], m8
-    pmaddubsw         m6, [lumaq+96], m8
-    pmaddubsw         m2, [lumaq+96+strideq], m8
+    pmaddubsw         m5, [lumaq+64], m7
+    pmaddubsw         m1, [lumaq+64+strideq], m7
+    pmaddubsw         m6, [lumaq+96], m7
+    pmaddubsw         m2, [lumaq+96+strideq], m7
     paddw             m1, m5
     paddw             m2, m6
     REPX {psrlw x, 2}, m1, m2
@@ -2613,21 +2616,20 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
     vpermq            m1, m1, q3120
     mova  [BUF_PX(32,2)], m1
 %elif %1 == 1
-    pxor              m7, m7
-    pand              m3, m8, [lumaq]
-    pand              m0, m8, [lumaq+strideq]
-    pand              m4, m8, [lumaq+32]
-    pand              m1, m8, [lumaq+32+strideq]
+    pand              m3, m7, [lumaq]
+    pand              m0, m7, [lumaq+strideq]
+    pand              m4, m7, [lumaq+32]
+    pand              m1, m7, [lumaq+32+strideq]
     paddw             m0, m3
     paddw             m1, m4
     REPX {psrlw x, 1}, m0, m1
     packuswb          m0, m1
     vpermq            m0, m0, q3120
     mova   [BUF_PX(0,2)], m0
-    pand              m5, m8, [lumaq+64]
-    pand              m1, m8, [lumaq+64+strideq]
-    pand              m6, m8, [lumaq+96]
-    pand              m2, m8, [lumaq+96+strideq]
+    pand              m5, m7, [lumaq+64]
+    pand              m1, m7, [lumaq+64+strideq]
+    pand              m6, m7, [lumaq+96]
+    pand              m2, m7, [lumaq+96+strideq]
     paddw             m1, m5
     paddw             m2, m6
     REPX {psrlw x, 1}, m1, m2
@@ -2636,13 +2638,13 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
     mova   [BUF_PX(32,2)], m1
 %else ; %1 == 2
 .load_p_ds_flt2:
-    pand              m0, m8, [lumaq]
-    pand              m1, m8, [lumaq+32]
+    pand              m0, m7, [lumaq]
+    pand              m1, m7, [lumaq+32]
     packuswb          m0, m1
     vpermq            m0, m0, q3120
     mova   [BUF_PX(0,2)], m0
-    pand              m1, m8, [lumaq+64]
-    pand              m2, m8, [lumaq+96]
+    pand              m1, m7, [lumaq+64]
+    pand              m2, m7, [lumaq+96]
     packuswb          m1, m2
     vpermq            m1, m1, q3120
     mova  [BUF_PX(32,2)], m1
@@ -2655,11 +2657,11 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
 %if %1 == 0
     movq             xm0, [lumaq-8]
     movq             xm1, [lumaq+strideq-8]
-    REPX {pmaddubsw x, xm8}, xm0, xm1
+    REPX {pmaddubsw x, xm7}, xm0, xm1
 %elif %1 == 1
     movq             xm0, [lumaq-8]
     movq             xm1, [lumaq+strideq-8]
-    REPX {pand x, xm8}, xm0, xm1
+    REPX {pand x, xm7}, xm0, xm1
 %else ; %1 == 2
     movq             xm0, [lumaq-8]
 %endif
@@ -2673,14 +2675,14 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
     test           edgeb, 0x01 ; LR_HAVE_LEFT
     jz %%load_p_lr_no_left
 %if %1 == 0
-    pmaddubsw        xm0, [leftq], xm8
+    pmaddubsw        xm0, [leftq], xm7
     add            leftq, 16
     pshufd           xm1, xm0, q3232
 %%store_left:
     paddw            xm0, xm1
     psrlw            xm0, 2
 %elif %1 == 1
-    pand             xm0, [leftq], xm8
+    pand             xm0, [leftq], xm7
     add            leftq, 16
     pshufd           xm1, xm0, q3232
 %%store_left:
@@ -2690,7 +2692,7 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
     movq             xm0, [leftq]
     add            leftq, 16
 %%store_left:
-    pand             xm0, xm8
+    pand             xm0, xm7
 %endif
     packuswb         xm0, xm0
     movd  [BUF_PX(-4,2)], xm0
@@ -2699,17 +2701,17 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 16, \
     test           edgeb, 0x02 ; LR_HAVE_RIGHT
     jz .load_p_lr_no_right
 %if %1 == 0
-    pmaddubsw        xm0, [lumaq+128], xm8
-    pmaddubsw        xm1, [lumaq+strideq+128], xm8
+    pmaddubsw        xm0, [lumaq+128], xm7
+    pmaddubsw        xm1, [lumaq+strideq+128], xm7
     paddw            xm0, xm1
     psrlw            xm0, 2
 %elif %1 == 1
-    pand             xm0, [lumaq+128], xm8
-    pand             xm1, [lumaq+strideq+128], xm8
+    pand             xm0, [lumaq+128], xm7
+    pand             xm1, [lumaq+strideq+128], xm7
     paddw            xm0, xm1
     psraw            xm0, 1
 %else ; %1 == 2
-    pand             xm0, [lumaq+128], xm8
+    pand             xm0, [lumaq+128], xm7
 %endif
     packuswb         xm0, xm0
     movd  [BUF_PX(64,2)], xm0
