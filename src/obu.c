@@ -1654,6 +1654,14 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 #endif
     }
     hdr->gdf.b64size = 1 << imax(!seqhdr->gdf_unit_matches_sbsz, hdr->sb128);
+    if (!seqhdr->gdf_unit_matches_sbsz && !hdr->sb128) {
+        int mask = 0;
+        for (int t = 0; t < hdr->tiling.t.cols - 1; t++)
+            mask |= hdr->tiling.t.col_start_sb[t];
+        for (int t = 0; t < hdr->tiling.t.rows - 1; t++)
+            mask |= hdr->tiling.t.row_start_sb[t];
+        if (mask & 1) hdr->gdf.b64size = 1;
+    }
 
     // cdef
     if (!hdr->all_lossless && seqhdr->cdef) {
@@ -1956,6 +1964,15 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 #endif
     }
     hdr->ccso.b64size = 1 << (seqhdr->ccso_unit_matches_sbsz ? hdr->sb128 : 2);
+    if (!seqhdr->ccso_unit_matches_sbsz && hdr->sb128 < 2) {
+        int mask = 0;
+        for (int t = 0; t < hdr->tiling.t.cols - 1; t++)
+            mask |= hdr->tiling.t.col_start_sb[t];
+        for (int t = 0; t < hdr->tiling.t.rows - 1; t++)
+            mask |= hdr->tiling.t.row_start_sb[t];
+        if (mask & 3 && !hdr->sb128) hdr->ccso.b64size = 2 - (mask & 1);
+        else if (mask & 1) hdr->ccso.b64size = 2;
+    }
 
     if (!hdr->all_lossless)
         hdr->txfm_mode = dav2d_get_bit(gb) ? DAV2D_TX_SWITCHABLE : DAV2D_TX_LARGEST;
