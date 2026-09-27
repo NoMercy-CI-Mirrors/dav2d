@@ -2851,10 +2851,6 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 }
             }
 
-            has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
-                !b->refine_mv && b->motion_mode == MM_TRANSLATION &&
-                (b->inter_mode != GLOBALMV_GLOBALMV || imin(bw4, bh4) == 1);
-
             b->comp_type = COMP_INTER_AVG;
             if (coded_mode <= JOINT_NEWMV /* no opfl */ &&
                 b->refine_mv != 1 /* disabled, or implicitly enabled */ &&
@@ -2914,9 +2910,18 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 };
                 b->cwp_idx = cwp_weighting_factor[!(f->refdir[b->ref.ref[0]] ^
                                                     f->refdir[b->ref.ref[1]])][n];
+                if (coded_mode != b->inter_mode && b->cwp_idx != 8) {
+                    assert(f->frame_hdr->opfl_refine_type == 2 /* always */);
+                    b->inter_mode = coded_mode;
+                    b->refine_mv = 0;
+                }
                 DEBUG_BLOCK_printf("%*sPost-compweightpred_idx[%d]: r=%d\n",
                                    depth, "", b->cwp_idx, ts->msac.rng);
             }
+
+            has_subpel_filter = b->inter_mode <= JOINT_NEWMV /* no opfl */ &&
+                !b->refine_mv && b->motion_mode == MM_TRANSLATION &&
+                (b->inter_mode != GLOBALMV_GLOBALMV || imin(bw4, bh4) == 1);
         } else {
             b->comp_type = COMP_INTER_NONE;
 
