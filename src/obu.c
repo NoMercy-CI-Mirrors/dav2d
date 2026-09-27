@@ -1230,7 +1230,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         hdr->has_bothside_refs = hdr->has_future_refs && hdr->has_past_refs;
 #if DEBUG_FRAME_HDR
         printf("HDR: post-refs[explicit:%d,refs:%d,%d,%d,%d,%d,%d,%d]: off=%td\n",
-               seqhdr->explicit_ref_frame_map, hdr->refidx[0],
+               explicit_ref_frame_map, hdr->refidx[0],
                hdr->refidx[1], hdr->refidx[2], hdr->refidx[3],
                hdr->refidx[4], hdr->refidx[5], hdr->refidx[6],
                (gb->ptr - init_ptr) * 8 - gb->bits_left);
