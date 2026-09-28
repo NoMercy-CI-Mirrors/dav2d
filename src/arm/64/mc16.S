@@ -3816,7 +3816,7 @@ endfunc
         mov             v30.16b, v28.16b
 
         mov             x12, #0                         // y = 0
-        opfl_refine_mv_large_neon opfl_compute_next_rows_16bpc_large_neon, 32
+        opfl_refine_mv_large opfl_compute_next_rows_16bpc_large_neon, 32, neon
 .endm
 
 .macro opfl_compute_rows_16bpc_small_neon p0_q0, p1_q0, p0_q1, p1_q1,   \
@@ -3877,7 +3877,7 @@ endfunc
         ldrel           q8,  x8,  shift_small
         mul             w16, w7,  w7                    // bs * bs
 
-        opfl_refine_mv_small_neon opfl_compute_next_rows_16bpc_small_neon
+        opfl_refine_mv_small opfl_compute_next_rows_16bpc_small_neon, neon
 .endm
 
 // void opfl_refine_mv_16bpc_neon(struct OpflRegressionData *out,

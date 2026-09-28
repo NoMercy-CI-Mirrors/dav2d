@@ -25,6 +25,7 @@
  */
 
 #include "src/arm/asm.S"
+#include "mc_common.S"
 #include "util.S"
 
 #if HAVE_SVE
@@ -125,12 +126,48 @@ endfunc
 DISABLE_SVE2
 #endif // HAVE_SVE2
 
-// After SHSUB has consumed one right shift, replace the shift right by 6
-// with a shift right by 5 when e1 = 1, allowing to skip the multiplication
-// by (e1 + 1).
-const shift_large, align=4
-        .short -5, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -5
-endconst
+.macro opfl_compute_rows_8bpc_large_sve p0_lo0_z, p0_hi0_z, p1_lo0_z, p1_hi0_z, \
+                                        p0_lo1_z, p0_hi1_z, p1_lo1_z, p1_hi1_z, \
+                                        p0_lo0, p0_hi0, p1_lo0, p1_hi0,         \
+                                        p0_lo1, p0_hi1, p1_lo1, p1_hi1,         \
+                                        tmp0_lo0, tmp0_hi0, tmp1_lo0, tmp1_hi0, \
+                                        tmp0_lo1, tmp0_hi1, tmp1_lo1, tmp1_hi1
+        add             x17, x10, #8
+        ld1b            {\p0_lo0_z\().h}, p0/z, [x10]
+        ld1b            {\p0_hi0_z\().h}, p0/z, [x17]
+        ld1b            {\p0_lo1_z\().h}, p0/z, [x10, x2]
+        ld1b            {\p0_hi1_z\().h}, p0/z, [x17, x2]
+        add             x17, x11, #8
+        mul             \tmp0_lo0\().8h, \p0_lo0\().8h, v0.h[0]         // d.i8[0] * p0p (lo line 0)
+        mul             \tmp0_hi0\().8h, \p0_hi0\().8h, v0.h[0]         // d.i8[0] * p0p (hi line 0)
+        ld1b            {\p1_lo0_z\().h}, p0/z, [x11]
+        ld1b            {\p1_hi0_z\().h}, p0/z, [x17]
+        ld1b            {\p1_lo1_z\().h}, p0/z, [x11, x4]
+        ld1b            {\p1_hi1_z\().h}, p0/z, [x17, x4]
+        mul             \tmp0_lo1\().8h, \p0_lo1\().8h, v0.h[0]         // d.i8[0] * p0p (lo line 1)
+        mul             \tmp0_hi1\().8h, \p0_hi1\().8h, v0.h[0]         // d.i8[0] * p0p (hi line 1)
+        sub             \tmp1_lo0\().8h, \p0_lo0\().8h, \p1_lo0\().8h   // tmp1 (lo line 0)
+        sub             \tmp1_hi0\().8h, \p0_hi0\().8h, \p1_hi0\().8h   // tmp1 (hi line 0)
+        mla             \tmp0_lo0\().8h, \p1_lo0\().8h, v0.h[1]         // d.i8[0] * p0p + d.i8[1] * p1p (lo line 0)
+        mla             \tmp0_hi0\().8h, \p1_hi0\().8h, v0.h[1]         // d.i8[0] * p0p + d.i8[1] * p1p (hi line 0)
+        add             x10, x10, x2, lsl #1
+        add             x11, x11, x4, lsl #1
+        sub             \tmp1_lo1\().8h, \p0_lo1\().8h, \p1_lo1\().8h   // tmp1 (lo line 1)
+        sub             \tmp1_hi1\().8h, \p0_hi1\().8h, \p1_hi1\().8h   // tmp1 (hi line 1)
+        mla             \tmp0_lo1\().8h, \p1_lo1\().8h, v0.h[1]         // d.i8[0] * p0p + d.i8[1] * p1p (lo line 1)
+        mla             \tmp0_hi1\().8h, \p1_hi1\().8h, v0.h[1]         // d.i8[0] * p0p + d.i8[1] * p1p (hi line 1)
+.endm
+
+.macro opfl_compute_next_rows_8bpc_large_sve
+        // Compute tmp0 and tmp1 for the next two lines.
+        // in:  line 2: [v8 - v21, v5 - v6]   (p0_lo - p0_hi, p1_lo - p1_hi)
+        //      line 3: [v23 - v13, v7 - v14]  (p0_lo - p0_hi, p1_lo - p1_hi)
+        // out: line 2: tmp0 [v1,  v2],  tmp1 [v8,  v21]
+        //      line 3: tmp0 [v20, v22], tmp1 [v23, v13]
+        opfl_compute_rows_8bpc_large_sve z8,  z21, z5,  z6,  z23, z13, z7,  z14, \
+                                         v8,  v21, v5,  v6,  v23, v13, v7,  v14, \
+                                         v1,  v2,  v8,  v21, v20, v22, v23, v13
+.endm
 
 // Process a 16-pixel-wide stripe as two adjacent 8x8 subblocks. Compute and
 // accumulate two lines at a time until both subblocks are complete, then move
@@ -159,35 +196,14 @@ endconst
         //      line 1: [v9 - v10, v11 - v12] (p0_lo - p0_hi, p1_lo - p1_hi)
         // out: line 0: tmp0 [v1, v2],  tmp1 [v3, v4]
         //      line 1: tmp0 [v7, v8],  tmp1 [v9, v10]
-        add             x15, x10, #8
-        add             x17, x11, #8
-        ld1b            {z3.h},  p0/z, [x10]
-        ld1b            {z4.h},  p0/z, [x15]
-        ld1b            {z5.h},  p0/z, [x11]
-        ld1b            {z6.h},  p0/z, [x17]
-        mul             v1.8h,   v3.8h,   v0.h[0]        // d.i8[0] * p0p (lo line 0)
-        mul             v2.8h,   v4.8h,   v0.h[0]        // d.i8[0] * p0p (hi line 0)
+        opfl_compute_rows_8bpc_large_sve z3,  z4,  z5,  z6,  z9,  z10, z11, z12, \
+                                         v3,  v4,  v5,  v6,  v9,  v10, v11, v12, \
+                                         v1,  v2,  v3,  v4,  v7,  v8,  v9,  v10
+
         mov             x12, #0                          // y = 0
-        ld1b            {z9.h},  p0/z, [x10, x2]
-        ld1b            {z10.h}, p0/z, [x15, x2]
-        ld1b            {z11.h}, p0/z, [x11, x4]
-        ld1b            {z12.h}, p0/z, [x17, x4]
-        mla             v1.8h,   v5.8h,   v0.h[1]        // d.i8[0] * p0p + d.i8[1] * p1p (lo line 0)
-        mla             v2.8h,   v6.8h,   v0.h[1]        // d.i8[0] * p0p + d.i8[1] * p1p (hi line 0)
-        sub             v3.8h,   v3.8h,   v5.8h          // tmp1 (lo line 0)
-        sub             v4.8h,   v4.8h,   v6.8h          // tmp1 (hi line 0)
-        mul             v7.8h,   v9.8h,   v0.h[0]        // d.i8[0] * p0p (lo line 1)
-        mul             v8.8h,   v10.8h,  v0.h[0]        // d.i8[0] * p0p (hi line 1)
-        add             x10, x10, x2, lsl #1
-        add             x11, x11, x4, lsl #1
         mov             v24.16b, v1.16b
         mov             v25.16b, v1.16b
         mov             v26.16b, v1.16b
-        sub             v9.8h,   v9.8h,   v11.8h         // tmp1 (lo line 1)
-        sub             v10.8h,  v10.8h,  v12.8h         // tmp1 (hi line 1)
-        mla             v7.8h,   v11.8h,  v0.h[1]        // d.i8[0] * p0p + d.i8[1] * p1p (lo line 1)
-        mla             v8.8h,   v12.8h,  v0.h[1]        // d.i8[0] * p0p + d.i8[1] * p1p (hi line 1)
-
         mov             v28.16b, v2.16b
         mov             v29.16b, v2.16b
         mov             v30.16b, v2.16b
@@ -195,593 +211,59 @@ endconst
         mov             v31.16b, v8.16b
         mov             x15, x0
 
-3:
-        movi            v11.2d,  #0
-
-        stp             q11, q11, [sp]                  // su2_0, su2_1
-        stp             q11, q11, [sp, #32]             // suv_0, suv_1
-        stp             q11, q11, [sp, #64]             // sv2_0, sv2_1
-        mov             w13, w12                        // py = y
-        stp             q11, q11, [sp, #96]             // suw_0, suw_1
-        stp             q11, q11, [sp, #128]            // svw_0, svw_1
-
-4:
-        // Compute the horizontal gradient for the two current lines.
-        // in: line 0: [v27, v31], line 1: [v26, v30]
-        // out: line 0: [v20, v19], line 1: [v22, v14]
-        dup             v22.8h,  v27.h[0]               // min_x (line 0)
-        dup             v23.8h,  v31.h[7]               // max_x (line 0)
-        dup             v20.8h,  v26.h[0]               // min_x (line 1)
-        dup             v21.8h,  v30.h[7]               // max_x (line 1)
-        ext             v17.16b, v22.16b, v27.16b, #12  // p0_lo (line 0)
-        ext             v18.16b, v22.16b, v27.16b, #14  // p1_lo (line 0)
-        ext             v1.16b,  v20.16b, v26.16b, #12  // p0_lo (line 1)
-        ext             v2.16b,  v20.16b, v26.16b, #14  // p1_lo (line 1)
-        ext             v22.16b, v27.16b, v31.16b, #2   // p2_lo (line 0)
-        ext             v5.16b,  v27.16b, v31.16b, #4   // p3_lo (line 0)
-
-        sub             v22.8h,  v22.8h,  v18.8h        // p2 - p1 (lo line 0)
-        sub             v17.8h,  v5.8h,   v17.8h        // p3 - p0 (lo line 0)
-        ext             v20.16b, v26.16b, v30.16b, #2   // p2_lo (line 1)
-        ext             v5.16b,  v26.16b, v30.16b, #4   // p3_lo (line 1)
-        ext             v14.16b, v31.16b, v23.16b, #2   // p2_hi (line 0)
-        ext             v15.16b, v31.16b, v23.16b, #4   // p3_hi (line 0)
-        sub             v20.8h,  v20.8h,  v2.8h         // p2 - p1 (lo line 1)
-        sub             v5.8h,   v5.8h,   v1.8h         // p3 - p0 (lo line 1)
-        ext             v7.16b,  v27.16b, v31.16b, #12  // p0_hi (line 0)
-        ext             v23.16b, v27.16b, v31.16b, #14  // p1_hi (line 0)
-
-        ext             v19.16b, v30.16b, v21.16b, #2   // p2_hi (line 1)
-        mul             z22.h,   z22.h,   #42           // (p2 - p1) * 42 (lo line 0)
-        mul             z17.h,   z17.h,   #5            // (p3 - p0) * 5  (lo line 0)
-        ext             v8.16b,  v26.16b, v30.16b, #14  // p1_hi (line 1)
-        ext             v6.16b,  v30.16b, v21.16b, #4   // p3_hi (line 1)
-        ext             v21.16b, v26.16b, v30.16b, #12  // p0_hi (line 1)
-        mul             z20.h,   z20.h,   #42           // (p2 - p1) * 42 (lo line 1)
-        mul             z5.h,    z5.h,    #5            // (p3 - p0) * 5  (lo line 1)
-        sub             v14.8h,  v14.8h,  v23.8h        // p2 - p1 (hi line 0)
-        sub             v19.8h,  v19.8h,  v8.8h         // p2 - p1 (hi line 1)
-        sub             v6.8h,   v6.8h,   v21.8h        // p3 - p0 (hi line 1)
-        sub             v15.8h,  v15.8h,  v7.8h         // p3 - p0 (hi line 0)
-        mul             z14.h,   z14.h,   #42           // (p2 - p1) * 42 (hi line 0)
-        mul             z15.h,   z15.h,   #5            // (p3 - p0) * 5  (hi line 0)
-        ldp             q12, q13, [x8]                  // shift
-        mul             z19.h,   z19.h,   #42           // (p2 - p1) * 42 (hi line 1)
-        mul             z6.h,    z6.h,    #5            // (p3 - p0) * 5  (hi line 1)
-        // Form x0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening:
-        // SHSUB computes floor(x0 / 2), avoiding the potentially 17-bit
-        // subtraction and consuming one bit of the final right shift.
-        //
-        // The *42 term is always even, so x0 has the same parity as the *5
-        // term. For negative odd x0, SHSUB's rounding already accounts for
-        // the -(x0 < 0) correction; only negative even x0 needs an extra -1.
-        // Move the parity bit to the sign bit, use BIC to retain a sign only
-        // for negative even x0, then use SSRA to apply that correction.
-        shsub           v22.8h,  v22.8h,  v17.8h        // x0 / 2 (lo line 0)
-        shsub           v20.8h,  v20.8h,  v5.8h         // x0 / 2 (lo line 1)
-        shsub           v14.8h,  v14.8h,  v15.8h        // x0 / 2 (hi line 0)
-        shsub           v19.8h,  v19.8h,  v6.8h         // x0 / 2 (hi line 1)
-        shl             v17.8h,  v17.8h,  #15           // Move x0 parity to sign bit (lo line 0)
-        shl             v5.8h,   v5.8h,   #15           // Move x0 parity to sign bit (lo line 1)
-        shl             v15.8h,  v15.8h,  #15           // Move x0 parity to sign bit (hi line 0)
-        shl             v6.8h,   v6.8h,   #15           // Move x0 parity to sign bit (hi line 1)
-        bic             v17.16b, v22.16b, v17.16b       // Sign set if x0 < 0 and even (lo line 0)
-        bic             v5.16b,  v20.16b, v5.16b        // Sign set if x0 < 0 and even (lo line 1)
-        bic             v15.16b, v14.16b, v15.16b       // Sign set if x0 < 0 and even (hi line 0)
-        bic             v6.16b,  v19.16b, v6.16b        // Sign set if x0 < 0 and even (hi line 1)
-        ssra            v22.8h,  v17.8h,  #15           // Adjust for SRSHL rounding up (lo line 0)
-        ssra            v20.8h,  v5.8h,   #15           // Adjust for SRSHL rounding up (lo line 1)
-        ssra            v14.8h,  v15.8h,  #15           // Adjust for SRSHL rounding up (hi line 0)
-        ssra            v19.8h,  v6.8h,   #15           // Adjust for SRSHL rounding up (hi line 1)
-        srshl           v22.8h,  v22.8h,  v12.8h        // x0 (lo line 0)
-        srshl           v20.8h,  v20.8h,  v12.8h        // x0 (lo line 1)
-        srshl           v14.8h,  v14.8h,  v13.8h        // x0 (hi line 0)
-        srshl           v19.8h,  v19.8h,  v13.8h        // x0 (hi line 1)
-        ldp             q11, q16, [sp]                  // su2_0, su2_1
-
-        // Start accumulating the results that don't need the vertical gradient
-        // (su2 and suw).
-        sdot            z11.d,  z20.h,  z20.h           // su2_0
-        sdot            z16.d,  z19.h,  z19.h           // su2_1
-        ldp             q17, q18, [sp, #96]             // suw_0, suw_1
-
-        sdot            z11.d,  z22.h,  z22.h           // su2_0
-        sdot            z16.d,  z14.h,  z14.h           // su2_1
-        cmp             w13, w16                        // py < h - 2
-        sdot            z17.d,  z20.h,  z3.h            // suw_0
-        sdot            z18.d,  z19.h,  z4.h            // suw_1
-        stp             q20, q19, [sp, #160]
-        stp             q11, q16, [sp]                  // su2_0, su2_1
-        sdot            z17.d,  z22.h,  z9.h            // suw_0
-        sdot            z18.d,  z14.h,  z10.h           // suw_1
-        stp             q17, q18, [sp, #96]             // suw_0, suw_1
-        stp             q22, q14, [sp, #192]
-
-        // If needed, compute tmp0/tmp1 for the next two lines (otherwise
-        // reuse the last line), then compute the vertical gradients for the
-        // current two lines.
-        b.lt            5f
-
-        // We reached the end of the block, compute the vertical gradient
-        // reusing the last line as needed. The result for the very last line
-        // is right-shifted by 6 to account for e2 = 1.
-
-        // Compute the vertical gradient for the low halves of the current two lines.
-        // in:  line 0: [v24, v28], line 1: [v25, v29], line 2: [v26, v30],
-        //      line 3: [v27, v31], line 4: [v27, v31], line 5: [v27, v31]
-        // out: line 0: [v5,  -],  line 1: [v19, -]
-        sub             v5.8h,   v27.8h,  v25.8h        // q2 - q1 (lo line 0)
-        sub             v24.8h,  v27.8h,  v24.8h        // q3 - q0 (lo line 0)
-        sub             v19.8h,  v27.8h,  v26.8h        // q2 - q1 (lo line 1)
-        sub             v25.8h,  v27.8h,  v25.8h        // q3 - q0 (lo line 1)
-        mul             z5.h,    z5.h,    #42           // (q2 - q1) * 42 (lo line 0)
-        mul             z24.h,   z24.h,   #5            // (q3 - q0) * 5  (lo line 0)
-        mul             z19.h,   z19.h,   #42           // (q2 - q1) * 42 (lo line 1)
-        mul             z25.h,   z25.h,   #5            // (q3 - q0) * 5  (lo line 1)
-        // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
-        // SHSUB computes floor(y0 / 2), avoiding the 17-bit subtraction and
-        // consuming one bit of the final right shift.
-        //
-        // The *42 term is even, so the *5 term determines y0 parity. SHSUB
-        // already applies the required correction for negative odd y0; use
-        // the parity and sign bits to subtract one only for negative even y0.
-        shsub           v5.8h,   v5.8h,   v24.8h        // y0 / 2 (lo line 0)
-        shsub           v19.8h,  v19.8h,  v25.8h        // y0 / 2 (lo line 1)
-        shl             v24.8h,  v24.8h,  #15           // Move y0 parity to sign bit (lo line 0)
-        shl             v25.8h,  v25.8h,  #15           // Move y0 parity to sign bit (lo line 1)
-        bic             v24.16b, v5.16b,  v24.16b       // Sign set if y0 < 0 and even (lo line 0)
-        bic             v25.16b, v19.16b, v25.16b       // Sign set if y0 < 0 and even (lo line 1)
-        ssra            v5.8h,   v24.8h,  #15           // Adjust for SRSHR rounding up (lo line 0)
-        ssra            v19.8h,  v25.8h,  #15           // Adjust for SRSHR rounding up (lo line 1)
-        srshr           v5.8h,   v5.8h,   #6            // y0 (lo line 0)
-        srshr           v19.8h,  v19.8h,  #5            // y0 (lo line 1)
-        // Compute the vertical gradient for the high halves of the current two lines.
-        // in:  line 0: [-, v28], line 1: [-, v29], line 2: [-, v30],
-        //      line 3: [-, v31], line 4: [-, v31], line 5: [-, v31]
-        // out: line 0: [-,  v14], line 1: [-,  v15]
-        sub             v14.8h,  v31.8h,  v29.8h        // q2 - q1 (hi line 0)
-        sub             v28.8h,  v31.8h,  v28.8h        // q3 - q0 (hi line 0)
-        sub             v15.8h,  v31.8h,  v30.8h        // q2 - q1 (hi line 1)
-        sub             v29.8h,  v31.8h,  v29.8h        // q3 - q0 (hi line 1)
-        mul             z14.h,   z14.h,   #42           // (q2 - q1) * 42 (hi line 0)
-        mul             z28.h,   z28.h,   #5            // (q3 - q0) * 5  (hi line 0)
-        mul             z15.h,   z15.h,   #42           // (q2 - q1) * 42 (hi line 1)
-        mul             z29.h,   z29.h,   #5            // (q3 - q0) * 5  (hi line 1)
-        shsub           v14.8h,  v14.8h,  v28.8h        // y0 / 2 (hi line 0)
-        shsub           v15.8h,  v15.8h,  v29.8h        // y0 / 2 (hi line 1)
-        shl             v28.8h,  v28.8h,  #15           // Move y0 parity to sign bit (hi line 0)
-        shl             v29.8h,  v29.8h,  #15           // Move y0 parity to sign bit (hi line 1)
-        bic             v28.16b, v14.16b, v28.16b       // Sign set if y0 < 0 and even (hi line 0)
-        bic             v29.16b, v15.16b, v29.16b       // Sign set if y0 < 0 and even (hi line 1)
-        ssra            v14.8h,  v28.8h,  #15           // Adjust for SRSHR rounding up (hi line 0)
-        ssra            v15.8h,  v29.8h,  #15           // Adjust for SRSHR rounding up (hi line 1)
-        srshr           v14.8h,  v14.8h,  #6            // y0 (hi line 0)
-        srshr           v15.8h,  v15.8h,  #5            // y0 (hi line 1)
-        b               6f
-
-5:
-        // Compute tmp0 and tmp1 for the next two lines.
-        // in:  line 2: [v8 - v21, v5 - v6]   (p0_lo - p0_hi, p1_lo - p1_hi)
-        //      line 3: [v23 - v13, v7 - v14]  (p0_lo - p0_hi, p1_lo - p1_hi)
-        // out: line 2: tmp0 [v1,  v2],  tmp1 [v8,  v21]
-        //      line 3: tmp0 [v20, v22], tmp1 [v23, v13]
-        add             x17, x10, #8
-        ld1b            {z8.h},  p0/z, [x10]
-        ld1b            {z21.h}, p0/z, [x17]
-        ld1b            {z23.h}, p0/z, [x10, x2]
-        ld1b            {z13.h}, p0/z, [x17, x2]
-        add             x17, x11, #8
-        ld1b            {z5.h},  p0/z, [x11]
-        ld1b            {z6.h},  p0/z, [x17]
-        ld1b            {z7.h},  p0/z, [x11, x4]
-        ld1b            {z14.h}, p0/z, [x17, x4]
-        add             x10, x10, x2, lsl #1
-        add             x11, x11, x4, lsl #1
-        mul             v1.8h,   v8.8h,   v0.h[0]       // d.i8[0] * p0p (lo line 2)
-        mul             v2.8h,   v21.8h,  v0.h[0]       // d.i8[0] * p0p (hi line 2)
-        mul             v20.8h,  v23.8h,  v0.h[0]       // d.i8[0] * p0p (lo line 3)
-        mul             v22.8h,  v13.8h,  v0.h[0]       // d.i8[0] * p0p (hi line 3)
-        mla             v1.8h,   v5.8h,   v0.h[1]       // d.i8[0] * p0p + d.i8[1] * p1p (lo line 2)
-        mla             v2.8h,   v6.8h,   v0.h[1]       // d.i8[0] * p0p + d.i8[1] * p1p (hi line 2)
-        mla             v20.8h,  v7.8h,   v0.h[1]       // d.i8[0] * p0p + d.i8[1] * p1p (lo line 3)
-        mla             v22.8h,  v14.8h,  v0.h[1]       // d.i8[0] * p0p + d.i8[1] * p1p (hi line 3)
-        sub             v8.8h,   v8.8h,   v5.8h         // tmp1 (lo line 2)
-        sub             v21.8h,  v21.8h,  v6.8h         // tmp1 (hi line 2)
-        sub             v23.8h,  v23.8h,  v7.8h         // tmp1 (lo line 3)
-        sub             v13.8h,  v13.8h,  v14.8h        // tmp1 (hi line 3)
-        dup             v17.8h,  w19
-
-        // Compute the vertical gradient for the low halves of the current two lines.
-        // in:  line 0: [v24, -], line 1: [v25, -], line 2: [v26, -],
-        //      line 3: [v27, -], line 4: [v1,  -], line 5: [v20, -]
-        // out: line 0: [v5,  -],  line 1: [v19, -]
-        sub             v5.8h,   v27.8h,  v25.8h        // q2 - q1 (lo line 0)
-        sub             v24.8h,  v1.8h,   v24.8h        // q3 - q0 (lo line 0)
-        sub             v19.8h,  v1.8h,   v26.8h        // q2 - q1 (lo line 1)
-        sub             v25.8h,  v20.8h,  v25.8h        // q3 - q0 (lo line 1)
-        mul             z5.h,    z5.h,    #42           // (q2 - q1) * 42 (lo line 0)
-        mul             z24.h,   z24.h,   #5            // (q3 - q0) * 5  (lo line 0)
-        mul             z19.h,   z19.h,   #42           // (q2 - q1) * 42 (lo line 1)
-        mul             z25.h,   z25.h,   #5            // (q3 - q0) * 5  (lo line 1)
-        // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
-        // SHSUB computes floor(y0 / 2), avoiding the 17-bit subtraction and
-        // consuming one bit of the final right shift.
-        //
-        // The *42 term is even, so the *5 term determines y0 parity. SHSUB
-        // already applies the required correction for negative odd y0; use
-        // the parity and sign bits to subtract one only for negative even y0.
-        shsub           v5.8h,   v5.8h,   v24.8h        // y0 / 2 (lo line 0)
-        shsub           v19.8h,  v19.8h,  v25.8h        // y0 / 2 (lo line 1)
-        shl             v24.8h,  v24.8h,  #15           // Move y0 parity to sign bit (lo line 0)
-        shl             v25.8h,  v25.8h,  #15           // Move y0 parity to sign bit (lo line 1)
-        bic             v24.16b, v5.16b,  v24.16b       // Sign set if y0 < 0 and even (lo line 0)
-        bic             v25.16b, v19.16b, v25.16b       // Sign set if y0 < 0 and even (lo line 1)
-        ssra            v5.8h,   v24.8h,  #15           // Adjust for SRSHL rounding up (lo line 0)
-        ssra            v19.8h,  v25.8h,  #15           // Adjust for SRSHR rounding up (lo line 1)
-        mov             v24.16b, v26.16b
-        mov             v25.16b, v27.16b
-        srshl           v5.8h,   v5.8h,   v17.8h        // y0 (lo line 0)
-        // For all lines after y = 0 use the regular shift value.
-        mov             v26.16b, v1.16b
-        srshr           v19.8h,  v19.8h,  #6            // y0 (lo line 1)
-        // Compute the vertical gradient for the high halves of the current two lines.
-        // in:  line 0: [-, v28], line 1: [-, v29], line 2: [-, v30],
-        //      line 3: [-, v31], line 4: [-,  v2], line 5: [-, v22]
-        // out: line 0: [-,  v14], line 1: [-,  v15]
-        sub             v14.8h,  v31.8h,  v29.8h        // q2 - q1 (hi line 0)
-        sub             v28.8h,  v2.8h,   v28.8h        // q3 - q0 (hi line 0)
-        mov             v27.16b, v20.16b
-        sub             v15.8h,  v2.8h,   v30.8h        // q2 - q1 (hi line 1)
-        sub             v29.8h,  v22.8h,  v29.8h        // q3 - q0 (hi line 1)
-        mul             z14.h,   z14.h,   #42           // (q2 - q1) * 42 (hi line 0)
-        mul             z28.h,   z28.h,   #5            // (q3 - q0) * 5  (hi line 0)
-        mul             z15.h,   z15.h,   #42           // (q2 - q1) * 42 (hi line 1)
-        mul             z29.h,   z29.h,   #5            // (q3 - q0) * 5  (hi line 1)
-        shsub           v14.8h,  v14.8h,  v28.8h        // y0 / 2 (hi line 0)
-        shsub           v15.8h,  v15.8h,  v29.8h        // y0 / 2 (hi line 1)
-        shl             v28.8h,  v28.8h,  #15           // Move y0 parity to sign bit (hi line 0)
-        shl             v29.8h,  v29.8h,  #15           // Move y0 parity to sign bit (hi line 1)
-        bic             v6.16b,  v14.16b, v28.16b       // Sign set if y0 < 0 and even (hi line 0)
-        bic             v29.16b, v15.16b, v29.16b       // Sign set if y0 < 0 and even (hi line 1)
-        mov             v28.16b, v30.16b
-        ssra            v14.8h,  v6.8h,   #15           // Adjust for SRSHL rounding up (hi line 0)
-        ssra            v15.8h,  v29.8h,  #15           // Adjust for SRSHR rounding up (hi line 1)
-        mov             v29.16b, v31.16b
-        srshl           v14.8h,  v14.8h,  v17.8h        // y0 (hi line 0)
-        srshr           v15.8h,  v15.8h,  #6            // y0 (hi line 1)
-        mov             w19, #-6
-        mov             v30.16b, v2.16b
-        mov             v31.16b, v22.16b
-6:
-
-        // v0_lo = v5, v0_hi = v14, v1_lo = v19, v1_hi = v15
-        // u0_lo = v1, u0_hi = v2,  u1_lo = v6,  u1_hi = v7
-        // w0_lo = v3, w0_hi = v4,  w1_lo = v9,  w1_hi = v10
-        // Do the rest of the accumulating (sv2, suv, svw).
-        ldp             q1,  q2,  [sp, #160]            // horiz_gradient_low
-        ldp             q6,  q7,  [sp, #192]            // horiz_gradient_high
-        add             w13, w13, #2                    // py += 2
-        add             w17, w12, w7                    // py_end = y + bs
-
-        ldp             q12, q22, [sp, #32]             // suv_0, suv_1
-        ldp             q16, q17, [sp, #64]             // sv2_0, sv2_1
-        ldp             q18, q20, [sp, #128]            // svw_0, svw_1
-
-        sdot            z12.d,  z1.h,  z5.h             // suv_0
-        sdot            z22.d,  z2.h,  z14.h            // suv_1
-        sdot            z16.d,  z5.h,  z5.h             // sv2_0
-        sdot            z17.d,  z14.h, z14.h            // sv2_1
-        sdot            z18.d,  z5.h,  z3.h             // svw_0
-        sdot            z20.d,  z14.h, z4.h             // svw_1
-
-        sdot            z12.d,  z6.h,  z19.h            // suv_0
-        sdot            z22.d,  z7.h,  z15.h            // suv_1
-        sdot            z16.d,  z19.h, z19.h            // sv2_0
-        sdot            z17.d,  z15.h, z15.h            // sv2_1
-        sdot            z18.d,  z19.h, z9.h             // svw_0
-        sdot            z20.d,  z15.h, z10.h            // svw_1
-
-        cmp             w13, w17                        // py < py_end
-
-        stp             q12, q22, [sp, #32]
-        stp             q16, q17, [sp, #64]
-        stp             q18, q20, [sp, #128]
-
-        mov             v3.16b,  v8.16b
-        mov             v4.16b,  v21.16b
-        mov             v9.16b,  v23.16b
-        mov             v10.16b, v13.16b
-
-        b.ne            4b
-
-        // Accumulate and store to `out`.
-        dup             v20.2d,  x14
-        add             w12, w12, w7                    // y += bs
-        ldp             q21, q11, [sp]                  // su2_0, su2_1
-        ldp             q12, q13, [sp, #32]             // suv_0, suv_1
-        ldp             q14, q15, [sp, #64]             // sv2_0, sv2_1
-        ldp             q16, q17, [sp, #96]             // suw_0, suw_1
-        ldp             q18, q19, [sp, #128]            // svw_0, svw_1
-        cmp             w12, w6                         // y < h
-
-        addp            d18,     v18.2d                 // svw_0
-        addp            d19,     v19.2d                 // svw_1
-        uzp1            v21.4s,  v21.4s,  v12.4s        // su2_0, suv_0
-        uzp1            v14.4s,  v14.4s,  v16.4s        // sv2_0, suw_0
-        uzp1            v11.4s,  v11.4s,  v13.4s        // su2_1, suv_1
-        uzp1            v15.4s,  v15.4s,  v17.4s        // sv2_1, suw_1
-        str             s18, [x15, #16]                 // out[0].svw
-        str             s19, [x15, #36]                 // out[1].svw
-        addp            v21.4s,  v21.4s,  v14.4s        // su2_0, suv_0, sv2_0, suw_0
-        addp            v11.4s,  v11.4s,  v15.4s        // su2_1, suv_1, sv2_1, suw_1
-        add             v21.4s,  v21.4s,  v20.4s        // add bs * bs to su2_0 and sv2_0
-        add             v11.4s,  v11.4s,  v20.4s        // add bs * bs to su2_1 and sv2_1
-        mov             x13, #20
-        lsr             x17, x5,  #3
-        str             q21, [x15]                      // out[0].{su2, suv, sv2, suw}
-        str             q11, [x15, #20]                 // out[1].{su2, suv, sv2, suw}
-
-        madd            x15, x17, x13, x15              // out += width >> 3 (20 bytes per struct)
-        b.ne            3b
-
-        add             w9,  w9,  #16                   // bx += 16
-        add             x1,  x1,  #16
-        cmp             w9,  w5                         // bx < w
-        add             x0,  x0,  #40                   // 2 * out
-        add             x3,  x3,  #16
-        b.ne            2b
-
-        add             sp,  sp,  #224
+        opfl_refine_mv_large opfl_compute_next_rows_8bpc_large_sve, 16, sve
 .endm
 
-// After SHSUB has consumed one right shift, replace the shift right by 6
-// with a shift right by 5 when e1 = 1, allowing to skip the multiplication
-// by (e1 + 1).
-const shift_small, align=4
-        .short -5, -6, -6, -6, -6, -6, -6, -5
-endconst
+.macro opfl_compute_rows_8bpc_small_sve p0_z0, p1_z0, p0_z1, p1_z1, \
+                                        p0_0, p1_0, p0_1, p1_1,     \
+                                        tmp0_0, tmp1_0, tmp0_1, tmp1_1
+        ld1b            {\p0_z0\().h}, p0/z, [x1]
+        ld1b            {\p1_z0\().h}, p0/z, [x3]
+        ld1b            {\p0_z1\().h}, p0/z, [x1, x2]
+        ld1b            {\p1_z1\().h}, p0/z, [x3, x4]
+
+        mul             \tmp0_0\().8h, \p0_0\().8h, v0.h[0]     // d.i8[0] * p0p (line 0)
+        mul             \tmp0_1\().8h, \p0_1\().8h, v0.h[0]     // d.i8[0] * p0p (line 1)
+        sub             \tmp1_0\().8h, \p0_0\().8h, \p1_0\().8h
+        sub             \tmp1_1\().8h, \p0_1\().8h, \p1_1\().8h
+        mla             \tmp0_0\().8h, \p1_0\().8h, v0.h[1]     // d.i8[0] * p0p + d.i8[1] * p1p (line 0)
+        mla             \tmp0_1\().8h, \p1_1\().8h, v0.h[1]     // d.i8[0] * p0p + d.i8[1] * p1p (line 1)
+        add             x1,  x1,  x2, lsl #1                    // p0 += 2 * p0_stride
+        add             x3,  x3,  x4, lsl #1                    // p1 += 2 * p1_stride
+.endm
+
+.macro opfl_compute_next_rows_8bpc_small_sve
+        // Compute tmp0/tmp1 for the next two lines.
+        // in:  line 2: [v22, v23] (p0, p1)
+        //      line 3: [v21, v3]  (p0, p1)
+        // out: line 2: tmp0 [v4], tmp1 [v20]
+        //      line 3: tmp0 [v6], tmp1 [v21]
+        opfl_compute_rows_8bpc_small_sve z22, z23, z21, z3, \
+                                         v22, v23, v21, v3, \
+                                         v4,  v20, v6,  v21
+.endm
 
 // Process the 8-pixel-wide block two lines at a time. For bs == 4, the low
 // and high halves form two adjacent 4x4 subblocks; for bs == 8, they form one
 // 8x8 subblock. After completing the current subblock row, move down to the
 // next one until the bottom of the block is reached.
 .macro opfl_refine_mv_8bpc_small_sve
+        sub             w11, w6,  #2                       // h - 2
+
         // Compute tmp0/tmp1 for the first two lines.
         // in:  line 0: [v2, v3]  (p0, p1)
         //      line 1: [v8, v9]  (p0, p1)
         // out: line 0: tmp0 [v4], tmp1 [v5]
         //      line 1: tmp0 [v6], tmp1 [v7]
-        ld1b            {z2.h}, p0/z, [x1]
-        ld1b            {z3.h}, p0/z, [x3]
-        add             x1,  x1,  x2
-        add             x3,  x3,  x4
-        ld1b            {z8.h}, p0/z, [x1]
-        ld1b            {z9.h}, p0/z, [x3]
-        sub             w11, w6,  #2                       // h - 2
-        mul             v4.8h,   v2.8h,   v0.h[0]          // d.i8[0] * p0p (line 0)
-        mul             v6.8h,   v8.8h,   v0.h[0]          // d.i8[0] * p0p (line 1)
-        add             x1,  x1,  x2
-        add             x3,  x3,  x4
-        sub             v5.8h,   v2.8h,   v3.8h            // tmp1 (line 0)
-        sub             v7.8h,   v8.8h,   v9.8h            // tmp1 (line 1)
-        ldrel           q8,  x8,  shift_small
-        mla             v4.8h,   v3.8h,   v0.h[1]          // d.i8[0] * p0p + d.i8[1] * p1p (line 0)
-        mla             v6.8h,   v9.8h,   v0.h[1]          // d.i8[0] * p0p + d.i8[1] * p1p (line 1)
+        opfl_compute_rows_8bpc_small_sve z2, z3, z8, z9, \
+                                         v2, v3, v8, v9, \
+                                         v4, v5, v6, v7
+
         mov             w9,  #0                            // y = 0
+        ldrel           q8,  x8,  shift_small
         mul             w16, w7,  w7                       // bs * bs
 
-        mov             v28.16b, v4.16b
-        mov             v29.16b, v4.16b
-        mov             v30.16b, v4.16b
-        mov             v31.16b, v6.16b
-        // This decides how much to shift y0 after SHSUB has consumed one
-        // right shift. It's a shift right by 6 in most cases, unless e2 is 1
-        // in which case a shift right by 5 allows to skip the multiplication
-        // by (1 + e2). This is true for y = 0, so initialize for this special
-        // case, then later overwrite it for the general case.
-        mov             w12, #-5
-2:
-        mov             w10, w9                            // py = y
-        movi            v10.2d,  #0                        // su2_0, su2_1
-        movi            v11.2d,  #0                        // suv_0, suv_1
-        movi            v12.2d,  #0                        // sv2_0, sv2_1
-        movi            v13.2d,  #0                        // suw_0, suw_1
-        movi            v14.2d,  #0                        // svw_0, svw_1
-        add             w17, w9,  w7                       // py_end = y + bs
-3:
-        // Compute the horizontal gradient for the current two lines.
-        // in:  line 0: [v30], line 1: [v31]
-        // out: line 0: [v2], line 1: [v25]
-        dup             v20.8h,  v30.h[0]                 // min_x (line 0)
-        dup             v21.8h,  v30.h[7]                 // max_x (line 0)
-        ext             v2.16b,  v30.16b, v21.16b, #2     // p2 (line 0)
-        ext             v1.16b,  v20.16b, v30.16b, #14    // p1 (line 0)
-        ext             v22.16b, v20.16b, v30.16b, #12    // p0 (line 0)
-        ext             v3.16b,  v30.16b, v21.16b, #4     // p3 (line 0)
-        dup             v20.8h,  v31.h[0]                 // min_x (line 1)
-        dup             v21.8h,  v31.h[7]                 // max_x (line 1)
-
-        sub             v2.8h,   v2.8h,   v1.8h           // p2 - p1 (line 0)
-        sub             v3.8h,   v3.8h,   v22.8h          // p3 - p0 (line 0)
-        ext             v23.16b, v20.16b, v31.16b, #12    // p0 (line 1)
-        ext             v26.16b, v31.16b, v21.16b, #4     // p3 (line 1)
-        mul             z2.h,    z2.h,    #42             // (p2 - p1) * 42 (line 0)
-        ext             v24.16b, v20.16b, v31.16b, #14    // p1 (line 1)
-        ext             v25.16b, v31.16b, v21.16b, #2     // p2 (line 1)
-        mul             z3.h,    z3.h,    #5              // (p3 - p0) * 5  (line 0)
-        sub             v25.8h,  v25.8h,  v24.8h          // p2 - p1 (line 1)
-        sub             v26.8h,  v26.8h,  v23.8h          // p3 - p0 (line 1)
-        mul             z25.h,   z25.h,   #42             // (p2 - p1) * 42 (line 1)
-        mul             z26.h,   z26.h,   #5              // (p3 - p0) * 5  (line 1)
-        // Form x0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
-        // SHSUB computes floor(x0 / 2), avoiding the 17-bit subtraction and
-        // consuming one bit of the final right shift.
-        //
-        // The *42 term is even, so the *5 term determines x0 parity. SHSUB
-        // already applies the required correction for negative odd x0; use
-        // the parity and sign bits to subtract one only for negative even x0.
-        shsub           v2.8h,   v2.8h,   v3.8h           // x0 / 2 (line 0)
-        shsub           v25.8h,  v25.8h,  v26.8h          // x0 / 2 (line 1)
-        shl             v3.8h,   v3.8h,   #15             // Move x0 parity to sign bit (line 0)
-        shl             v26.8h,  v26.8h,  #15             // Move x0 parity to sign bit (line 1)
-        bic             v3.16b,  v2.16b,  v3.16b          // Sign set if x0 < 0 and even (line 0)
-        bic             v26.16b, v25.16b, v26.16b         // Sign set if x0 < 0 and even (line 1)
-        ssra            v2.8h,   v3.8h,   #15             // Adjust for SRSHL rounding up (line 0)
-        ssra            v25.8h,  v26.8h,  #15             // Adjust for SRSHL rounding up (line 1)
-        srshl           v2.8h,   v2.8h,   v8.8h           // x0 (line 0)
-        srshl           v25.8h,  v25.8h,  v8.8h           // x0 (line 1)
-
-        cmp             w10, w11                          // py < h - 2
-        // Start accumulating the results that don't need the vertical gradient
-        // (su2 and suw).
-        sdot            z10.d,  z25.h, z25.h              // su2_0, su2_1
-        sdot            z13.d,  z25.h, z7.h               // suw_0, suw_1
-        sdot            z10.d,  z2.h,  z2.h               // su2_0, su2_1
-        sdot            z13.d,  z2.h,  z5.h               // suw_0, suw_1
-
-        b.lt            4f
-
-        // We reached the end of the block, compute the vertical gradient
-        // reusing the last line as needed. The result for the very last line
-        // is right-shifted by 6 to account for e2 = 1.
-
-        // Compute the vertical gradient for both rows.
-        // in:  line 0: [v28], line 1: [v29], line 2: [v30]
-        //      line 3: [v31], line 4: [v31], line 5: [v31]
-        // out: line 0: [v24], line 1: [v26]
-        sub             v24.8h,  v31.8h,  v29.8h             // q2 - q1 (line 0)
-        sub             v1.8h,   v31.8h,  v28.8h             // q3 - q0 (line 0)
-        sub             v22.8h,  v31.8h,  v30.8h             // q2 - q1 (line 1)
-        sub             v23.8h,  v31.8h,  v29.8h             // q3 - q0 (line 1)
-        mul             z24.h,   z24.h,   #42                // (q2 - q1) * 42 (line 0)
-        mul             z1.h,    z1.h,    #5                 // (q3 - q0) * 5  (line 0)
-        mul             z22.h,   z22.h,   #42                // (q2 - q1) * 42 (line 1)
-        mul             z23.h,   z23.h,   #5                 // (q3 - q0) * 5  (line 1)
-        // Form y0 = (q2 - q1) * 42 - (q3 - q0) * 5 without widening.
-        // SHSUB computes floor(y0 / 2), avoiding the 17-bit subtraction and
-        // consuming one bit of the final right shift.
-        //
-        // The *42 term is even, so the *5 term determines y0 parity. SHSUB
-        // already applies the required correction for negative odd y0; use
-        // the parity and sign bits to subtract one only for negative even y0.
-        shsub           v24.8h,  v24.8h,  v1.8h              // y0 / 2 (line 0)
-        shsub           v22.8h,  v22.8h,  v23.8h             // y0 / 2 (line 1)
-        shl             v1.8h,   v1.8h,   #15                // Move y0 parity to sign bit (line 0)
-        shl             v23.8h,  v23.8h,  #15                // Move y0 parity to sign bit (line 1)
-        bic             v1.16b,  v24.16b, v1.16b             // Sign set if y0 < 0 and even (line 0)
-        bic             v23.16b, v22.16b, v23.16b            // Sign set if y0 < 0 and even (line 1)
-        ssra            v24.8h,  v1.8h,   #15                // Adjust for SRSHR rounding up (line 0)
-        ssra            v22.8h,  v23.8h,  #15                // Adjust for SRSHR rounding up (line 1)
-        srshr           v24.8h,  v24.8h,  #6                 // y0 (line 0)
-        srshr           v26.8h,  v22.8h,  #5                 // y0 (line 1)
-        // No need to move anything, it's the last iteration.
-        b               5f
-
-4:      // Compute tmp0/tmp1 for the next two lines.
-        // in:  line 2: [v22, v23] (p0, p1)
-        //      line 3: [v21, v3]  (p0, p1)
-        // out: line 2: tmp0 [v4], tmp1 [v20]
-        //      line 3: tmp0 [v6], tmp1 [v21]
-        ld1b            {z22.h}, p0/z, [x1]
-        ld1b            {z23.h}, p0/z, [x3]
-        add             x1,  x1,  x2
-        add             x3,  x3,  x4
-        ld1b            {z21.h}, p0/z, [x1]
-        ld1b            {z3.h}, p0/z, [x3]
-        mul             v4.8h,   v22.8h,  v0.h[0]            // d.i8[0] * p0p (line 2)
-        mul             v6.8h,   v21.8h,  v0.h[0]            // d.i8[0] * p0p (line 3)
-        add             x1,  x1,  x2
-        add             x3,  x3,  x4
-        sub             v20.8h,  v22.8h,  v23.8h             // tmp1 (line 2)
-        sub             v21.8h,  v21.8h,  v3.8h              // tmp1 (line 3)
-        mla             v4.8h,   v23.8h,  v0.h[1]            // d.i8[0] * p0p + d.i8[1] * p1p (line 2)
-        mla             v6.8h,   v3.8h,   v0.h[1]            // d.i8[0] * p0p + d.i8[1] * p1p (line 3)
-        // Compute vertical gradient for the current two lines.
-        // in:  line 0: [v28], line 1: [v29], line 2: [v30],
-        //      line 3: [v31], line 4: [v4],  line 5: [v6]
-        // out: line 0: [v24], line 1: [v26]
-        dup             v27.8h,  w12
-        sub             v1.8h,   v4.8h,   v28.8h             // q3 - q0 (line 0)
-        sub             v24.8h,  v31.8h,  v29.8h             // q2 - q1 (line 0)
-        sub             v22.8h,  v4.8h,   v30.8h             // q2 - q1 (line 1)
-        sub             v23.8h,  v6.8h,   v29.8h             // q3 - q0 (line 1)
-        // For all lines after y = 0 use the regular shift value.
-        mov             w12, #-6
-        mul             z24.h,   z24.h,   #42                // (q2 - q1) * 42 (line 0)
-        mul             z1.h,    z1.h,    #5                 // (q3 - q0) * 5  (line 0)
-        mul             z22.h,   z22.h,   #42                // (q2 - q1) * 42 (line 1)
-        mul             z23.h,   z23.h,   #5                 // (q3 - q0) * 5  (line 1)
-        // Form y0 = (q2 - q1) * 42 - (q3 - q0) * 5 without widening.
-        // SHSUB computes floor(y0 / 2), avoiding the 17-bit subtraction and
-        // consuming one bit of the final right shift.
-        //
-        // The *42 term is even, so the *5 term determines y0 parity. SHSUB
-        // already applies the required correction for negative odd y0; use
-        // the parity and sign bits to subtract one only for negative even y0.
-        shsub           v24.8h,  v24.8h,  v1.8h              // y0 / 2 (line 0)
-        shsub           v22.8h,  v22.8h,  v23.8h             // y0 / 2 (line 1)
-        shl             v1.8h,   v1.8h,   #15                // Move y0 parity to sign bit (line 0)
-        shl             v23.8h,  v23.8h,  #15                // Move y0 parity to sign bit (line 1)
-        bic             v1.16b,  v24.16b, v1.16b             // Sign set if y0 < 0 and even (line 0)
-        bic             v23.16b, v22.16b, v23.16b            // Sign set if y0 < 0 and even (line 1)
-        ssra            v24.8h,  v1.8h,   #15                // Adjust for SRSHL rounding up (line 0)
-        ssra            v22.8h,  v23.8h,  #15                // Adjust for SRSHR rounding up (line 1)
-        srshl           v24.8h,  v24.8h,  v27.8h             // y0 (line 0)
-        srshr           v26.8h,  v22.8h,  #6                 // y0 (line 1)
-        mov             v28.16b, v30.16b
-        mov             v29.16b, v31.16b
-        mov             v30.16b, v4.16b
-        mov             v31.16b, v6.16b
-5:
-        // v0 = v24, v1 = v26, u0 = v2, u1 = v25, w0 = v5, w1 = v7
-        // Do the rest of the accumulating (sv2, suv, svw).
-        sdot            z14.d,  z24.h, z5.h                  // svw_0, svw_1
-        add             w10, w10, #2                         // py += 2
-        sdot            z14.d,  z26.h, z7.h                  // svw_0, svw_1
-        sdot            z11.d,  z2.h,  z24.h                 // suv_0, suv_1
-        sdot            z12.d,  z24.h, z24.h                 // sv2_0, sv2_1
-        mov             v5.16b,  v20.16b
-        mov             v7.16b,  v21.16b
-        sdot            z11.d,  z25.h, z26.h                 // suv_0, suv_1
-        sdot            z12.d,  z26.h, z26.h                 // sv2_0, sv2_1
-
-        cmp             w10, w17                             // py < py_end
-        b.ne            3b
-
-        // Accumulate and store to `out`.
-        cmp             w7,  #4                              // bs
-        dup             v20.2d, x16                          // [0, bs * bs, 0, bs * bs]
-        b.ne            6f
-
-        // bs == 4
-        trn1            v10.4s,  v10.4s,  v11.4s             // su2_0, suv_0, su2_1, suv_1
-        trn1            v12.4s,  v12.4s,  v13.4s             // sv2_0, suw_0, sv2_1, suw_1
-        add             x15, x0,  #16
-        zip1            v17.2d,  v10.2d,  v12.2d             // su2_0, suv_0, sv2_0, suw_0
-        zip2            v18.2d,  v10.2d,  v12.2d             // su2_1, suv_1, sv2_1, suw_1
-        st1             {v14.s}[0], [x15]                    // out[0].svw
-        add             v17.4s,  v17.4s,  v20.4s             // add bs * bs to su2_0 and sv2_0
-        add             x15, x0,  #36
-        str             q17, [x0]                            // out[0].{su2, suv, sv2, suw}
-        add             v18.4s,  v18.4s,  v20.4s             // add bs * bs to su2_1 and sv2_1
-        st1             {v14.s}[2], [x15]                    // out[1].svw
-        str             q18, [x0, #20]                       // out[1].{su2, suv, sv2, suw}
-        add             x0,  x0,  #40                        // out += 2
-        b               7f
-
-6:      // bs == 8
-        addp            d14,     v14.2d                      // svw
-        uzp1            v10.4s,  v10.4s,  v11.4s             // su2, suv
-        uzp1            v12.4s,  v12.4s,  v13.4s             // sv2, suw
-        addp            v10.4s,  v10.4s,  v12.4s             // su2, suv, sv2, suw
-        add             v10.4s,  v10.4s,  v20.4s             // add bs * bs to su2 and sv2
-        str             s14, [x0, #16]                       // out->svw
-        str             q10, [x0]                            // out->{su2, suv, sv2, suw}
-        add             x0,  x0,  #20                        // out++
-7:
-        add             w9,  w9,  w7                         // y += bs
-        cmp             w9,  w6                              // y < h
-        b.ne            2b
+        opfl_refine_mv_small opfl_compute_next_rows_8bpc_small_sve, sve
 
 .endm
 
