@@ -415,7 +415,9 @@ static void setup_thr_sb64_simple_c(pixel (*thr_dst)[16 * 16],
 }
 
 #if HAVE_ASM
-#if ARCH_X86
+#if ARCH_AARCH64 || ARCH_ARM
+#include "src/arm/deblock.h"
+#elif ARCH_X86
 #include "src/x86/deblock.h"
 #endif
 #endif
@@ -433,7 +435,9 @@ COLD void bitfn(dav2d_deblock_dsp_init)(Dav2dDeblockDSPContext *const c) {
     c->setup_thr_sb_simple = setup_thr_sb64_simple_c;
 
 #if HAVE_ASM
-#if ARCH_X86
+#if ARCH_AARCH64 || ARCH_ARM
+    deblock_dsp_init_arm(c);
+#elif ARCH_X86
     deblock_dsp_init_x86(c);
 #endif
 #endif

@@ -108,6 +108,7 @@ if is_asm_enabled
             if dav2d_bitdepths.contains('8')
                 libdav2d_sources_asm += files(
                     'arm/64/cdef.S',
+                    'arm/64/deblock.S',
                     'arm/64/filmgrain.S',
                     'arm/64/ipred.S',
                     'arm/64/itx.S',

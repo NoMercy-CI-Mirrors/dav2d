@@ -28,18 +28,16 @@
 #include "src/cpu.h"
 #include "src/deblock.h"
 
-decl_deblock_sb_fn(BF(dav2d_lpf_h_sb_y, neon));
-decl_deblock_sb_fn(BF(dav2d_lpf_v_sb_y, neon));
-decl_deblock_sb_fn(BF(dav2d_lpf_h_sb_uv, neon));
-decl_deblock_sb_fn(BF(dav2d_lpf_v_sb_uv, neon));
+decl_setup_thr_sb_seg_fn(BF(dav2d_setup_thr_rows_sb64_seg, neon));
 
-static ALWAYS_INLINE void loop_filter_dsp_init_arm(Dav2dDeblockDSPContext *const c) {
+static ALWAYS_INLINE void deblock_dsp_init_arm(
+    Dav2dDeblockDSPContext *const c)
+{
     const unsigned flags = dav2d_get_cpu_flags();
 
     if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
-    c->deblock_sb[0][0] = BF(dav2d_lpf_h_sb_y, neon);
-    c->deblock_sb[0][1] = BF(dav2d_lpf_v_sb_y, neon);
-    c->deblock_sb[1][0] = BF(dav2d_lpf_h_sb_uv, neon);
-    c->deblock_sb[1][1] = BF(dav2d_lpf_v_sb_uv, neon);
+#if ARCH_AARCH64 && BITDEPTH == 8
+    c->setup_thr_sb_seg[1] = BF(dav2d_setup_thr_rows_sb64_seg, neon);
+#endif
 }
