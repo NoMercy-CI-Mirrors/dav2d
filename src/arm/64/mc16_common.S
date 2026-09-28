@@ -24,18 +24,16 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-.macro opfl_compute_rows_16bpc_large p0_lo0_q, p0_hi0_q, p1_lo0_q, p1_hi0_q, \
-                                     p0_lo1_q, p0_hi1_q, p1_lo1_q, p1_hi1_q, \
-                                     p0_lo0, p0_hi0, p1_lo0, p1_hi0,         \
+.macro opfl_compute_rows_16bpc_large p0_lo0, p0_hi0, p1_lo0, p1_hi0,         \
                                      p0_lo1, p0_hi1, p1_lo1, p1_hi1,         \
                                      tmp0_lo0, tmp0_hi0, tmp1_lo0, tmp1_hi0, \
                                      tmp0_lo1, tmp0_hi1, tmp1_lo1, tmp1_hi1
-        ldp             \p0_lo0_q, \p0_hi0_q, [x10]
-        ldp             \p1_lo0_q, \p1_hi0_q, [x11]
+        ldp             q(\p0_lo0), q(\p0_hi0), [x10]
+        ldp             q(\p1_lo0), q(\p1_hi0), [x11]
         add             x10, x10, x2
         add             x11, x11, x4
-        ldp             \p0_lo1_q, \p0_hi1_q, [x10]
-        ldp             \p1_lo1_q, \p1_hi1_q, [x11]
+        ldp             q(\p0_lo1), q(\p0_hi1), [x10]
+        ldp             q(\p1_lo1), q(\p1_hi1), [x11]
         add             x10, x10, x2
         add             x11, x11, x4
 
@@ -72,13 +70,12 @@
         srshl           \tmp0_hi1\().8h, \tmp0_hi1\().8h, v18.8h        // tmp0 (hi line 1)
 .endm
 
-.macro opfl_compute_rows_16bpc_small p0_q0, p1_q0, p0_q1, p1_q1,   \
-                                     p0_0, p1_0, p0_1, p1_1,       \
+.macro opfl_compute_rows_16bpc_small p0_0, p1_0, p0_1, p1_1,       \
                                      tmp0_0, tmp1_0, tmp0_1, tmp1_1
-        ldr             \p0_q0, [x1]
-        ldr             \p1_q0, [x3]
-        ldr             \p0_q1, [x1, x2]
-        ldr             \p1_q1, [x3, x4]
+        ldr             q(\p0_0), [x1]
+        ldr             q(\p1_0), [x3]
+        ldr             q(\p0_1), [x1, x2]
+        ldr             q(\p1_1), [x3, x4]
 
         // The 16-bit mul/mla/sub are range-safe because d.i8 is only +/-1 or +/-2.
         mul             \tmp0_0\().8h, \p0_0\().8h,  v0.h[0]       // d.i8[0] * p0p
@@ -107,8 +104,7 @@
         //      line 3: [v12 - v13, v17 - v18] (p0_lo - p0_hi, p1_lo - p1_hi)
         // out: line 2: tmp0 [v1,  v2],  tmp1 [v8,  v21]
         //      line 3: tmp0 [v20, v22], tmp1 [v23, v13]
-        opfl_compute_rows_16bpc_large q5,  q6,  q14, q15, q12, q13, q17, q18, \
-                                      v5,  v6,  v14, v15, v12, v13, v17, v18, \
+        opfl_compute_rows_16bpc_large v5,  v6,  v14, v15, v12, v13, v17, v18, \
                                       v1,  v2,  v8,  v21, v20, v22, v23, v13
 .endm
 
@@ -118,8 +114,7 @@
         //      line 3: [v21, v3]  (p0, p1)
         // out: line 2: tmp0 [v4], tmp1 [v20]
         //      line 3: tmp0 [v6], tmp1 [v21]
-        opfl_compute_rows_16bpc_small q22, q23, q21, q3, \
-                                      v22, v23, v21, v3, \
+        opfl_compute_rows_16bpc_small v22, v23, v21, v3, \
                                       v4,  v20, v6,  v21
 .endm
 
@@ -153,8 +148,7 @@
         //      line 1: [v9 - v10, v11 - v12]  (p0_lo - p0_hi, p1_lo - p1_hi)
         // out: line 0: tmp0 [v24, v28], tmp1 [v3, v4]
         //      line 1: tmp0 [v27, v31], tmp1 [v9, v10]
-        opfl_compute_rows_16bpc_large q3,  q4,  q5,  q6,  q9,  q10, q11, q12, \
-                                      v3,  v4,  v5,  v6,  v9,  v10, v11, v12, \
+        opfl_compute_rows_16bpc_large v3,  v4,  v5,  v6,  v9,  v10, v11, v12, \
                                       v24, v28, v3,  v4,  v27, v31, v9,  v10
 
         mov             v25.16b, v24.16b
@@ -180,8 +174,7 @@
         //      line 1: [v8, v9]  (p0, p1)
         // out: line 0: tmp0 [v4], tmp1 [v5]
         //      line 1: tmp0 [v6], tmp1 [v7]
-        opfl_compute_rows_16bpc_small q2,  q3,  q8,  q9, \
-                                      v2,  v3,  v8,  v9, \
+        opfl_compute_rows_16bpc_small v2,  v3,  v8,  v9, \
                                       v4,  v5,  v6,  v7
 
         mov             w9,  #0

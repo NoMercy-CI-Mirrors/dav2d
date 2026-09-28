@@ -3543,16 +3543,15 @@ L(morph_4xh):
         ret
 endfunc
 
-.macro opfl_compute_rows_8bpc_large_neon p0_q0, p1_q0, p0_q1, p1_q1,             \
-                                         p0_src0, p1_src0, p0_src1, p1_src1,     \
+.macro opfl_compute_rows_8bpc_large_neon p0_src0, p1_src0, p0_src1, p1_src1,     \
                                          p0_lo0, p0_hi0, p1_lo0, p1_hi0,         \
                                          p0_lo1, p0_hi1, p1_lo1, p1_hi1,         \
                                          tmp0_lo0, tmp0_hi0, tmp1_lo0, tmp1_hi0, \
                                          tmp0_lo1, tmp0_hi1, tmp1_lo1, tmp1_hi1
-        ldr             \p0_q0, [x10]
-        ldr             \p1_q0, [x11]
-        ldr             \p0_q1, [x10, x2]
-        ldr             \p1_q1, [x11, x4]
+        ldr             q(\p0_src0), [x10]
+        ldr             q(\p1_src0), [x11]
+        ldr             q(\p0_src1), [x10, x2]
+        ldr             q(\p1_src1), [x11, x4]
         add             x10, x10, x2, lsl #1
         add             x11, x11, x4, lsl #1
 
@@ -3585,8 +3584,7 @@ endfunc
         //      line 3: [v13, v14]  (p0, p1)
         // out: line 2: tmp0 [v1,  v2],  tmp1 [v8,  v21]
         //      line 3: tmp0 [v20, v22], tmp1 [v23, v13]
-        opfl_compute_rows_8bpc_large_neon q21, q7,  q13, q14,                     \
-                                          v21, v7,  v13, v14,                     \
+        opfl_compute_rows_8bpc_large_neon v21, v7,  v13, v14,                     \
                                           v8,  v21, v5,  v6,  v23, v13, v7,  v14, \
                                           v1,  v2,  v8,  v21, v20, v22, v23, v13
 .endm
@@ -3619,8 +3617,7 @@ endfunc
         //      line 1: [v10, v12] (p0, p1)
         // out: line 0: tmp0 [v1, v2],  tmp1 [v3, v4]
         //      line 1: tmp0 [v7, v8],  tmp1 [v9, v10]
-        opfl_compute_rows_8bpc_large_neon q4,  q6,  q10, q12,                     \
-                                          v4,  v6,  v10, v12,                     \
+        opfl_compute_rows_8bpc_large_neon v4,  v6,  v10, v12,                     \
                                           v3,  v4,  v5,  v6,  v9,  v10, v11, v12, \
                                           v1,  v2,  v3,  v4,  v7,  v8,  v9,  v10
 
@@ -3638,13 +3635,12 @@ endfunc
         opfl_refine_mv_large opfl_compute_next_rows_8bpc_large_neon, 16, neon
 .endm
 
-.macro opfl_compute_rows_8bpc_small_neon p0_d0, p1_d0, p0_d1, p1_d1,   \
-                                         p0_0, p1_0, p0_1, p1_1,       \
+.macro opfl_compute_rows_8bpc_small_neon p0_0, p1_0, p0_1, p1_1,       \
                                          tmp0_0, tmp1_0, tmp0_1, tmp1_1
-        ldr             \p0_d0, [x1]
-        ldr             \p1_d0, [x3]
-        ldr             \p0_d1, [x1, x2]
-        ldr             \p1_d1, [x3, x4]
+        ldr             d(\p0_0), [x1]
+        ldr             d(\p1_0), [x3]
+        ldr             d(\p0_1), [x1, x2]
+        ldr             d(\p1_1), [x3, x4]
         uxtl            \p0_0\().8h,   \p0_0\().8b
         uxtl            \p1_0\().8h,   \p1_0\().8b
         uxtl            \p0_1\().8h,   \p0_1\().8b
@@ -3665,8 +3661,7 @@ endfunc
         //      line 3: [v21, v3]  (p0, p1)
         // out: line 2: tmp0 [v4], tmp1 [v20]
         //      line 3: tmp0 [v6], tmp1 [v21]
-        opfl_compute_rows_8bpc_small_neon d22, d23, d21, d3, \
-                                          v22, v23, v21, v3, \
+        opfl_compute_rows_8bpc_small_neon v22, v23, v21, v3, \
                                           v4,  v20, v6,  v21
 .endm
 
@@ -3680,8 +3675,7 @@ endfunc
         //      line 1: [v8, v9]  (p0, p1)
         // out: line 0: tmp0 [v4], tmp1 [v5]
         //      line 1: tmp0 [v6], tmp1 [v7]
-        opfl_compute_rows_8bpc_small_neon d2,  d3,  d8,  d9, \
-                                          v2,  v3,  v8,  v9, \
+        opfl_compute_rows_8bpc_small_neon v2,  v3,  v8,  v9, \
                                           v4,  v5,  v6,  v7
 
         sub             w11, w6,  #2                 // h - 2

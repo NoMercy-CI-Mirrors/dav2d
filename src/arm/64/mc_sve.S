@@ -126,24 +126,22 @@ endfunc
 DISABLE_SVE2
 #endif // HAVE_SVE2
 
-.macro opfl_compute_rows_8bpc_large_sve p0_lo0_z, p0_hi0_z, p1_lo0_z, p1_hi0_z, \
-                                        p0_lo1_z, p0_hi1_z, p1_lo1_z, p1_hi1_z, \
-                                        p0_lo0, p0_hi0, p1_lo0, p1_hi0,         \
+.macro opfl_compute_rows_8bpc_large_sve p0_lo0, p0_hi0, p1_lo0, p1_hi0,         \
                                         p0_lo1, p0_hi1, p1_lo1, p1_hi1,         \
                                         tmp0_lo0, tmp0_hi0, tmp1_lo0, tmp1_hi0, \
                                         tmp0_lo1, tmp0_hi1, tmp1_lo1, tmp1_hi1
         add             x17, x10, #8
-        ld1b            {\p0_lo0_z\().h}, p0/z, [x10]
-        ld1b            {\p0_hi0_z\().h}, p0/z, [x17]
-        ld1b            {\p0_lo1_z\().h}, p0/z, [x10, x2]
-        ld1b            {\p0_hi1_z\().h}, p0/z, [x17, x2]
+        ld1b            {z(\p0_lo0)\().h}, p0/z, [x10]
+        ld1b            {z(\p0_hi0)\().h}, p0/z, [x17]
+        ld1b            {z(\p0_lo1)\().h}, p0/z, [x10, x2]
+        ld1b            {z(\p0_hi1)\().h}, p0/z, [x17, x2]
         add             x17, x11, #8
         mul             \tmp0_lo0\().8h, \p0_lo0\().8h, v0.h[0]         // d.i8[0] * p0p (lo line 0)
         mul             \tmp0_hi0\().8h, \p0_hi0\().8h, v0.h[0]         // d.i8[0] * p0p (hi line 0)
-        ld1b            {\p1_lo0_z\().h}, p0/z, [x11]
-        ld1b            {\p1_hi0_z\().h}, p0/z, [x17]
-        ld1b            {\p1_lo1_z\().h}, p0/z, [x11, x4]
-        ld1b            {\p1_hi1_z\().h}, p0/z, [x17, x4]
+        ld1b            {z(\p1_lo0)\().h}, p0/z, [x11]
+        ld1b            {z(\p1_hi0)\().h}, p0/z, [x17]
+        ld1b            {z(\p1_lo1)\().h}, p0/z, [x11, x4]
+        ld1b            {z(\p1_hi1)\().h}, p0/z, [x17, x4]
         mul             \tmp0_lo1\().8h, \p0_lo1\().8h, v0.h[0]         // d.i8[0] * p0p (lo line 1)
         mul             \tmp0_hi1\().8h, \p0_hi1\().8h, v0.h[0]         // d.i8[0] * p0p (hi line 1)
         sub             \tmp1_lo0\().8h, \p0_lo0\().8h, \p1_lo0\().8h   // tmp1 (lo line 0)
@@ -164,8 +162,7 @@ DISABLE_SVE2
         //      line 3: [v23 - v13, v7 - v14]  (p0_lo - p0_hi, p1_lo - p1_hi)
         // out: line 2: tmp0 [v1,  v2],  tmp1 [v8,  v21]
         //      line 3: tmp0 [v20, v22], tmp1 [v23, v13]
-        opfl_compute_rows_8bpc_large_sve z8,  z21, z5,  z6,  z23, z13, z7,  z14, \
-                                         v8,  v21, v5,  v6,  v23, v13, v7,  v14, \
+        opfl_compute_rows_8bpc_large_sve v8,  v21, v5,  v6,  v23, v13, v7,  v14, \
                                          v1,  v2,  v8,  v21, v20, v22, v23, v13
 .endm
 
@@ -196,8 +193,7 @@ DISABLE_SVE2
         //      line 1: [v9 - v10, v11 - v12] (p0_lo - p0_hi, p1_lo - p1_hi)
         // out: line 0: tmp0 [v1, v2],  tmp1 [v3, v4]
         //      line 1: tmp0 [v7, v8],  tmp1 [v9, v10]
-        opfl_compute_rows_8bpc_large_sve z3,  z4,  z5,  z6,  z9,  z10, z11, z12, \
-                                         v3,  v4,  v5,  v6,  v9,  v10, v11, v12, \
+        opfl_compute_rows_8bpc_large_sve v3,  v4,  v5,  v6,  v9,  v10, v11, v12, \
                                          v1,  v2,  v3,  v4,  v7,  v8,  v9,  v10
 
         mov             x12, #0                          // y = 0
@@ -214,13 +210,12 @@ DISABLE_SVE2
         opfl_refine_mv_large opfl_compute_next_rows_8bpc_large_sve, 16, sve
 .endm
 
-.macro opfl_compute_rows_8bpc_small_sve p0_z0, p1_z0, p0_z1, p1_z1, \
-                                        p0_0, p1_0, p0_1, p1_1,     \
+.macro opfl_compute_rows_8bpc_small_sve p0_0, p1_0, p0_1, p1_1,     \
                                         tmp0_0, tmp1_0, tmp0_1, tmp1_1
-        ld1b            {\p0_z0\().h}, p0/z, [x1]
-        ld1b            {\p1_z0\().h}, p0/z, [x3]
-        ld1b            {\p0_z1\().h}, p0/z, [x1, x2]
-        ld1b            {\p1_z1\().h}, p0/z, [x3, x4]
+        ld1b            {z(\p0_0)\().h}, p0/z, [x1]
+        ld1b            {z(\p1_0)\().h}, p0/z, [x3]
+        ld1b            {z(\p0_1)\().h}, p0/z, [x1, x2]
+        ld1b            {z(\p1_1)\().h}, p0/z, [x3, x4]
 
         mul             \tmp0_0\().8h, \p0_0\().8h, v0.h[0]     // d.i8[0] * p0p (line 0)
         mul             \tmp0_1\().8h, \p0_1\().8h, v0.h[0]     // d.i8[0] * p0p (line 1)
@@ -238,8 +233,7 @@ DISABLE_SVE2
         //      line 3: [v21, v3]  (p0, p1)
         // out: line 2: tmp0 [v4], tmp1 [v20]
         //      line 3: tmp0 [v6], tmp1 [v21]
-        opfl_compute_rows_8bpc_small_sve z22, z23, z21, z3, \
-                                         v22, v23, v21, v3, \
+        opfl_compute_rows_8bpc_small_sve v22, v23, v21, v3, \
                                          v4,  v20, v6,  v21
 .endm
 
@@ -255,8 +249,7 @@ DISABLE_SVE2
         //      line 1: [v8, v9]  (p0, p1)
         // out: line 0: tmp0 [v4], tmp1 [v5]
         //      line 1: tmp0 [v6], tmp1 [v7]
-        opfl_compute_rows_8bpc_small_sve z2, z3, z8, z9, \
-                                         v2, v3, v8, v9, \
+        opfl_compute_rows_8bpc_small_sve v2, v3, v8, v9, \
                                          v4, v5, v6, v7
 
         mov             w9,  #0                            // y = 0
