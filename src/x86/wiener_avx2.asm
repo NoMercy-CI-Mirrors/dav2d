@@ -2478,9 +2478,11 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 15, \
     call %%load_p
     call %%load_p_lr
     mov               t2, t4
-%%top:
     test           edgeb, 0x14 ; LR_HAVE_TOP | LR_HAVE_TOP_INTEGRATED
-    jz %%no_top
+    jnz %%top
+    call .no_top
+    jmp %%top_done1
+%%top:
     mov             bakq, lumaq
     test           edgeb, 0x10 ; LR_HAVE_TOP_INTEGRATED
     jz %%no_top_integrated
@@ -2518,22 +2520,6 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 15, \
     mova [BUF_PX(32,-2)], m1
 %endif
     call %%load_tb_lr
-    jmp %%top_done0
-%%no_top:
-    lea               t0, [Stk(row_buf) + 32]
-    lea               t1, [Stk(row_buf) + 96 + 32]
-    mova              m0, [BUF_PX( 0, 0)]
-    mova              m1, [BUF_PX(32, 0)]
-    mova  [BUF_PX(0,-2)], m0
-    mova [BUF_PX(32,-2)], m1
-    mova  [BUF_PX(0,-1)], m0
-    mova [BUF_PX(32,-1)], m1
-    mov             tmpd, [BUF_PX(-4, 0)]
-    mov  [BUF_PX(-4,-1)], tmpd
-    mov             tmpd, [BUF_PX(64, 0)]
-    mov  [BUF_PX(64,-1)], tmpd
-    add               t4, 96
-    jmp %%top_done1
 %%top_done0:
     add               t4, 96*2
     mov            lumaq, bakq
@@ -2720,6 +2706,21 @@ cglobal wiener_uv_luma_420_8bpc, 8, 15, 15, \
 WIENER_UV_LUMA 0
 WIENER_UV_LUMA 1
 WIENER_UV_LUMA 2
+.no_top:
+    lea               t0, [Stk(row_buf) + 32]
+    lea               t1, [Stk(row_buf) + 96 + 32]
+    mova              m0, [BUF_PX( 0, 0)]
+    mova              m1, [BUF_PX(32, 0)]
+    mova  [BUF_PX(0,-2)], m0
+    mova [BUF_PX(32,-2)], m1
+    mova  [BUF_PX(0,-1)], m0
+    mova [BUF_PX(32,-1)], m1
+    mov             tmpd, [BUF_PX(-4, 0)]
+    mov  [BUF_PX(-4,-1)], tmpd
+    mov             tmpd, [BUF_PX(64, 0)]
+    mov  [BUF_PX(64,-1)], tmpd
+    add               t4, 96
+    ret
 .load_p_lr_no_right:
     mov             tmpd, [Stk(w)]
     vpbroadcastb     xm0, [BUF_PX(0,2)+tmpq-1]
