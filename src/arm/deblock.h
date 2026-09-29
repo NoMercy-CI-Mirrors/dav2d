@@ -28,6 +28,7 @@
 #include "src/cpu.h"
 #include "src/deblock.h"
 
+decl_setup_thr_sb_seg_fn(BF(dav2d_setup_thr_cols_sb64_seg, neon));
 decl_setup_thr_sb_seg_fn(BF(dav2d_setup_thr_rows_sb64_seg, neon));
 
 static ALWAYS_INLINE void deblock_dsp_init_arm(
@@ -38,6 +39,7 @@ static ALWAYS_INLINE void deblock_dsp_init_arm(
     if (!(flags & DAV2D_ARM_CPU_FLAG_NEON)) return;
 
 #if ARCH_AARCH64 && BITDEPTH == 8
+    c->setup_thr_sb_seg[0] = BF(dav2d_setup_thr_cols_sb64_seg, neon);
     c->setup_thr_sb_seg[1] = BF(dav2d_setup_thr_rows_sb64_seg, neon);
 #endif
 }
