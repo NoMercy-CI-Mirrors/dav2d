@@ -30,7 +30,7 @@
 
 SECTION_RODATA 16
 
-pb_0to15:      db  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
+const pb_0to15,db  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
 w4Llshuf:      db  0, -1,  1, -1,  3, -1,  5, -1,  8, -1,  9, -1, 11, -1, 13, -1
 w8Llshuf:      db  0, -1,  1, -1,  3, -1,  5, -1,  7, -1,  9, -1, 11, -1, 13, -1
 Llshuf:        db  0, -1,  2, -1,  4, -1,  6, -1,  8, -1, 10, -1, 12, -1, 14, -1
@@ -71,9 +71,9 @@ pb_flt2: times 2 db 4, 1
 pw_128:  times 2 dw 128
 pw_1024: times 2 dw 1024
 pd_1:            dd 1
-pd_16:           dd 16
+const pd_16,     dd 16
 pd_18:           dd 18
-pd_281:          dd 281
+const pd_281,    dd 281
 pd_511:          dd 511
 
 %macro JMP_TABLE 1-*
@@ -5405,7 +5405,7 @@ cglobal cfl_mh_pred_c_8bpc, 4, 12, 16, dst, ds, src, w, h, a, _, a2, _
     packssdw                m0, m0
     ret
 
-.prep_a0_a1:
+cglobal_label .prep_a0_a1
     vpbroadcastd           m13, [aq+0]
     vpbroadcastd           m14, [aq+4]
     pabsd                  m11, m13
