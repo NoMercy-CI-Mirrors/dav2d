@@ -305,9 +305,7 @@ static inline int get_poc_diff(const int order_hint_n_bits,
                                const int poc0, const int poc1)
 {
     if (!order_hint_n_bits) return 0;
-    const int mask = 1 << (order_hint_n_bits - 1);
-    const int diff = poc0 - poc1;
-    return (diff & (mask - 1)) - (diff & mask);
+    return iclip(poc0 - poc1, -127, 127);
 }
 
 static inline unsigned get_cur_frame_segid(const int by, const int bx,
