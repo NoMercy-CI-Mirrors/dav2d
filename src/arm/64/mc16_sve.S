@@ -1668,6 +1668,7 @@ function opfl_refine_mv_16bpc_sve, export=1
         stp             d14, d15, [sp, #48]
         cmp             w5,  #8
         sxtl            v0.8h,   v0.8b
+        ptrue           p0.b, vl16
         b.ne            1f
 
         opfl_refine_mv_16bpc_small opfl_refine_mv_small, sve

@@ -121,6 +121,24 @@ endconst
 .endif
         // Form x0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
         // Shift and round abs(x0), then restore the sign.
+.ifc \isa, sve
+        cmpgt           p1.h,    p0/z,    z17.h, z22.h  // sign(x0) (lo line 0)
+        sabd            v22.8h,  v22.8h,  v17.8h        // abs(x0) (lo line 0)
+        cmpgt           p2.h,    p0/z,    z5.h,  z20.h  // sign(x0) (lo line 1)
+        sabd            v20.8h,  v20.8h,  v5.8h         // abs(x0) (lo line 1)
+        cmpgt           p3.h,    p0/z,    z15.h, z14.h  // sign(x0) (hi line 0)
+        sabd            v14.8h,  v14.8h,  v15.8h        // abs(x0) (hi line 0)
+        cmpgt           p4.h,    p0/z,    z6.h,  z19.h  // sign(x0) (hi line 1)
+        sabd            v19.8h,  v19.8h,  v6.8h         // abs(x0) (hi line 1)
+        urshl           v22.8h,  v22.8h,  v12.8h        // Shift and round (lo line 0)
+        urshl           v20.8h,  v20.8h,  v12.8h        // Shift and round (lo line 1)
+        urshl           v14.8h,  v14.8h,  v13.8h        // Shift and round (hi line 0)
+        urshl           v19.8h,  v19.8h,  v13.8h        // Shift and round (hi line 1)
+        neg             z22.h,   p1/m,    z22.h         // Apply sign (lo line 0)
+        neg             z20.h,   p2/m,    z20.h         // Apply sign (lo line 1)
+        neg             z14.h,   p3/m,    z14.h         // Apply sign (hi line 0)
+        neg             z19.h,   p4/m,    z19.h         // Apply sign (hi line 1)
+.else
         sabd            v1.8h,   v22.8h,  v17.8h        // abs(x0) (lo line 0)
         sabd            v2.8h,   v20.8h,  v5.8h         // abs(x0) (lo line 1)
         sabd            v7.8h,   v14.8h,  v15.8h        // abs(x0) (hi line 0)
@@ -141,6 +159,7 @@ endconst
         sub             v20.8h,  v2.8h,   v5.8h         // Apply sign part 2 (lo line 1)
         sub             v14.8h,  v7.8h,   v15.8h        // Apply sign part 2 (hi line 0)
         sub             v19.8h,  v8.8h,   v6.8h         // Apply sign part 2 (hi line 1)
+.endif
         ldp             q11, q16, [sp]                  // su2_0, su2_1
 
         // Start accumulating the results that don't need the vertical gradient
@@ -220,6 +239,16 @@ endconst
 .endif
         // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
         // Shift and round abs(y0), then restore the sign.
+.ifc \isa, sve
+        cmpgt           p1.h,    p0/z,    z24.h, z5.h    // sign(y0) (lo line 0)
+        sabd            v5.8h,   v5.8h,   v24.8h         // abs(y0) (lo line 0)
+        cmpgt           p2.h,    p0/z,    z25.h, z19.h   // sign(y0) (lo line 1)
+        sabd            v19.8h,  v19.8h,  v25.8h         // abs(y0) (lo line 1)
+        urshr           v5.8h,   v5.8h,   #7             // Shift and round (lo line 0)
+        urshr           v19.8h,  v19.8h,  #6             // Shift and round (lo line 1)
+        neg             z5.h,    p1/m,    z5.h           // Apply sign (lo line 0)
+        neg             z19.h,   p2/m,    z19.h          // Apply sign (lo line 1)
+.else
         sabd            v1.8h,   v5.8h,   v24.8h         // abs(y0) (lo line 0)
         sabd            v2.8h,   v19.8h,  v25.8h         // abs(y0) (lo line 1)
         cmgt            v24.8h,  v24.8h,  v5.8h          // sign(y0) (lo line 0)
@@ -230,6 +259,7 @@ endconst
         eor             v2.16b,  v2.16b,  v25.16b        // Apply sign part 1 (lo line 1)
         sub             v5.8h,   v1.8h,   v24.8h         // Apply sign part 2 (lo line 0)
         sub             v19.8h,  v2.8h,   v25.8h         // Apply sign part 2 (lo line 1)
+.endif
         // Compute the vertical gradient for the high halves of the current two lines.
         // in:  line 0: [-, v28], line 1: [-, v29], line 2: [-, v30],
         //      line 3: [-, v31], line 4: [-, v31], line 5: [-, v31]
@@ -249,6 +279,16 @@ endconst
         mul             v15.8h,  v15.8h,  v16.8h         // (q2 - q1) * 42 (hi line 1)
         mul             v29.8h,  v29.8h,  v11.8h         // (q3 - q0) * 5  (hi line 1)
 .endif
+.ifc \isa, sve
+        cmpgt           p1.h,    p0/z,    z28.h, z14.h  // sign(y0) (hi line 0)
+        sabd            v14.8h,  v14.8h,  v28.8h        // abs(y0) (hi line 0)
+        cmpgt           p2.h,    p0/z,    z29.h, z15.h  // sign(y0) (hi line 1)
+        sabd            v15.8h,  v15.8h,  v29.8h        // abs(y0) (hi line 1)
+        urshr           v14.8h,  v14.8h,  #7            // Shift and round (hi line 0)
+        urshr           v15.8h,  v15.8h,  #6            // Shift and round (hi line 1)
+        neg             z14.h,   p1/m,    z14.h         // Apply sign (hi line 0)
+        neg             z15.h,   p2/m,    z15.h         // Apply sign (hi line 1)
+.else
         sabd            v1.8h,   v14.8h,  v28.8h         // abs(y0) (hi line 0)
         sabd            v2.8h,   v15.8h,  v29.8h         // abs(y0) (hi line 1)
         cmgt            v28.8h,  v28.8h,  v14.8h         // sign(y0) (hi line 0)
@@ -259,6 +299,7 @@ endconst
         eor             v2.16b,  v2.16b,  v29.16b        // Apply sign part 1 (hi line 1)
         sub             v14.8h,  v1.8h,   v28.8h         // Apply sign part 2 (hi line 0)
         sub             v15.8h,  v2.8h,   v29.8h         // Apply sign part 2 (hi line 1)
+.endif
         b               6f
 
 5:
@@ -291,6 +332,16 @@ endconst
 .endif
         // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
         // Shift and round abs(y0), then restore the sign.
+.ifc \isa, sve
+        cmpgt           p1.h,    p0/z,    z24.h, z5.h   // sign(y0) (lo line 0)
+        sabd            v5.8h,   v5.8h,   v24.8h        // abs(y0) (lo line 0)
+        cmpgt           p2.h,    p0/z,    z25.h, z19.h  // sign(y0) (lo line 1)
+        sabd            v19.8h,  v19.8h,  v25.8h        // abs(y0) (lo line 1)
+        urshl           v5.8h,   v5.8h,   v17.8h        // Shift and round (lo line 0)
+        urshr           v19.8h,  v19.8h,  #7            // Shift and round (lo line 1)
+        neg             z5.h,    p1/m,    z5.h          // Apply sign (lo line 0)
+        neg             z19.h,   p2/m,    z19.h         // Apply sign (lo line 1)
+.else
         sabd            v6.8h,   v5.8h,   v24.8h         // abs(y0) (lo line 0)
         sabd            v7.8h,   v19.8h,  v25.8h         // abs(y0) (lo line 1)
         cmgt            v24.8h,  v24.8h,  v5.8h          // sign(y0) (lo line 0)
@@ -301,6 +352,7 @@ endconst
         eor             v7.16b,  v7.16b,  v25.16b        // Apply sign part 1 (lo line 1)
         sub             v5.8h,   v6.8h,   v24.8h         // Apply sign part 2 (lo line 0)
         sub             v19.8h,  v7.8h,   v25.8h         // Apply sign part 2 (lo line 1)
+.endif
         mov             v24.16b, v26.16b
         mov             v25.16b, v27.16b
         mov             v26.16b, v1.16b
@@ -324,6 +376,16 @@ endconst
         mul             v15.8h,  v15.8h,  v16.8h         // (q2 - q1) * 42 (hi line 1)
         mul             v29.8h,  v29.8h,  v11.8h         // (q3 - q0) * 5  (hi line 1)
 .endif
+.ifc \isa, sve
+        cmpgt           p1.h,    p0/z,    z28.h, z14.h  // sign(y0) (hi line 0)
+        sabd            v14.8h,  v14.8h,  v28.8h        // abs(y0) (hi line 0)
+        cmpgt           p2.h,    p0/z,    z29.h, z15.h  // sign(y0) (hi line 1)
+        sabd            v15.8h,  v15.8h,  v29.8h        // abs(y0) (hi line 1)
+        urshl           v14.8h,  v14.8h,  v17.8h        // Shift and round (hi line 0)
+        urshr           v15.8h,  v15.8h,  #7            // Shift and round (hi line 1)
+        neg             z14.h,   p1/m,    z14.h         // Apply sign (hi line 0)
+        neg             z15.h,   p2/m,    z15.h         // Apply sign (hi line 1)
+.else
         sabd            v6.8h,   v14.8h,  v28.8h         // abs(y0) (hi line 0)
         sabd            v7.8h,   v15.8h,  v29.8h         // abs(y0) (hi line 1)
         cmgt            v28.8h,  v28.8h,  v14.8h         // sign(y0) (hi line 0)
@@ -334,6 +396,7 @@ endconst
         eor             v7.16b,  v7.16b,  v29.16b        // Apply sign part 1 (hi line 1)
         sub             v14.8h,  v6.8h,   v28.8h         // Apply sign part 2 (hi line 0)
         sub             v15.8h,  v7.8h,   v29.8h         // Apply sign part 2 (hi line 1)
+.endif
         mov             v28.16b, v30.16b
         mov             v29.16b, v31.16b
         // For all lines after y = 0 use the regular shift value.
@@ -531,6 +594,16 @@ endconst
 .endif
         // Form x0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
         // Shift and round abs(x0), then restore the sign.
+.ifc \isa, sve
+        cmpgt           p1.h,    p0/z,    z3.h,  z2.h   // sign(x0) (line 0)
+        sabd            v2.8h,   v2.8h,   v3.8h         // abs(x0) (line 0)
+        cmpgt           p2.h,    p0/z,    z26.h, z25.h  // sign(x0) (line 1)
+        sabd            v25.8h,  v25.8h,  v26.8h        // abs(x0) (line 1)
+        urshl           v2.8h,   v2.8h,   v8.8h         // Shift and round (line 0)
+        urshl           v25.8h,  v25.8h,  v8.8h         // Shift and round (line 1)
+        neg             z2.h,    p1/m,    z2.h          // Apply sign (line 0)
+        neg             z25.h,   p2/m,    z25.h         // Apply sign (line 1)
+.else
         sabd            v22.8h,  v2.8h,   v3.8h          // abs(x0) (line 0)
         sabd            v24.8h,  v25.8h,  v26.8h         // abs(x0) (line 1)
         cmgt            v3.8h,   v3.8h,   v2.8h          // sign(x0) (line 0)
@@ -541,6 +614,7 @@ endconst
         eor             v24.16b, v24.16b, v26.16b        // Apply sign part 1 (line 1)
         sub             v2.8h,   v22.8h,  v3.8h          // Apply sign part 2 (line 0)
         sub             v25.8h,  v24.8h,  v26.8h         // Apply sign part 2 (line 1)
+.endif
 
         cmp             w10, w11                         // py < h - 2
         // Start accumulating the results that don't need the vertical gradient
@@ -587,6 +661,16 @@ endconst
 .endif
         // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
         // Shift and round abs(y0), then restore the sign.
+.ifc \isa, sve
+        cmpgt           p1.h,    p0/z,    z1.h,  z24.h  // sign(y0) (line 0)
+        sabd            v24.8h,  v24.8h,  v1.8h         // abs(y0) (line 0)
+        cmpgt           p2.h,    p0/z,    z23.h, z22.h  // sign(y0) (line 1)
+        sabd            v26.8h,  v22.8h,  v23.8h        // abs(y0) (line 1)
+        urshr           v24.8h,  v24.8h,  #7            // Shift and round (line 0)
+        urshr           v26.8h,  v26.8h,  #6            // Shift and round (line 1)
+        neg             z24.h,   p1/m,    z24.h         // Apply sign (line 0)
+        neg             z26.h,   p2/m,    z26.h         // Apply sign (line 1)
+.else
         sabd            v20.8h,  v24.8h,  v1.8h          // abs(y0) (line 0)
         sabd            v21.8h,  v22.8h,  v23.8h         // abs(y0) (line 1)
         cmgt            v1.8h,   v1.8h,   v24.8h         // sign(y0) (line 0)
@@ -597,6 +681,7 @@ endconst
         eor             v21.16b, v21.16b, v23.16b        // Apply sign part 1 (line 1)
         sub             v24.8h,  v20.8h,  v1.8h          // Apply sign part 2 (line 0)
         sub             v26.8h,  v21.8h,  v23.8h         // Apply sign part 2 (line 1)
+.endif
         // No need to move anything, it's the last iteration.
         b               5f
 
@@ -630,6 +715,16 @@ endconst
 .endif
         // Form y0 = (p2 - p1) * 42 - (p3 - p0) * 5 without widening.
         // Shift and round abs(y0), then restore the sign.
+.ifc \isa, sve
+        cmpgt           p1.h,    p0/z,    z1.h,  z24.h  // sign(y0) (line 0)
+        sabd            v24.8h,  v24.8h,  v1.8h         // abs(y0) (line 0)
+        cmpgt           p2.h,    p0/z,    z23.h, z22.h  // sign(y0) (line 1)
+        sabd            v26.8h,  v22.8h,  v23.8h        // abs(y0) (line 1)
+        urshl           v24.8h,  v24.8h,  v28.8h        // Shift and round (line 0)
+        urshr           v26.8h,  v26.8h,  #7            // Shift and round (line 1)
+        neg             z24.h,   p1/m,    z24.h         // Apply sign (line 0)
+        neg             z26.h,   p2/m,    z26.h         // Apply sign (line 1)
+.else
         sabd            v3.8h,   v24.8h,  v1.8h         // abs(y0) (line 0)
         sabd            v26.8h,  v22.8h,  v23.8h        // abs(y0) (line 1)
         cmgt            v1.8h,   v1.8h,   v24.8h        // sign(y0) (line 0)
@@ -640,6 +735,7 @@ endconst
         eor             v26.16b, v26.16b, v23.16b       // Apply sign part 1 (line 1)
         sub             v24.8h,  v3.8h,   v1.8h         // Apply sign part 2 (line 0)
         sub             v26.8h,  v26.8h,  v23.8h        // Apply sign part 2 (line 1)
+.endif
         mov             v28.16b, v30.16b
         mov             v29.16b, v31.16b
         mov             v30.16b, v4.16b
