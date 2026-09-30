@@ -2875,8 +2875,9 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
         // FIXME handle bridge/bru also
         const int frame_without_data = c->frame_hdr->tip.frame_mode == 2;
         if (c->frame_hdr->show_existing_frame) {
-            if (!c->refs[c->frame_hdr->existing_frame_idx].p.p.frame_hdr) goto error;
-            switch (c->refs[c->frame_hdr->existing_frame_idx].p.p.frame_hdr->frame_type) {
+            const int fidx = c->frame_hdr->existing_frame_idx;
+            if (!c->refs[fidx].p.p.frame_hdr) goto error;
+            switch (c->refs[fidx].p.p.frame_hdr->frame_type) {
             case DAV2D_FRAME_TYPE_INTER:
             case DAV2D_FRAME_TYPE_SWITCH:
                 if (c->decode_frame_type > DAV2D_DECODEFRAMETYPE_REFERENCE)
@@ -2889,32 +2890,53 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             default:
                 break;
             }
-            if (!c->refs[c->frame_hdr->existing_frame_idx].p.p.data[0]) goto error;
-            dav2d_queue_output(c, &c->refs[c->frame_hdr->existing_frame_idx].p, 1);
+            if (!c->refs[fidx].p.p.data[0]) goto error;
+            Dav2dThreadPicture tp;
+            memset(&tp, 0, sizeof(tp));
+            dav2d_thread_picture_ref(&tp, &c->refs[fidx].p);
+            if (tp.p.fgm_ref) {
+                dav2d_ref_dec(&tp.p.fgm_ref);
+                tp.p.fgm_ref = NULL;
+                tp.p.fgm = NULL;
+            }
+            if (c->frame_hdr->film_grain.present) {
+                tp.p.fgm_ref = c->fgm[c->frame_hdr->film_grain.id];
+                dav2d_ref_inc(tp.p.fgm_ref);
+                tp.p.fgm = tp.p.fgm_ref->data;
+            }
+            memcpy(c->frame_hdr, tp.p.frame_hdr,
+                   offsetof(Dav2dFrameHeader, film_grain));
+            c->frame_hdr->show_existing_frame = 1;
+            c->frame_hdr->existing_frame_idx = fidx;
+            dav2d_ref_dec(&tp.p.frame_hdr_ref);
+            tp.p.frame_hdr_ref = c->frame_hdr_ref;
+            c->frame_hdr_ref = NULL;
+            tp.p.frame_hdr = c->frame_hdr;
+            c->frame_hdr = NULL;
+            dav2d_queue_output(c, &tp, 1);
 #if 0
-            c->event_flags |= dav2d_picture_get_event_flags(&c->refs[c->frame_hdr->existing_frame_idx].p);
+            c->event_flags |= dav2d_picture_get_event_flags(&c->refs[fidx].p);
 #endif
-            if (c->refs[c->frame_hdr->existing_frame_idx].p.p.frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY) {
-                const int r = c->frame_hdr->existing_frame_idx;
-                c->refs[r].p.showable = 0;
+            if (tp.p.frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY) {
+                c->refs[fidx].p.showable = 0;
                 for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
-                    if (i == r) continue;
+                    if (i == fidx) continue;
 
                     if (c->refs[i].p.p.frame_hdr)
                         dav2d_thread_picture_unref(&c->refs[i].p);
-                    dav2d_thread_picture_ref(&c->refs[i].p, &c->refs[r].p);
+                    dav2d_thread_picture_ref(&c->refs[i].p, &c->refs[fidx].p);
 
                     dav2d_cdf_thread_unref(&c->cdf[i]);
-                    dav2d_cdf_thread_ref(&c->cdf[i], &c->cdf[r]);
+                    dav2d_cdf_thread_ref(&c->cdf[i], &c->cdf[fidx]);
 
                     dav2d_ref_dec(&c->refs[i].segmap);
-                    c->refs[i].segmap = c->refs[r].segmap;
-                    if (c->refs[r].segmap)
-                        dav2d_ref_inc(c->refs[r].segmap);
+                    c->refs[i].segmap = c->refs[fidx].segmap;
+                    if (c->refs[fidx].segmap)
+                        dav2d_ref_inc(c->refs[fidx].segmap);
                     dav2d_ref_dec(&c->refs[i].refmvs);
                 }
             }
-            c->frame_hdr = NULL;
+            dav2d_thread_picture_unref(&tp);
         } else if (c->n_tiles == c->frame_hdr->tiling.t.cols *
                                  c->frame_hdr->tiling.t.rows ||
                    frame_without_data)
