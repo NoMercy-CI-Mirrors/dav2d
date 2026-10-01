@@ -354,8 +354,11 @@ static void extend_warpmv(Dav2dTaskContext *const t,
                           Dav2dWarpedMotionParams *const wmp)
 {
     const Dav2dFrameContext *const f = t->f;
-    const refmvs_block *const r = y_off == -1 && !(t->by & (f->sb_step - 1)) ?
-        x_off < 0 && !(t->bx & (f->sb_step - 1)) ?
+    const refmvs_block *const r =
+        // did we cross a vertical SB boundary?
+        y_off == -1 && !(t->by & (f->sb_step - 1)) ?
+        // did we cross a horizontal SB boundary?
+        t->bx + x_off < (t->bx & ~(f->sb_step - 1)) ?
         &t->rt.ra_tl : &t->rt.ra[(t->bx + x_off) >> 1] :
         &t->rt.r[((t->by + y_off) & 63) * 128 + ((t->bx + x_off) & 127)];
     int32_t *const m = wmp->matrix;
