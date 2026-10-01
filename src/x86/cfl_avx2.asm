@@ -4703,17 +4703,16 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
 .ret:
     RET
 
-cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
+cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
                                         ntop, start, n, y1, left, dir_off
  DECLARE_REG_TMP 12, 13, 6, 7, 3
     movifnidn           flagsd, flagsm
-    mov                  refwd, refwm           ; zero upper halves
     mov                  refhd, refhm
-    lea                    r14, [pw_128]
-%define base r14-pw_128
+    mov                  refwd, refwd           ; zero upper halves
+    lea                    r14, [mh_smpl_msk]
+%define base r14-mh_smpl_msk
     pxor                   m10, m10
-    pxor                   m12, m12
-    vpbroadcastd           m11, [base+pw_128]
+    pxor                   m11, m11
     mov                  ntopd, flagsd
     and                  ntopd, 0x5
     mov                    t0d, ntopd
@@ -4753,9 +4752,9 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
 .top.loop:
     cmp                  refwd, -31
     cmovae                 t0d, t2d
-    movu                   m14, [base+mh_smpl_msk+t0]
-    pand                    m1, m14, [y1q+refwq]
-    pand                    m0, m14, [y0q+refwq]
+    movu                   m13, [base+mh_smpl_msk+t0]
+    pand                    m1, m13, [y1q+refwq]
+    pand                    m0, m13, [y0q+refwq]
     punpcklbw               m4, m1, m10
     punpckhbw               m5, m1, m10
     psllw                   m8, m4, 7
@@ -4782,12 +4781,12 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     punpckhwd               m5, m10
     punpcklwd               m1, m2, m10
     punpckhwd               m2, m10
-    punpcklwd              m15, m3, m10
+    punpcklwd              m14, m3, m10
     punpckhwd               m3, m10
     paddd                   m4, m7
     paddd                   m5, m9
     paddd                   m2, m1
-    paddd                   m3, m15
+    paddd                   m3, m14
     paddd                   m4, m5
     paddd                   m2, m3
     REPX          {pslld x, 7}, m4, m2
@@ -4811,7 +4810,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     paddd                   m6, m7
     paddd                  xm2, xm3
     punpcklqdq              m6, m2
-    paddd                  m12, m6
+    paddd                  m11, m6
     add                  refwq, 32
     jl .top.loop
     test                flagsb, 0x8             ; has_l
@@ -4842,7 +4841,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     punpckldq              xm3, xm4
     punpcklqdq             xm0, xm2
     vinserti128             m0, xm3, 1
-    paddd                  m12, m0
+    paddd                  m11, m0
     dec                  refhd
     jmp .left.dir_t
 
@@ -4871,8 +4870,8 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
 .left.dir_l.loop:
     cmp                  refhd, -15
     cmovae                 t0d, t2d
-    movu                   m14, [base+mh_smpl_msk+t0]
-    pand                    m0, m14, [lq+refhq*2]
+    movu                   m13, [base+mh_smpl_msk+t0]
+    pand                    m0, m13, [lq+refhq*2]
     psrlw                   m1, m0, 8
     pand                    m0, m10
     psllw                   m3, m1, 7
@@ -4887,12 +4886,12 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     vpermq                  m6, m6, q2020
     pxor                    m5, m5
     movu     [imatq+386+refhq], xm6
-    punpcklwd              m13, m1, m5
+    punpcklwd              m12, m1, m5
     punpckhwd               m1, m5
-    punpcklwd              m15, m0, m5
+    punpcklwd              m14, m0, m5
     punpckhwd               m0, m5
-    paddd                   m1, m13
-    paddd                   m0, m15
+    paddd                   m1, m12
+    paddd                   m0, m14
     REPX          {pslld x, 7}, m1, m0
     vperm2i128              m7, m2, m4, 0x31
     vinserti128             m2, xm4, 1
@@ -4914,7 +4913,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     paddd                   m2, m3
     paddd                  xm0, xm9
     punpcklqdq              m2, m0
-    paddd                  m12, m2
+    paddd                  m11, m2
     add                  refhq, 16
     jl .left.dir_l.loop
     jmp .shift
@@ -4931,9 +4930,9 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
 .left.dir_t.loop:
     cmp                  refhq, -31
     cmovae                 t1d, t2d
-    movu                   m14, [base+mh_smpl_msk+t1]
-    pand                    m1, m14, [lq+refhq+1]
-    pand                    m0, m14, [lq+refhq]
+    movu                   m13, [base+mh_smpl_msk+t1]
+    pand                    m1, m13, [lq+refhq+1]
+    pand                    m0, m13, [lq+refhq]
     pxor                   m10, m10
     punpcklbw               m4, m1, m10
     punpckhbw               m5, m1, m10
@@ -4961,12 +4960,12 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     punpckhwd               m5, m10
     punpcklwd               m1, m2, m10
     punpckhwd               m2, m10
-    punpcklwd              m15, m3, m10
+    punpcklwd              m14, m3, m10
     punpckhwd               m3, m10
     paddd                   m4, m7
     paddd                   m5, m9
     paddd                   m2, m1
-    paddd                   m3, m15
+    paddd                   m3, m14
     paddd                   m4, m5
     paddd                   m2, m3
     REPX          {pslld x, 7}, m4, m2
@@ -4990,7 +4989,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     paddd                   m6, m7
     paddd                  xm2, xm3
     punpcklqdq              m6, m2
-    paddd                  m12, m6
+    paddd                  m11, m6
     add                  refhq, 32
     jl .left.dir_t.loop
     jmp .shift
@@ -5007,8 +5006,8 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
 .left.dir_c.loop:
     cmp                  refhq, -31
     cmovae                 t1d, t2d
-    movu                   m14, [base+mh_smpl_msk+t1]
-    pand                    m0, m14, [lq+refhq]
+    movu                   m13, [base+mh_smpl_msk+t1]
+    pand                    m0, m13, [lq+refhq]
     movu     [imatq+  0+refhq], m0
     punpcklbw               m2, m0, m10
     punpckhbw               m3, m0, m10
@@ -5022,8 +5021,8 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     pmaddwd                 m1, m3, m7
     pmaddwd                 m8, m6, m6
     pmaddwd                 m9, m7, m7
-    packuswb               m15, m6, m7
-    movu     [imatq+386+refhq], m15
+    packuswb               m14, m6, m7
+    movu     [imatq+386+refhq], m14
     paddd                   m4, m5
     paddd                   m0, m1
     paddd                   m8, m9
@@ -5033,12 +5032,12 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     punpckhwd               m7, m10
     punpcklwd               m9, m2, m10
     punpckhwd               m2, m10
-    punpcklwd              m15, m3, m10
+    punpcklwd              m14, m3, m10
     punpckhwd               m3, m10
     paddd                   m6, m5
     paddd                   m7, m1
     paddd                   m2, m9
-    paddd                   m3, m15
+    paddd                   m3, m14
     paddd                   m6, m7
     paddd                   m2, m3
     REPX          {pslld x, 7}, m6, m2
@@ -5062,12 +5061,12 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
     paddd                   m4, m0
     paddd                  xm2, xm3
     punpcklqdq              m4, m2
-    paddd                  m12, m4
+    paddd                  m11, m4
     add                  refhq, 32
     jl .left.dir_c.loop
 
 .shift:
-    vextracti128           xm0, m12, 1
+    vextracti128           xm0, m11, 1
     mov                    t1d, -1
     lzcnt                  t0d, nd
     xor                    t0d, 31              ; nl2
@@ -5083,25 +5082,25 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 16, mat, imat, y0, refw, refh, flags, \
 ;.lshift:
     movd                   xm1, t3d
     pslld                  xm0, xm1
-    pslld                 xm12, xm1
+    pslld                 xm11, xm1
     jmp .end
 .rshift:
     neg                    t3d
     movd                   xm1, t3d
     psrld                  xm0, xm1
-    psrld                 xm12, xm1
+    psrld                 xm11, xm1
 .end:
     mov                    t1d, 2
     movd                   xm2, t1d
     punpcklqdq             xm3, xm2, xm2
-    paddd                 xm12, xm2
+    paddd                 xm11, xm2
     paddd                  xm0, xm3
-    psrlq                  xm4, xm12, 32
+    psrlq                  xm4, xm11, 32
     pslldq                 xm1, xm0, 4
-    psrldq                 xm5, xm12, 8
+    psrldq                 xm5, xm11, 8
     vpblendd               xm1, xm4, 0x1
     vpblendd               xm0, xm5, 0x1
-    mova             [matq+ 0], xm12
+    mova             [matq+ 0], xm11
     mova             [matq+16], xm1
     mova             [matq+32], xm0
     RET
