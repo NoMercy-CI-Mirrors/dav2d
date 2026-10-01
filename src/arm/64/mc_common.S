@@ -36,6 +36,13 @@ const shift_small, align=4
 endconst
 
 .macro opfl_refine_mv_large compute_next_rows, src_inc, isa
+        // This decides how much to shift y0 after SHSUB has consumed one
+        // right shift. It's a shift right by 6 in most cases, unless e2 is 1
+        // in which case a shift right by 5 allows to skip the multiplication
+        // by (1 + e2). This is true for y = 0, so initialize for this special
+        // case, then later overwrite it for the general case.
+        mov             w19, #-5
+
 3:
         movi            v11.2d,  #0
 

@@ -3605,12 +3605,6 @@ endfunc
         mov             x10, x1                          // p0_ptr
         mov             x11, x3                          // p1_ptr
         mov             x15, x0
-        // This decides how much to shift y0 after SHSUB has consumed one
-        // right shift. It's a shift right by 6 in most cases, unless e2 is 1
-        // in which case a shift right by 5 allows to skip the multiplication
-        // by (1 + e2). This is true for y = 0, so initialize for this special
-        // case, then later overwrite it for the general case.
-        mov             w19, #-5
 
         // Compute tmp0/tmp1 for the first two lines.
         // in:  line 0: [v4, v6]   (p0, p1)
