@@ -192,8 +192,9 @@ static void fgy_32x32xn_c(pixel *const dst_row, const pixel *const src_row,
     unsigned seed[2];
     for (int i = 0; i < rows; i++) {
         seed[i] = in_seed;
-        seed[i] ^= (((row_num - i) * 37  + 178) & 0xFF) << 8;
-        seed[i] ^= (((row_num - i) * 173 + 105) & 0xFF);
+        const int rel_row_num = (row_num - i) << data->block_size;
+        seed[i] ^= ((rel_row_num * 37  + 178) & 0xFF) << 8;
+        seed[i] ^= ((rel_row_num * 173 + 105) & 0xFF);
     }
 
     assert(stride % (bs * sizeof(pixel)) == 0);
@@ -311,8 +312,9 @@ fguv_32x32xn_c(pixel *const dst_row, const pixel *const src_row,
     unsigned seed[2];
     for (int i = 0; i < rows; i++) {
         seed[i] = in_seed;
-        seed[i] ^= (((row_num - i) * 37  + 178) & 0xFF) << 8;
-        seed[i] ^= (((row_num - i) * 173 + 105) & 0xFF);
+        const int rel_row_num = (row_num - i) << data->block_size;
+        seed[i] ^= ((rel_row_num * 37  + 178) & 0xFF) << 8;
+        seed[i] ^= ((rel_row_num * 173 + 105) & 0xFF);
     }
 
     assert(stride % (bs * sizeof(pixel)) == 0);
