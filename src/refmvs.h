@@ -194,9 +194,9 @@ typedef struct Dav2dRefmvsDSPContext {
 int dav2d_refmvs_init_frame(refmvs_frame *rf,
                             const Dav2dSequenceHeader *seq_hdr,
                             const Dav2dFrameHeader *frm_hdr,
-                            const uint16_t ref_poc[7],
+                            const int ref_poc[7],
                             refmvs_temporal_block *rp,
-                            const uint16_t ref_ref_poc[7][7],
+                            const int ref_ref_poc[7][7],
                             const uint8_t refcnt[7],
                             /*const*/ refmvs_temporal_block *const rp_ref[7],
                             int have_threading, int have_frame_threading);

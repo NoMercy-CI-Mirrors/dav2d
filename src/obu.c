@@ -779,8 +779,8 @@ static int get_ref_frames(Dav2dContext *const c, const int have_resolution) {
     Dav2dFrameHeader *const hdr = c->frame_hdr;
     struct Score {
         int score;
-        uint8_t poc;
-        int8_t pocdiff;
+        int poc;
+        int pocdiff;
         uint16_t qidx;
         uint8_t mlayer;
         int8_t res_ratio_log2;
@@ -1159,7 +1159,19 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     if (!seqhdr->reduced_still_picture_header) {
         hdr->frame_size_override = hdr->frame_type == DAV2D_FRAME_TYPE_SWITCH ?
                                    1 : dav2d_get_bit(gb);
-        hdr->frame_offset = dav2d_get_bits(gb, seqhdr->order_hint_n_bits);
+        hdr->coded_frame_offset = dav2d_get_bits(gb, seqhdr->order_hint_n_bits);
+        int max_poc = 0;
+        for (int n = 0; n < DAV2D_NUM_REF_FRAMES; n++) {
+            if (!c->refs[n].p.p.frame_hdr) continue;
+            max_poc = umax(max_poc, c->refs[n].p.p.frame_hdr->frame_offset);
+        }
+        int this_poc = hdr->coded_frame_offset;
+        const int range = 1 << seqhdr->order_hint_n_bits, hrange = range >> 1;
+        if (max_poc - this_poc >= hrange)
+            this_poc += (max_poc - this_poc + hrange) & ~(range - 1);
+        hdr->frame_offset = this_poc;
+        if (this_poc >= (1 << 30)) goto error; // limit copied from AVM
+
         int did_signal_pri_ref = -1;
         if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER) {
             hdr->primary_ref_signaled = did_signal_pri_ref = dav2d_get_bit(gb);
@@ -1170,7 +1182,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-frame_size_override_flag[%d,poc:%d,p_ref:%d|%d]: off=%td\n",
-               hdr->frame_size_override, hdr->frame_offset, did_signal_pri_ref,
+               hdr->frame_size_override, hdr->coded_frame_offset, did_signal_pri_ref,
                hdr->primary_ref_frame, (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     }

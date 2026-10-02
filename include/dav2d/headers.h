@@ -462,7 +462,8 @@ typedef struct Dav2dFrameHeader {
     uint8_t multi_frame_hdr_id;
     enum Dav2dFrameType frame_type; ///< type of the picture
     int width, height;
-    uint8_t frame_offset; ///< frame number
+    int frame_offset;
+    uint16_t coded_frame_offset; ///< frame number
     uint8_t tlayer_id, mlayer_id, xlayer_id;
 
     uint8_t show_existing_frame;

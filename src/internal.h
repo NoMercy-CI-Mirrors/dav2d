@@ -185,7 +185,7 @@ struct Dav2dContext {
         Dav2dRef *segmap;
         Dav2dRef *refmvs;
         Dav2dRef *ccsomap;
-        uint16_t refpoc[7];
+        int refpoc[7];
     } refs[DAV2D_NUM_REF_FRAMES];
     Dav2dMemPool *cdf_pool;
     CdfThreadContext cdf[DAV2D_NUM_REF_FRAMES];
@@ -256,7 +256,7 @@ struct Dav2dFrameContext {
     Dav2dRef *cur_ccsomap_ref, *prev_ccsomap_ref[3];
     uint8_t *cur_ccsomap;
     const uint8_t *prev_ccsomap[3];
-    uint16_t refpoc[7], refrefpoc[7][7];
+    int refpoc[7], refrefpoc[7][7];
     uint8_t refcnt[7];
     union {
         int8_t refdir_with_intra[1 /* intra */ + 7 + 1 /* tip */];
