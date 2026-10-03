@@ -4759,7 +4759,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     add                  refwq, 32
     jl .top.loop
     test                flagsb, 0x8             ; has_l
-    jz .shift
+    jz ._shift
     test                flagsb, 0x1             ; dir_t
     jz .left2
 ;.extra_tl:
@@ -4914,7 +4914,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     paddd                  m11, m2
     add                  refhq, 16
     jl .left.dir_l.loop
-    jmp .shift
+    jmp ._shift
 
 .left.dir_t:
     mov                    t0d, refhd
@@ -4935,7 +4935,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     call .main
     add                  nrefq, 32
     jl .left.dir_t.loop
-    jmp .shift
+    jmp ._shift
 
 .left.dir_c:
     mov                    t0d, refhd
@@ -4963,16 +4963,25 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     add                  nrefq, 32
     jl .left.dir_c.loop
 
-.shift:
+._shift:
+    mov                    t4d, 14
+    mov                    t3d, 6
+    mov                    t2d, 2
+%if WIN64
+    movaps                xm14, [rsp+32+(14-8)*16]
+    movaps                xm13, [rsp+32+(13-8)*16]
+    movaps                xm12, [rsp+32+(12-8)*16]
+ %assign xmm_regs_used 12
+%endif
+cglobal_label .shift
     vextracti128           xm0, m11, 1
     mov                    t1d, -1
     lzcnt                  t0d, nd
     xor                    t0d, 31              ; nl2
     bzhi                   t1d, t1d, t0d
-    mov                    t3d, 6
     test                    nd, t1d
     setnz                  t1b                  ; !!(n & ((1 << nl2) - 1))
-    shl                     nd, 14
+    shlx                    nd, nd, t4d
     pinsrd                 xm0, nd, 2
     sub                    t3d, t0d
     sub                    t3d, t1d             ; mat_sh
@@ -4988,8 +4997,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     psrld                  xm0, xm1
     psrld                 xm11, xm1
 .end:
-    mov                    t1d, 2
-    movd                   xm2, t1d
+    movd                   xm2, t2d
     punpcklqdq             xm3, xm2, xm2
     paddd                 xm11, xm2
     paddd                  xm0, xm3
