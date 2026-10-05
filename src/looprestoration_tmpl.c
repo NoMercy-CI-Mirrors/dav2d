@@ -259,6 +259,7 @@ static void ns_wiener_single_y_c(pixel *p, const ptrdiff_t stride,
     backup_row(bak_rows[4], p, left[0], w, 4, 8, edges);
     ptrs[4] = bak_rows[4];
     if (edges & LR_HAVE_TOP_INTEGRATED) {
+        lpf += 2 * PXSTRIDE(stride);
         for (int i = 0; i < 4; i++) {
             backup_row_lpf(bak_rows[i], lpf, w, 4, edges);
             lpf += PXSTRIDE(stride);
@@ -346,10 +347,11 @@ wiener_uv_luma_c(coef *dst, const pixel *luma, const ptrdiff_t stride,
     left += row_step;
     ptrs[2] = bak_rows[2];
     if (edges & LR_HAVE_TOP_INTEGRATED) {
-        backup_row_luma(bak_rows[0], top + row_step * PXSTRIDE(stride),
+        top += (6 - 2 * row_step) * PXSTRIDE(stride);
+        backup_row_luma(bak_rows[0], top,
                         stride, NULL, w, edges, ss_hor, ss_ver, ds_flt);
         ptrs[0] = bak_rows[0];
-        backup_row_luma(bak_rows[1], top + 2 * row_step * PXSTRIDE(stride),
+        backup_row_luma(bak_rows[1], top + row_step * PXSTRIDE(stride),
                         stride, NULL, w, edges, ss_hor, ss_ver, ds_flt);
         ptrs[1] = bak_rows[1];
     } else if (edges & LR_HAVE_TOP) {
@@ -630,6 +632,7 @@ static void wiener_multi(pixel *p, const ptrdiff_t stride,
     for (int y = 0; y < 4; y++)
         backup_row(ptrs[4+y], p + y*PXSTRIDE(stride), left[y], w, 4, 8, edges);
     if (edges & LR_HAVE_TOP_INTEGRATED) {
+        lpf += 2 * PXSTRIDE(stride);
         for (int i = 0; i < 4; i++) {
             backup_row_lpf(ptrs[i], lpf, w, 4, edges);
             lpf += PXSTRIDE(stride);

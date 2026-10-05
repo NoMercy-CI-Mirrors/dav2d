@@ -106,7 +106,7 @@ static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
     ALIGN_STK_64(coef, c_dst, 64 * 64, );
     ALIGN_STK_64(coef, a_dst, 64 * 64, );
     PIXEL_RECT(luma, 128, 64);
-    PIXEL_RECT(top, 128, 4);
+    PIXEL_RECT(top, 128, 6);
     PIXEL_RECT(bottom, 128, 4);
     ALIGN_STK_16(pixel, left[64], 8, );
     int8_t filter[18];
@@ -134,7 +134,8 @@ static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
             init_filter(filter, 1);
 
             init_tmp(luma - 4, luma_stride, 128 + 8, 64 + 4, bitdepth_max);
-            init_tmp(top - 4, top_stride, 128 + 8, 4, bitdepth_max);
+            init_tmp(top + (6 - (2 << ss_ver)) * top_stride - 4, top_stride,
+                     128 + 8, (2 * ss_ver), bitdepth_max);
             init_tmp(bottom - 4, bottom_stride, 128 + 8, 4, bitdepth_max);
             init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
@@ -240,7 +241,7 @@ static void check_wiener_uv_chroma(Dav2dLoopRestorationDSPContext *const c) {
 static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
-    PIXEL_RECT(top, 64, 4);
+    PIXEL_RECT(top, 64, 6);
     PIXEL_RECT(bottom, 64, 4);
     uint16_t ll_mask[64][4];
     ALIGN_STK_16(pixel, left[64], 8, );
@@ -265,7 +266,7 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
 
         CLEAR_PIXEL_RECT(c_dst);
         init_tmp(c_dst - 4, c_dst_stride, 64 + 8, 64 + 4, bitdepth_max);
-        init_tmp(top - 4, top_stride, 64 + 8, 4, bitdepth_max);
+        init_tmp(top + 2 * top_stride - 4, top_stride, 64 + 8, 4, bitdepth_max);
         init_tmp(bottom - 4, bottom_stride, 64 + 8, 4, bitdepth_max);
         init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
@@ -312,7 +313,7 @@ static void check_wiener_single(Dav2dLoopRestorationDSPContext *const c) {
 static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
     PIXEL_RECT(c_dst, 64, 64);
     PIXEL_RECT(a_dst, 64, 64);
-    PIXEL_RECT(top, 64, 4);
+    PIXEL_RECT(top, 64, 6);
     PIXEL_RECT(bottom, 64, 4);
     uint16_t ll_mask[64][4];
     uint16_t noskip_mask[64];
@@ -340,7 +341,7 @@ static void check_wiener_multi(Dav2dLoopRestorationDSPContext *const c) {
 
         CLEAR_PIXEL_RECT(c_dst);
         init_tmp(c_dst - 4, c_dst_stride, 64 + 8, 64 + 4, bitdepth_max);
-        init_tmp(top - 4, top_stride, 64 + 8, 4, bitdepth_max);
+        init_tmp(top + 2 * top_stride - 4, top_stride, 64 + 8, 4, bitdepth_max);
         init_tmp(bottom - 4, bottom_stride, 64 + 8, 4, bitdepth_max);
         init_tmp((pixel *) left, 8 * sizeof(pixel), 8, 64, bitdepth_max);
 
@@ -495,8 +496,8 @@ static void check_gdf_prep(Dav2dLoopRestorationDSPContext *const c) {
     ALIGN_STK_64(int8_t, a_dst, 64 * 64,);
     ALIGN_STK_64(pixel, left, 64, [8]);
     PIXEL_RECT(p, 64, 64);
-    PIXEL_RECT(top, 64, 4);
-    PIXEL_RECT(bottom, 64, 4);
+    PIXEL_RECT(top, 64, 6);
+    PIXEL_RECT(bottom, 64, 6);
     const Dav2dGdfParams *params;
 
     declare_func(void, int8_t *dst, const pixel *p, ptrdiff_t stride,

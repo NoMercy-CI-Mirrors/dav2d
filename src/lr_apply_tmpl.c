@@ -242,8 +242,7 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
                              HIGHBD_CALL_SUFFIX);
         }
         if (wiener_fn) {
-            wiener_fn(ptrs[0], strides[0], left,
-                      top[0] ? top[0] + 2 * PXSTRIDE(strides[0]) : lpf[0],
+            wiener_fn(ptrs[0], strides[0], left, top[0] ? top[0] : lpf[0],
                       lpfb[0], &wiener_params, ll_mask_y, w, stripe_h, edges
                       HIGHBD_CALL_SUFFIX);
             if (multi_wiener)

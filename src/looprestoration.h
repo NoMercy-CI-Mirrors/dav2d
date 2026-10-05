@@ -194,6 +194,8 @@ typedef union WienerParams {
 // The filter functions are allowed to do aligned writes past the right
 // edge of the buffer, aligned up to the minimum loop restoration unit size
 // (which is 32 pixels for subsampled chroma and 64 pixels for luma).
+// If LR_HAVE_TOP_INTEGRATED is set in edges, then top is 6 pixels tall,
+// otherwise top is 4 pixels tall.
 #define decl_wiener_filter_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, \
             const_left_pixel_row left, \
@@ -204,7 +206,7 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
 typedef decl_wiener_filter_fn(*wienerfilter_fn);
 
 // sum the luma component of the chroma filter
-// dst has a constant stride of 64 coefs (this applies to the chroma part too)
+// dst has a constant stride of 64 coefs
 #define decl_wiener_filter_uv_luma_fn(name) \
 void (name)(coef *dst, const pixel *luma, const ptrdiff_t stride, \
             const_left_pixel_row left, const pixel *top, const pixel *bottom, \
@@ -212,7 +214,10 @@ void (name)(coef *dst, const pixel *luma, const ptrdiff_t stride, \
             enum LrEdgeFlags edges)
 typedef decl_wiener_filter_uv_luma_fn(*wienerfilter_uv_luma_fn);
 
-// compute and add the chroma component of the chroma filter to the luma filter
+// Compute and add the chroma component of the chroma filter to the luma filter
+// luma has a constant stride of 64 coefs
+// If LR_HAVE_TOP_INTEGRATED is set in edges, then top is 6 pixels tall;
+// otherwise, top is 4 pixels tall.
 #define decl_wiener_filter_uv_chroma_fn(name) \
 void (name)(pixel *p, const ptrdiff_t stride, const_left_pixel_row_uv left, \
             const pixel *top, const pixel *bottom, const coef *luma, \
@@ -220,6 +225,9 @@ void (name)(pixel *p, const ptrdiff_t stride, const_left_pixel_row_uv left, \
             int w, int h, enum LrEdgeFlags edges HIGHBD_DECL_SUFFIX)
 typedef decl_wiener_filter_uv_chroma_fn(*wienerfilter_uv_chroma_fn);
 
+// If LR_HAVE_TOP_INTEGRATED is set in edges, then top is 6 pixels tall;
+// otherwise, top is 4 pixels tall. LR_HAVE_BOTTOM_INTEGRATED does the same for
+// the bottom.
 #define decl_gdf_prep_fn(name) \
 void (name)(int8_t *dst, const pixel *p, ptrdiff_t stride, \
             const_left_pixel_row left, const pixel *top, \

@@ -1262,6 +1262,7 @@ DEFINE_ARGS p, stride, left, lpf, lpf_bot, params, ll_mask, bw, h, edge, \
 .have_top_integrated:
     mov   [Stk(scratch)], pq
     mov               pq, [Stk(lpf)]
+    lea               pq, [pq + 2*strideq]
     call .bak_edge_tile
     jmp .end_top
 .no_top:
