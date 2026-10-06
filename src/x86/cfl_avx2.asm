@@ -4755,62 +4755,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     movu                   m13, [base+mh_smpl_msk+t0]
     pand                    m1, m13, [y1q+refwq]
     pand                    m0, m13, [y0q+refwq]
-    punpcklbw               m4, m1, m10
-    punpckhbw               m5, m1, m10
-    psllw                   m8, m4, 7
-    psllw                   m9, m5, 7
-    pmulhrsw                m4, m8
-    pmulhrsw                m5, m9
-    movu         [imatq+refwq], m0
-    punpcklbw               m2, m0, m10
-    punpckhbw               m3, m0, m10
-    pmaddwd                 m6, m2, m2
-    pmaddwd                 m7, m3, m3
-    packuswb                m1, m4, m5
-    movu     [imatq+386+refwq], m1
-    pmaddwd                 m8, m2, m4
-    pmaddwd                 m9, m3, m5
-    pmaddwd                 m0, m4, m4
-    pmaddwd                 m1, m5, m5
-    paddd                   m6, m7
-    paddd                   m8, m9
-    paddd                   m0, m1
-    punpcklwd               m7, m4, m10
-    punpckhwd               m4, m10
-    punpcklwd               m9, m5, m10
-    punpckhwd               m5, m10
-    punpcklwd               m1, m2, m10
-    punpckhwd               m2, m10
-    punpcklwd              m14, m3, m10
-    punpckhwd               m3, m10
-    paddd                   m4, m7
-    paddd                   m5, m9
-    paddd                   m2, m1
-    paddd                   m3, m14
-    paddd                   m4, m5
-    paddd                   m2, m3
-    REPX          {pslld x, 7}, m4, m2
-    vperm2i128              m7, m6, m0, 0x31
-    vinserti128             m6, xm0, 1
-    vperm2i128              m9, m8, m4, 0x31
-    vinserti128             m8, xm4, 1
-    vextracti128           xm3, m2, 1
-    paddd                   m6, m7
-    paddd                   m8, m9
-    paddd                  xm2, xm3
-    punpckhqdq              m7, m6, m6
-    punpckhqdq              m9, m8, m8
-    punpckhqdq             xm3, xm2, xm2
-    paddd                   m6, m7
-    paddd                   m8, m9
-    paddd                  xm2, xm3
-    punpckldq               m6, m8
-    psrlq                  xm3, xm2, 32
-    punpckhqdq              m7, m6, m6
-    paddd                   m6, m7
-    paddd                  xm2, xm3
-    punpcklqdq              m6, m2
-    paddd                  m11, m6
+    call .main
     add                  refwq, 32
     jl .top.loop
     test                flagsb, 0x8             ; has_l
@@ -4845,7 +4790,61 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     dec                  refhd
     jmp .left.dir_t
 
- DEFINE_ARGS mat, imat, _, _, refh, flags, _, start, n, _, l, _
+ DEFINE_ARGS mat, imat, _, nref, refh, flags, _, start, n, _, l, _
+.main:
+    punpcklbw               m4, m1, m10
+    punpckhbw               m5, m1, m10
+    psllw                   m8, m4, 7
+    psllw                   m9, m5, 7
+    pmulhrsw                m4, m8
+    pmulhrsw                m5, m9
+    packuswb                m1, m4, m5
+    punpcklbw               m2, m0, m10
+    punpckhbw               m3, m0, m10
+.main.dir_c:
+    movu     [imatq+  0+nrefq], m0
+    movu     [imatq+386+nrefq], m1
+    paddw                   m1, m4, m5
+    paddw                   m0, m2, m3
+    punpcklwd               m6, m1, m10
+    punpckhwd               m7, m1, m10
+    punpcklwd               m8, m0, m10
+    punpckhwd               m9, m0, m10
+    paddd                   m6, m7
+    paddd                   m8, m9
+    REPX          {pslld x, 7}, m6, m8          ; l1m l0m
+    pmaddwd                 m0, m2, m2          ; l0^2
+    pmaddwd                 m7, m3, m3
+    pmaddwd                m12, m4, m4          ; l1^2
+    pmaddwd                m14, m5, m5
+    pmaddwd                 m1, m2, m4          ; l0l1
+    pmaddwd                 m9, m3, m5
+    paddd                   m0, m7
+    paddd                  m12, m14
+    paddd                   m1, m9
+    vperm2i128              m7, m0, m12, 0x31
+    vinserti128             m0, xm12, 1
+    vperm2i128              m9, m1, m6, 0x31
+    vinserti128             m1, xm6, 1
+    vextracti128           xm2, m8, 1
+    paddd                   m0, m7
+    paddd                   m1, m9
+    paddd                  xm2, xm8
+    punpckhqdq              m7, m0, m0
+    punpckhqdq              m9, m1, m1
+    punpckhqdq             xm8, xm2, xm2
+    paddd                   m0, m7
+    paddd                   m1, m9
+    paddd                  xm2, xm8
+    punpckldq               m0, m1
+    psrlq                  xm8, xm2, 32
+    punpckhqdq              m1, m0, m0
+    paddd                   m0, m1
+    paddd                  xm2, xm8
+    punpcklqdq              m0, m2
+    paddd                  m11, m0
+    ret
+
 .left:
     test                flagsb, 0x1
     jnz .left.dir_t
@@ -4865,33 +4864,32 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     and                    t1d, 30
     xor                    t0d, t0d
     sub                    t2d, t1d
-    pcmpeqw                m10, m10
-    psrlw                  m10, 8
+    pcmpeqw                m12, m12
+    psrlw                  m12, 8
 .left.dir_l.loop:
     cmp                  refhd, -15
     cmovae                 t0d, t2d
     movu                   m13, [base+mh_smpl_msk+t0]
     pand                    m0, m13, [lq+refhq*2]
     psrlw                   m1, m0, 8
-    pand                    m0, m10
+    pand                    m0, m12
     psllw                   m3, m1, 7
     pmaddwd                 m2, m0, m0
     pmulhrsw                m1, m3
     packuswb                m5, m0, m0
+    packuswb                m6, m1, m1
     vpermq                  m5, m5, q2020
-    movu         [imatq+refhq], xm5
+    vpermq                  m6, m6, q2020
     pmaddwd                 m3, m0, m1
     pmaddwd                 m4, m1, m1
-    packuswb                m6, m1, m1
-    vpermq                  m6, m6, q2020
-    pxor                    m5, m5
+    movu         [imatq+refhq], xm5
     movu     [imatq+386+refhq], xm6
-    punpcklwd              m12, m1, m5
-    punpckhwd               m1, m5
-    punpcklwd              m14, m0, m5
-    punpckhwd               m0, m5
-    paddd                   m1, m12
-    paddd                   m0, m14
+    punpcklwd               m7, m1, m10
+    punpckhwd               m1, m10
+    punpcklwd               m8, m0, m10
+    punpckhwd               m0, m10
+    paddd                   m1, m7
+    paddd                   m0, m8
     REPX          {pslld x, 7}, m1, m0
     vperm2i128              m7, m2, m4, 0x31
     vinserti128             m2, xm4, 1
@@ -4927,70 +4925,15 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     xor                    t1d, t1d
     sub                    t2d, t0d
     neg                  refhq
+    mov                  nrefq, refhq
 .left.dir_t.loop:
-    cmp                  refhq, -31
+    cmp                  nrefq, -31
     cmovae                 t1d, t2d
     movu                   m13, [base+mh_smpl_msk+t1]
-    pand                    m1, m13, [lq+refhq+1]
-    pand                    m0, m13, [lq+refhq]
-    pxor                   m10, m10
-    punpcklbw               m4, m1, m10
-    punpckhbw               m5, m1, m10
-    psllw                   m8, m4, 7
-    psllw                   m9, m5, 7
-    pmulhrsw                m4, m8
-    pmulhrsw                m5, m9
-    movu     [imatq+  0+refhq], m0
-    punpcklbw               m2, m0, m10
-    punpckhbw               m3, m0, m10
-    pmaddwd                 m6, m2, m2
-    pmaddwd                 m7, m3, m3
-    packuswb                m1, m4, m5
-    movu     [imatq+386+refhq], m1
-    pmaddwd                 m8, m2, m4
-    pmaddwd                 m9, m3, m5
-    pmaddwd                 m0, m4, m4
-    pmaddwd                 m1, m5, m5
-    paddd                   m6, m7
-    paddd                   m8, m9
-    paddd                   m0, m1
-    punpcklwd               m7, m4, m10
-    punpckhwd               m4, m10
-    punpcklwd               m9, m5, m10
-    punpckhwd               m5, m10
-    punpcklwd               m1, m2, m10
-    punpckhwd               m2, m10
-    punpcklwd              m14, m3, m10
-    punpckhwd               m3, m10
-    paddd                   m4, m7
-    paddd                   m5, m9
-    paddd                   m2, m1
-    paddd                   m3, m14
-    paddd                   m4, m5
-    paddd                   m2, m3
-    REPX          {pslld x, 7}, m4, m2
-    vperm2i128              m7, m6, m0, 0x31
-    vinserti128             m6, xm0, 1
-    vperm2i128              m9, m8, m4, 0x31
-    vinserti128             m8, xm4, 1
-    vextracti128           xm3, m2, 1
-    paddd                   m6, m7
-    paddd                   m8, m9
-    paddd                  xm2, xm3
-    punpckhqdq              m7, m6, m6
-    punpckhqdq              m9, m8, m8
-    punpckhqdq             xm3, xm2, xm2
-    paddd                   m6, m7
-    paddd                   m8, m9
-    paddd                  xm2, xm3
-    punpckldq               m6, m8
-    psrlq                  xm3, xm2, 32
-    punpckhqdq              m7, m6, m6
-    paddd                   m6, m7
-    paddd                  xm2, xm3
-    punpcklqdq              m6, m2
-    paddd                  m11, m6
-    add                  refhq, 32
+    pand                    m1, m13, [lq+nrefq+1]
+    pand                    m0, m13, [lq+nrefq]
+    call .main
+    add                  nrefq, 32
     jl .left.dir_t.loop
     jmp .shift
 
@@ -5003,66 +4946,21 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
     xor                    t1d, t1d
     sub                    t2d, t0d
     neg                  refhq
+    mov                  nrefq, refhq
 .left.dir_c.loop:
-    cmp                  refhq, -31
+    cmp                  nrefq, -31
     cmovae                 t1d, t2d
     movu                   m13, [base+mh_smpl_msk+t1]
-    pand                    m0, m13, [lq+refhq]
-    movu     [imatq+  0+refhq], m0
+    pand                    m0, m13, [lq+nrefq]
     punpcklbw               m2, m0, m10
     punpckhbw               m3, m0, m10
     psllw                   m6, m2, 7
     psllw                   m7, m3, 7
-    pmaddwd                 m4, m2, m2
-    pmaddwd                 m5, m3, m3
-    pmulhrsw                m6, m2
-    pmulhrsw                m7, m3
-    pmaddwd                 m0, m2, m6
-    pmaddwd                 m1, m3, m7
-    pmaddwd                 m8, m6, m6
-    pmaddwd                 m9, m7, m7
-    packuswb               m14, m6, m7
-    movu     [imatq+386+refhq], m14
-    paddd                   m4, m5
-    paddd                   m0, m1
-    paddd                   m8, m9
-    punpcklwd               m5, m6, m10
-    punpckhwd               m6, m10
-    punpcklwd               m1, m7, m10
-    punpckhwd               m7, m10
-    punpcklwd               m9, m2, m10
-    punpckhwd               m2, m10
-    punpcklwd              m14, m3, m10
-    punpckhwd               m3, m10
-    paddd                   m6, m5
-    paddd                   m7, m1
-    paddd                   m2, m9
-    paddd                   m3, m14
-    paddd                   m6, m7
-    paddd                   m2, m3
-    REPX          {pslld x, 7}, m6, m2
-    vperm2i128              m5, m4, m8, 0x31
-    vinserti128             m4, xm8, 1
-    vperm2i128              m1, m0, m6, 0x31
-    vinserti128             m0, xm6, 1
-    vextracti128           xm3, m2, 1
-    paddd                   m4, m5
-    paddd                   m0, m1
-    paddd                  xm2, xm3
-    punpckhqdq              m5, m4, m4
-    punpckhqdq              m1, m0, m0
-    punpckhqdq             xm3, xm2, xm2
-    paddd                   m4, m5
-    paddd                   m0, m1
-    paddd                  xm2, xm3
-    punpckldq               m4, m0
-    psrlq                  xm3, xm2, 32
-    punpckhqdq              m0, m4, m4
-    paddd                   m4, m0
-    paddd                  xm2, xm3
-    punpcklqdq              m4, m2
-    paddd                  m11, m4
-    add                  refhq, 32
+    pmulhrsw                m4, m2, m6
+    pmulhrsw                m5, m3, m7
+    packuswb                m1, m4, m5
+    call .main.dir_c
+    add                  nrefq, 32
     jl .left.dir_c.loop
 
 .shift:
