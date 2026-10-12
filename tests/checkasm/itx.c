@@ -255,9 +255,12 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
                                                     w, h, "dst"))
                     {
                         fprintf(stderr, "eob = %d\n", eob);
+                        break;
                     }
-                    if (memcmp(coeff[0], coeff[1], sizeof(*coeff)))
+                    if (memcmp(coeff[0], coeff[1], sizeof(*coeff))) {
                         fail();
+                        break;
+                    }
                 }
                 if ((hor1d <= ADST && ver1d <= ADST) || txtp == WHT_WHT) {
                     /* Only benchmark with coef_bits_min */
@@ -311,6 +314,7 @@ static void check_cctx(const Dav2dInvTxfmDSPContext *const c) {
                 memcmp(c_coef[1], a_coef[1], mem_sz))
             {
                 fail();
+                break;
             }
 
             if (sz == 16 * 16)
