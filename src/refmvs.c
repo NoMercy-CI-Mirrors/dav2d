@@ -1390,13 +1390,12 @@ static inline mv dequantize_mv(const union qmv mv) {
     };
 }
 
-static void tip_projection(const refmvs_frame *const rf,
-                           refmvs_sngl_mv_block *const rp_proj,
+static void tip_projection(refmvs_sngl_mv_block *const rp_proj,
                            const ptrdiff_t stride,
                            const int col_start8, const int col_end8,
                            const int row_start8, int row_end8,
                            const int mfmv_sbsz8, const int sbsz8,
-                           const int tmvp_sample_step)
+                           const int tmvp_sample_step, const int tip_delta)
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
         const int xend = imin(col_end8 - sx, mfmv_sbsz8);
@@ -1409,22 +1408,21 @@ static void tip_projection(const refmvs_frame *const rf,
                 const union mv mv = rp_proj_ptr->mv[pos];
                 if (mv.n == INVALID_MV) continue;
                 rp_proj_ptr->mv[pos] =
-                    dav2d_mv_projection(mv, rf->tip.delta,
+                    dav2d_mv_projection(mv, tip_delta,
                                         rp_proj_ptr->ref[pos],
                                         -2047, 2047);
-                rp_proj_ptr->ref[pos] = rf->tip.delta;
+                rp_proj_ptr->ref[pos] = tip_delta;
             }
         }
     }
 }
 
-static void fill_holes(const refmvs_frame *const rf,
-                       refmvs_sngl_mv_block *const rp_proj,
+static void fill_holes(refmvs_sngl_mv_block *const rp_proj,
                        const ptrdiff_t stride,
                        const int col_start8, const int col_end8,
                        const int row_start8, int row_end8,
                        const int mfmv_sbsz8, const int sbsz8,
-                       const int tmvp_sample_step)
+                       const int tmvp_sample_step, const int tip_delta)
 {
     for (int sx = col_start8; sx < col_end8; sx += mfmv_sbsz8) {
         const int xend = imin(col_end8 - sx, mfmv_sbsz8);
@@ -1441,7 +1439,7 @@ static void fill_holes(const refmvs_frame *const rf,
 #define copy(dx, dy) do { \
                 if (rp_proj_ptr[dy * stride >> 5].mv[pos + dx].n == INVALID_MV) { \
                     rp_proj_ptr[dy * stride >> 5].mv[pos + dx] = mv; \
-                    rp_proj_ptr[dy * stride >> 5].ref[pos + dx] = rf->tip.delta; \
+                    rp_proj_ptr[dy * stride >> 5].ref[pos + dx] = tip_delta; \
                 } \
             } while (0)
                 if (x - tmvp_sample_step >= 0)
@@ -1458,13 +1456,12 @@ static void fill_holes(const refmvs_frame *const rf,
     }
 }
 
-static void smoothen(const refmvs_frame *const rf,
-                     refmvs_sngl_mv_block *const rp_proj,
+static void smoothen(refmvs_sngl_mv_block *const rp_proj,
                      const ptrdiff_t stride,
                      const int col_start8, const int col_end8,
                      const int row_start8, int row_end8,
                      const int mfmv_sbsz8, const int sbsz8,
-                     const int tmvp_sample_step)
+                     const int tmvp_sample_step, const int tip_delta)
 {
     static const unsigned idiv[] = {
         65536, 32768, 21845, 16384, 13107
@@ -1501,7 +1498,7 @@ static void smoothen(const refmvs_frame *const rf,
 #undef add
                 if (!first_line) {
                     rp_proj_ptr[-tmvp_sample_step * stride >> 5].mv[pos] = mv_line[x];
-                    rp_proj_ptr[-tmvp_sample_step * stride >> 5].ref[pos] = rf->tip.delta;
+                    rp_proj_ptr[-tmvp_sample_step * stride >> 5].ref[pos] = tip_delta;
                 }
                 if (sum_n) {
                     mv_line[x].y = (int)((int64_t) sum_y * idiv[sum_n - 1] +
@@ -1520,7 +1517,7 @@ static void smoothen(const refmvs_frame *const rf,
             for (int x = 0; x < xend; x += tmvp_sample_step) {
                 const ptrdiff_t pos = bx8 + x;
                 rp_proj_ptr->mv[pos] = mv_line[x];
-                rp_proj_ptr->ref[pos] = rf->tip.delta;
+                rp_proj_ptr->ref[pos] = tip_delta;
             }
         }
     }
@@ -1989,16 +1986,17 @@ void dav2d_refmvs_load_tmvs(const refmvs_frame *const rf, int tile_row_idx,
     }
 
     if (rf->frm_hdr->tip.frame_mode) {
-        tip_projection(rf, rp_proj, stride, col_start8, col_end8,
+        const int tip_delta = rf->tip.delta;
+        tip_projection(rp_proj, stride, col_start8, col_end8,
                        row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                       sample_step);
+                       sample_step, tip_delta);
         if (rf->seq_hdr->tip_hole_fill) {
-            fill_holes(rf, rp_proj, stride, col_start8, col_end8,
+            fill_holes(rp_proj, stride, col_start8, col_end8,
                        row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                       sample_step);
-            smoothen(rf, rp_proj, stride, col_start8, col_end8,
+                       sample_step, tip_delta);
+            smoothen(rp_proj, stride, col_start8, col_end8,
                      row_start8, row_end8, mfmv_sbsz8, sbsz8,
-                     sample_step);
+                     sample_step, tip_delta);
         }
     }
     if (sample_step > 1) {
