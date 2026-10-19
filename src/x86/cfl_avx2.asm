@@ -30,7 +30,7 @@
 
 SECTION_RODATA 16
 
-const pb_0to15,db  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
+pb_0to15:      db  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
 w4Llshuf:      db  0, -1,  1, -1,  3, -1,  5, -1,  8, -1,  9, -1, 11, -1, 13, -1
 w8Llshuf:      db  0, -1,  1, -1,  3, -1,  5, -1,  7, -1,  9, -1, 11, -1, 13, -1
 Llshuf:        db  0, -1,  2, -1,  4, -1,  6, -1,  8, -1, 10, -1, 12, -1, 14, -1
@@ -4153,8 +4153,6 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                   dstq, 64
     sub                     hd, 2 << 5
     jge .blk.w32.loop
-    jmp .ret
-
 .ret:
     RET
 
@@ -4687,8 +4685,6 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                   dstq, 64
     sub                     hd, 2 << 5
     jge .blk.w32.loop
-    jmp .ret
-
 .ret:
     RET
 
@@ -5534,8 +5530,8 @@ cglobal cfl_mh_pred_l_8bpc, 4, 12, 16, dst, ds, src, w, h, a, flags, a2, _, l
  DECLARE_REG_TMP 10
     movifnidn               aq, amp
     movifnidn               hd, hm
-    lea                     r8, [pd_281]
-%define base r8-pd_281
+    lea                     r8, [$$]
+%define base r8-$$
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).prep_a0_a1
     call mangle(private_prefix %+ _cfl_mh_pred_c_8bpc_avx2).calc_a2v2
     mov                 flagsd, flagsm

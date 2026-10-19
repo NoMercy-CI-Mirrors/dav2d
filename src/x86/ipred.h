@@ -156,6 +156,7 @@ static ALWAYS_INLINE void intra_pred_dsp_init_x86(Dav2dIntraPredDSPContext *cons
     init_cfl_fns(420, avx2);
     init_cfl_mh_fns(avx2);
 #else
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][CFL_FLT_TYPE_UNIFORM] = dav2d_cfl_mh_gen_y_420_uniform_16bpc_avx2;
     c->cfl_mh_gen_mat = dav2d_cfl_mh_gen_mat_16bpc_avx2;
     c->cfl_mh_calc_alphas = dav2d_cfl_mh_calc_alphas_16bpc_avx2;
     init_cfl_mh_pred_fns(avx2);

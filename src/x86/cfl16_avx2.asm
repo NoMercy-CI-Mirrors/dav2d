@@ -30,16 +30,46 @@
 
 SECTION_RODATA 16
 
+pw_flt0: dw 2, 2
+pw_flt1: dw 2, 1
+mh_lshuf:      db  0,  1,  4,  5,  8,  9, 12, 13
+pb_0to15:      db  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
 mh_rev_words:  db 14, 15, 12, 13, 10, 11,  8,  9,  6,  7,  4,  5,  2,  3,  0,  1
 mh_smpl_msk: times 32 db -1
              times 32 db 0
 bdmax: times 16 dw 0x3ff
        times 16 dw 0xfff
 
-pd_9:       dd 9
-pd_11:      dd 11
+pw_flt2: dw 4, 1
+         db 6, 1
+pd_9:  dd 9
+pd_11: dd 11
 
-cextern pb_0to15
+%macro JMP_TABLE2 2-* ; fn, name, min_log2, labels
+    %assign %%min_log2 %2
+    %xdefine %1_table (%%table - %%min_log2*4)
+    %xdefine %%base mangle(private_prefix %+ _%1)
+    %%table:
+    %rep %0 - 2
+        dd %%base %+ .%3 - (%%table - %%min_log2*4)
+        %rotate 1
+    %endrep
+%endmacro
+
+JMP_TABLE2 cfl_mh_gen_y_420_uniform_16bpc_avx2, 1, \
+    top.9, top.9, top.9, top.17, top.33, top.63, \
+    blk.w4, blk.w8, blk.w16, blk.w32
+
+%if 0
+JMP_TABLE2 cfl_mh_gen_y_420_vstrip_16bpc_avx2, 1, \
+    top.4, top.4, top.8, top.17, top.33, top.63, \
+    blk.w4, blk.w8, blk.w16, blk.w32
+
+JMP_TABLE2 cfl_mh_gen_y_420_gauss_16bpc_avx2, 1, \
+    top.4, top.4, top.8, top.17, top.33, top.63, \
+    blk.w4, blk.w8, blk.w16, blk.w32
+%endif
+
 cextern pd_16
 cextern pd_281
 
@@ -55,6 +85,347 @@ cextern cfl_mh_pred_c_8bpc_avx2.prep_a0_a1
 SECTION .text
 
 INIT_YMM avx2
+cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
+                                                   needed_top, needed_left, \
+                                                   w, h, flags, \
+                                                   nleft, ntop, tbl
+ DECLARE_REG_TMP 12, 13
+    mov                 flagsd, flagsm
+    mov                     hd, hm
+    movifnidn      needed_topd, needed_topm
+    movifnidn     needed_leftd, needed_leftm
+    mov                 nleftd, 4
+    mov                  ntopd, 1
+    xor                    t0d, t0d
+    test                flagsb, 0x8             ; has_l
+    cmovz               nleftd, t0d
+    test                flagsb, 0x2             ; dir_l
+    setnz                  t1b
+    shlx                nleftd, nleftd, t1d
+    sub                   srcq, nleftq
+    test                flagsb, 0x1             ; dir_t
+    setnz                  t1b
+    test                flagsb, 0x4             ; has_t
+    cmovz                ntopd, t0d
+    shlx                 ntopd, ntopd, t1d
+    lea                   tblq, [cfl_mh_gen_y_420_uniform_16bpc_avx2_table]
+%define base tblq-cfl_mh_gen_y_420_uniform_16bpc_avx2_table
+    vpbroadcastd           m14, [base+pw_flt0]
+    jz .left.no_top
+    sub                   tseq, nleftq
+    test                flagsb, 0xb
+    setz                   t0b                  ; !has_l && dir_c
+    lea                   tseq, [tseq+t0*4]
+    test                flagsb, 0x10            ; is_top_sb_edge
+    jnz .tse
+    lea                   srcq, [srcq+t0*4]
+    lzcnt                  t0d, needed_topd
+    tzcnt                  t1d, needed_topd
+    xor                    t0d, 31
+    cmp                    t0d, t1d
+    setne                  t1b
+    add                    t0d, t1d
+    shlx                    t1, ssq, ntopq
+    sub                   srcq, t1
+    movsxd                  t0, [tblq+t0*4]
+    add                     t0, tblq
+    jmp                     t0
+
+.tse:
+    xor                    t0d, t0d
+.tse.loop:
+    pmaddwd                 m0, m14, [tseq+t0*4+ 0]
+    pmaddwd                 m1, m14, [tseq+t0*4+32]
+    REPX          {psrld x, 2}, m0, m1
+    packusdw                m0, m1
+    vpermq                  m0, m0, q3120
+    mova           [dstq+t0*2], m0
+    test                 ntopb, 2
+    jz .tse.loop.skip_2nd_row
+    mova       [dstq+t0*2+128], m0
+.tse.loop.skip_2nd_row:
+    add                    t0d, 16
+    cmp                    t0d, needed_topd
+    jl .tse.loop
+    mov                    t1d, 64
+    shlx                   t1d, t1d, ntopd
+    add                   dstq, t1
+    jmp .left
+
+.top.9:
+    pmaddwd                 m0, m14, [srcq+ssq*0]
+    pmaddwd                 m1, m14, [srcq+ssq*1]
+    cmp            needed_topd, 9
+    jne .top.9.skip_last
+    movd                   xm2, [srcq+ssq*0+32]
+    movd                   xm3, [srcq+ssq*1+32]
+    REPX     {pmaddwd x, xm14}, xm2, xm3
+    paddd                  xm2, xm3
+    psrld                  xm2, 3
+.top.9.skip_last:
+    paddd                   m0, m1
+    psrld                   m0, 3
+    vextracti128           xm1, m0, 1
+    packusdw               xm0, xm1
+    mova             [dstq+ 0], xm0
+    movd             [dstq+16], xm2
+    lea                   srcq, [srcq+ssq*2]
+    add                   dstq, 128
+    dec                  ntopd
+    jg .top.9
+    jmp .left
+.top.17:
+    pmaddwd                 m0, m14, [srcq+ssq*0+ 0]
+    pmaddwd                 m1, m14, [srcq+ssq*1+ 0]
+    pmaddwd                 m2, m14, [srcq+ssq*0+32]
+    pmaddwd                 m3, m14, [srcq+ssq*1+32]
+    cmp            needed_topd, 17
+    jne .top.17.skip_last
+    movd                   xm4, [srcq+ssq*0+64]
+    movd                   xm5, [srcq+ssq*1+64]
+    REPX     {pmaddwd x, xm14}, xm4, xm5
+.top.17.skip_last:
+    paddd                   m0, m1
+    paddd                   m2, m3
+    paddd                  xm4, xm5
+    REPX          {psrld x, 3}, m0, m2, xm4
+    packusdw                m0, m2
+    vpermq                  m0, m0, q3120
+    mova                [dstq], m0
+    movd             [dstq+32], xm4
+    lea                   srcq, [srcq+ssq*2]
+    add                   dstq, 128
+    dec                  ntopd
+    jg .top.17
+    jmp .left
+.top.33:
+    pmaddwd                 m0, m14, [srcq+ssq*0+0x00]
+    pmaddwd                 m1, m14, [srcq+ssq*1+0x00]
+    pmaddwd                 m2, m14, [srcq+ssq*0+0x20]
+    pmaddwd                 m3, m14, [srcq+ssq*1+0x20]
+    pmaddwd                 m4, m14, [srcq+ssq*0+0x40]
+    pmaddwd                 m5, m14, [srcq+ssq*1+0x40]
+    pmaddwd                 m6, m14, [srcq+ssq*0+0x60]
+    pmaddwd                 m7, m14, [srcq+ssq*1+0x60]
+    test           needed_topd, 33
+    jz .top.33.skip_last
+    movd                   xm8, [srcq+ssq*0+0x80]
+    movd                   xm9, [srcq+ssq*1+0x80]
+    REPX     {pmaddwd x, xm14}, xm8, xm9
+    paddd                  xm8, xm9
+    psrld                  xm8, 3
+.top.33.skip_last:
+    paddd                   m0, m1
+    paddd                   m2, m3
+    paddd                   m4, m5
+    paddd                   m6, m7
+    REPX          {psrld x, 3}, m0, m2, m4, m6
+    packusdw                m0, m2
+    packusdw                m4, m6
+    REPX  {vpermq x, x, q3120}, m0, m4
+    mova             [dstq+ 0], m0
+    mova             [dstq+32], m4
+    movd             [dstq+64], xm8
+    lea                   srcq, [srcq+ssq*2]
+    add                   dstq, 128
+    dec                  ntopd
+    jg .top.33
+    jmp .left
+.top.63:
+    pmaddwd                 m0, m14, [srcq+ssq*0+0x00]
+    pmaddwd                 m1, m14, [srcq+ssq*1+0x00]
+    pmaddwd                 m2, m14, [srcq+ssq*0+0x20]
+    pmaddwd                 m3, m14, [srcq+ssq*1+0x20]
+    pmaddwd                 m4, m14, [srcq+ssq*0+0x40]
+    pmaddwd                 m5, m14, [srcq+ssq*1+0x40]
+    pmaddwd                 m6, m14, [srcq+ssq*0+0x60]
+    pmaddwd                 m7, m14, [srcq+ssq*1+0x60]
+    pmaddwd                 m8, m14, [srcq+ssq*0+0x80]
+    pmaddwd                 m9, m14, [srcq+ssq*1+0x80]
+    pmaddwd                m10, m14, [srcq+ssq*0+0xa0]
+    pmaddwd                m11, m14, [srcq+ssq*1+0xa0]
+    pmaddwd                m12, m14, [srcq+ssq*0+0xc0]
+    pmaddwd                m13, m14, [srcq+ssq*1+0xc0]
+    paddd                   m0, m1
+    paddd                   m2, m3
+    pmaddwd                 m1, m14, [srcq+ssq*0+0xe0]
+    pmaddwd                 m3, m14, [srcq+ssq*1+0xe0]
+    paddd                   m4, m5
+    paddd                   m6, m7
+    paddd                   m8, m9
+    paddd                  m10, m11
+    paddd                  m12, m13
+    paddd                   m1, m3
+    REPX          {psrld x, 3}, m0, m2, m4, m6, m8, m10, m12, m1
+    packusdw                m0, m2
+    packusdw                m4, m6
+    packusdw                m8, m10
+    packusdw               m12, m1
+    REPX  {vpermq x, x, q3120}, m0, m4, m8, m12
+    mova             [dstq+ 0], m0
+    mova             [dstq+32], m4
+    mova             [dstq+64], m8
+    mova             [dstq+96], m12
+    lea                   srcq, [srcq+ssq*2]
+    add                   dstq, 128
+    dec                  ntopd
+    jg .top.63
+
+ DEFINE_ARGS dst, src, srcl, ss, ss3, needed_left, w, h, flags, nleft, dstl, tbl, ystart
+.left:
+    lea                   ss3q, [ssq*3]
+    test                nleftd, nleftd
+    jz .blk.skip_left
+.left2:
+    xor                ystartd, ystartd
+    test                flagsb, 0x7
+    cmovz              ystartq, ssq             ; !has_t && dir_c
+    lea                  srclq, [srcq+ystartq*2]
+    movu                   xm8, [base+mh_lshuf-8+nleftq*2]
+    lea                  dstlq, [dstq+32*32*2]
+.left.loop:
+    movq                   xm0, [srclq+ssq*0]
+    vpbroadcastq           xm2, [srclq+ssq*2]
+    movq                   xm1, [srclq+ssq*1]
+    vpbroadcastq           xm3, [srclq+ss3q ]
+    lea                  srclq, [srclq+ssq*4]
+    vpbroadcastq            m4, [srclq+ssq*0]
+    vpbroadcastq            m6, [srclq+ssq*2]
+    vpbroadcastq            m5, [srclq+ssq*1]
+    vpbroadcastq            m7, [srclq+ss3q ]
+    lea                  srclq, [srclq+ssq*4]
+    vpblendd               xm0, xm2, 0xc
+    vpblendd               xm1, xm3, 0xc
+    vpblendd                m4, m6, 0xc0
+    vpblendd                m5, m7, 0xc0
+    vpblendd                m0, m4, 0xf0
+    vpblendd                m1, m5, 0xf0
+    REPX      {pmaddwd x, m14}, m0, m1
+    paddd                   m0, m1
+    psrld                   m0, 3
+    packusdw                m0, m0
+    vpermq                  m0, m0, q3220
+    pshufb                 xm0, xm8
+    movu               [dstlq], xm0
+    lea                  dstlq, [dstlq+nleftq*2]
+    sub           needed_leftd, 4
+    jg .left.loop
+    add                   srcq, nleftq
+
+.blk:
+    tzcnt                   wd, wm
+    movsxd                  t0, [tblq+20+wq*4]
+    add                     t0, tblq
+    jmp                     t0
+.blk.skip_left:
+    xor                    t0d, t0d
+    test                flagsb, 0x13
+    setz                   t0b
+    neg                     t0                  ; restore src ptr post top
+    lea                   srcq, [srcq+t0*4]     ; src -= (!itse && dir_c) * 2
+    jmp .blk
+.left.no_top:
+    lea                   ss3q, [ssq*3]
+    test                nleftd, nleftd
+    jz .blk
+    jmp .left2
+
+.blk.w4:
+    movu                   xm0, [srcq+ssq*0]
+    movu                   xm1, [srcq+ssq*1]
+    movu                   xm2, [srcq+ssq*2]
+    movu                   xm3, [srcq+ss3q ]
+    lea                   srcq, [srcq+ssq*4]
+    vinserti128             m0, [srcq+ssq*0], 1
+    vinserti128             m1, [srcq+ssq*1], 1
+    vinserti128             m2, [srcq+ssq*2], 1
+    vinserti128             m3, [srcq+ss3q ], 1
+    lea                   srcq, [srcq+ssq*4]
+    REPX      {pmaddwd x, m14}, m0, m1, m2, m3
+    paddd                   m0, m1
+    paddd                   m2, m3
+    REPX          {psrld x, 3}, m0, m2
+    packusdw                m0, m2
+    mova                [dstq], m0
+    add                   dstq, 32
+    sub                     hd, 4
+    jg .blk.w4
+    jmp .ret
+.blk.w8:
+    pmaddwd                 m0, m14, [srcq+ssq*0]
+    pmaddwd                 m1, m14, [srcq+ssq*1]
+    pmaddwd                 m2, m14, [srcq+ssq*2]
+    pmaddwd                 m3, m14, [srcq+ss3q ]
+    lea                   srcq, [srcq+ssq*4]
+    pmaddwd                 m4, m14, [srcq+ssq*0]
+    pmaddwd                 m5, m14, [srcq+ssq*1]
+    pmaddwd                 m6, m14, [srcq+ssq*2]
+    pmaddwd                 m7, m14, [srcq+ss3q ]
+    lea                   srcq, [srcq+ssq*4]
+    paddd                   m0, m1
+    paddd                   m2, m3
+    paddd                   m4, m5
+    paddd                   m6, m7
+    REPX          {psrld x, 3}, m0, m2, m4, m6
+    packusdw                m0, m2
+    packusdw                m4, m6
+    REPX  {vpermq x, x, q3120}, m0, m4
+    mova             [dstq+ 0], m0
+    mova             [dstq+32], m4
+    add                   dstq, 64
+    sub                     hd, 4
+    jg .blk.w8
+    jmp .ret
+.blk.w16:
+    pmaddwd                 m0, m14, [srcq+ssq*0+ 0]
+    pmaddwd                 m1, m14, [srcq+ssq*1+ 0]
+    pmaddwd                 m2, m14, [srcq+ssq*0+32]
+    pmaddwd                 m3, m14, [srcq+ssq*1+32]
+    pmaddwd                 m4, m14, [srcq+ssq*2+ 0]
+    pmaddwd                 m5, m14, [srcq+ss3q + 0]
+    pmaddwd                 m6, m14, [srcq+ssq*2+32]
+    pmaddwd                 m7, m14, [srcq+ss3q +32]
+    lea                   srcq, [srcq+ssq*4]
+    paddd                   m0, m1
+    paddd                   m2, m3
+    paddd                   m4, m5
+    paddd                   m6, m7
+    REPX          {psrld x, 3}, m0, m2, m4, m6
+    packusdw                m0, m2
+    packusdw                m4, m6
+    REPX  {vpermq x, x, q3120}, m0, m4
+    mova             [dstq+ 0], m0
+    mova             [dstq+32], m4
+    add                   dstq, 64
+    sub                     hd, 2
+    jg .blk.w16
+    jmp .ret
+.blk.w32:
+    pmaddwd                 m0, m14, [srcq+ssq*0+ 0]
+    pmaddwd                 m1, m14, [srcq+ssq*1+ 0]
+    pmaddwd                 m2, m14, [srcq+ssq*0+32]
+    pmaddwd                 m3, m14, [srcq+ssq*1+32]
+    pmaddwd                 m4, m14, [srcq+ssq*0+64]
+    pmaddwd                 m5, m14, [srcq+ssq*1+64]
+    pmaddwd                 m6, m14, [srcq+ssq*0+96]
+    pmaddwd                 m7, m14, [srcq+ssq*1+96]
+    lea                   srcq, [srcq+ssq*2]
+    paddd                   m0, m1
+    paddd                   m2, m3
+    paddd                   m4, m5
+    paddd                   m6, m7
+    REPX          {psrld x, 3}, m0, m2, m4, m6
+    packusdw                m0, m2
+    packusdw                m4, m6
+    REPX  {vpermq x, x, q3120}, m0, m4
+    mova             [dstq+ 0], m0
+    mova             [dstq+32], m4
+    add                   dstq, 64
+    dec                     hd
+    jg .blk.w32
+.ret:
+    RET
+
 cglobal cfl_mh_gen_mat_16bpc, 4, 15, 0, mat, imat, y0, refw, refh, flags, bd, \
                                         ntop, n, start, y1, left, dir_off
  WIN64_SPILL_XMM 12, 15
