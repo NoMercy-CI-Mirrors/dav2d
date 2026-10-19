@@ -3377,14 +3377,13 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     cmp            needed_topd, 16
     setge                  t3b
     shr                    t1d, 1
-    mov                    r8d, needed_topd
+    mov                    t2d, needed_topd
     and                    t1d, t3d             ; if (needed_top >= 16)
-    sub                    r8d, t1d             ;   needed_top -= has_l
-    mov                    t0d, 31
-    lzcnt                  t1d, r8d
-    tzcnt                  t2d, r8d
-    sub                    t0d, t1d
-    cmp                    t0d, t2d
+    sub                    t2d, t1d             ;   needed_top -= has_l
+    lzcnt                  t0d, t2d
+    tzcnt                  t1d, t2d
+    xor                    t0d, 31
+    cmp                    t0d, t1d
     setne                  t1b
     add                    t0d, t1d
     shlx                    t3, ssq, ntopq
@@ -3444,7 +3443,7 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     psrlw                   m0, 3
     packuswb                m0, m0
     vpermq                  m0, m0, q3220
-    mova             [dstq+ 0], m0
+    mova             [dstq+ 0], xm0
     movd             [dstq+16], xm2
     lea                   srcq, [srcq+ssq*2]
     add                   dstq, 64
@@ -3510,7 +3509,6 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
 .left2:
     xor                ystartd, ystartd
     test                    hb, 0x7             ; flags
- DEFINE_ARGS dst, src, srcl, ss, ss3, needed_left, w, h, ystart, nleft, dstl, tbl
     cmovz              ystartq, ssq             ; !has_t && dir_c
     lea                  srclq, [srcq+ystartq*2]
     movu                   xm8, [base+mh_lshuf1-4+nleftq*4]
@@ -3655,7 +3653,6 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     sub                     hd, 2 << 5
     jge .blk.w32
     jmp .ret
-
 .ret:
     RET
 
