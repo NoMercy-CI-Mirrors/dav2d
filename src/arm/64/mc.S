@@ -3716,6 +3716,13 @@ const ext_warp4x4_h_store_tbl, align=4
         .byte 0, 16, 4, 20, 1, 17, 5, 21, 2, 18, 6, 22, 3, 19, 7, 23
 endconst
 
+const ext_warp4x4t_h_store_tbl, align=4
+        // Pack col0|col2 and col1|col3 into four 64-bit tmp rows:
+        // rowN = col0[N], col1[N], col2[N], col3[N].
+        .byte 0, 1, 16, 17, 8,  9,  24, 25, 2, 3, 18, 19, 10, 11, 26, 27
+        .byte 4, 5, 20, 21, 12, 13, 28, 29, 6, 7, 22, 23, 14, 15, 30, 31
+endconst
+
 // Horizontal 4x4 filter over 8 rows in parallel.
 // Computes taps 1..3 and 4..6 in signed 16-bit partial sums,
 // then combines them with a halving add into 16-bit accumulators.
@@ -3825,7 +3832,7 @@ endconst
                                    v2,  v3,  v4,  v5,  v6,  v16, v17, v18, v19
 .endm
 
-.macro ext_warp4x4_h_8bpc_neon
+.macro ext_warp4x4_h_compute_8bpc_neon rnd
         movrel          x7,  X(ext_warp_filter), -8
         sub             x6,  x2,  #1                   // src - 1
         ldr             d0,  [x7, w4, uxtw #3]         // fh = dav2d_ext_warp_filter[mx - 1]
@@ -3850,11 +3857,15 @@ endconst
         uxtl            v16.8h,  v22.8b                // s1 | s3
         uxtl2           v17.8h,  v22.16b               // s5 | s7
         orr             x13, x13, x11, lsl #32         // s0.h[0..3] = src[(0..3) * src_stride - 2]
-        movi            v25.8h,  #68
+.if \rnd
+        movi            v25.8h,  #\rnd
+.endif
         uxtl            v18.8h,  v23.8b                // s2 | s4
         uxtl2           v19.8h,  v23.16b               // s6 | s8
         fmov            d2,  x13                       // s0
-        movi            v27.8h,  #68
+.if \rnd
+        movi            v27.8h,  #\rnd
+.endif
         ext             v20.16b, v16.16b, v17.16b, #8  // s3 | s5
         // 4x4_16b_convolve - Computes taps 1..3 and 4..6 in signed 16-bit
         // partial sums, then combines them with a halving add into 16-bit
@@ -3862,8 +3873,13 @@ endconst
         // v24/v25 -> cols 0|2, v26/v27 -> cols 1|3.
         mul             v24.8h,  v16.8h,  v0.h[2]      // (s1|s3) * h2
         mul             v26.8h,  v16.8h,  v0.h[1]      // (s1|s3) * h1
+.if \rnd
         mla             v25.8h,  v17.8h,  v0.h[6]      // (s5|s7) * h6
         mla             v27.8h,  v17.8h,  v0.h[5]      // (s5|s7) * h5
+.else
+        mul             v25.8h,  v17.8h,  v0.h[6]      // (s5|s7) * h6
+        mul             v27.8h,  v17.8h,  v0.h[5]      // (s5|s7) * h5
+.endif
         ext             v21.16b, v18.16b, v19.16b, #8  // s4 | s6
         mov             v2.d[1],  v18.d[0]             // s0 | s2
         mla             v24.8h,  v18.8h,  v0.h[3]      // (s2|s4) * h3
@@ -3876,7 +3892,10 @@ endconst
         mla             v27.8h,  v21.8h,  v0.h[4]      // (s4|s6) * h4
         shadd           v20.8h,  v24.8h,  v25.8h       // cols 0|2
         shadd           v21.8h,  v26.8h,  v27.8h       // cols 1|3
+.endm
 
+.macro ext_warp4x4_h_8bpc_neon
+        ext_warp4x4_h_compute_8bpc_neon 68
         ldrel           q31, x9, ext_warp4x4_h_store_tbl
         sqshrun         v20.8b,  v20.8h,  #6
         sqshrun         v21.8b,  v21.8h,  #6
@@ -3891,7 +3910,26 @@ endconst
         st1             {v20.s}[3], [x6]               // dst[3 * dst_stride]
 .endm
 
-.macro ext_warp4x4_v_8bpc_neon
+.macro ext_warp4x4t_h_8bpc_neon
+        movrel          x15, ext_warp4x4t_h_store_tbl
+        ext_warp4x4_h_compute_8bpc_neon 0
+        ldp             q30, q31, [x15]
+        srshr           v20.8h,  v20.8h,  #2
+        srshr           v21.8h,  v21.8h,  #2
+        lsl             x15, x1,  #1
+        tbl             v22.16b, {v20.16b, v21.16b}, v30.16b
+        add             x6,  x0,  x1, lsl #2
+        tbl             v23.16b, {v20.16b, v21.16b}, v31.16b
+
+        str             d22, [x0]                      // tmp[0 * tmp_stride]
+        str             d23, [x6]                      // tmp[2 * tmp_stride]
+        add             x0,  x0,  x15
+        add             x6,  x6,  x15
+        st1             {v22.d}[1], [x0]               // tmp[1 * tmp_stride]
+        st1             {v23.d}[1], [x6]               // tmp[3 * tmp_stride]
+.endm
+
+.macro ext_warp4x4_v_compute_8bpc_neon
         movrel          x7,  X(ext_warp_filter), -8
         sub             x6,  x2,  x3, lsl #1           // src - 2 * src_stride
         ldr             d0,  [x7, w5, uxtw #3]         // fv = dav2d_ext_warp_filter[my - 1]
@@ -3940,7 +3978,10 @@ endconst
         mla             v27.8h,  v16.8h,  v0.h[6]
         shadd           v20.8h,  v24.8h,  v25.8h       // rows 0 | 2
         shadd           v21.8h,  v26.8h,  v27.8h       // rows 1 | 3
+.endm
 
+.macro ext_warp4x4_v_8bpc_neon
+        ext_warp4x4_v_compute_8bpc_neon
         sqrshrun        v20.8b,  v20.8h,  #6
         sqrshrun        v21.8b,  v21.8h,  #6
 
@@ -3951,7 +3992,20 @@ endconst
         st1             {v21.s}[1], [x6]               // dst[3 * dst_stride]
 .endm
 
-.macro ext_warp4x4_hv_8bpc_neon
+.macro ext_warp4x4t_v_8bpc_neon
+        ext_warp4x4_v_compute_8bpc_neon
+        lsl             x1,  x1,  #1
+        srshr           v20.8h,  v20.8h,  #2
+        srshr           v21.8h,  v21.8h,  #2
+
+        add             x6,  x0,  x1, lsl #1
+        str             d20, [x0]                      // tmp[0 * tmp_stride]
+        str             d21, [x0, x1]                  // tmp[1 * tmp_stride]
+        st1             {v20.d}[1], [x6], x1           // tmp[2 * tmp_stride]
+        st1             {v21.d}[1], [x6]               // tmp[3 * tmp_stride]
+.endm
+
+.macro ext_warp4x4_hv_compute_8bpc_neon
         movrel          x6,  X(ext_warp_filter), -8
         sub             x2,  x2,  x3, lsl #1           // src - 2 * src_stride
         ldr             d0,  [x6, w4, uxtw #3]         // fh = dav2d_ext_warp_filter[mx - 1]
@@ -3988,7 +4042,10 @@ endconst
 
         warp_4x4_32b_convolve_neon v2,  v3,  v4,  v5,  v1, \
                                    v20, v21, v22, v23, v24
+.endm
 
+.macro ext_warp4x4_hv_8bpc_neon
+        ext_warp4x4_hv_compute_8bpc_neon
         shrn            v2.4h,   v2.4s,   #10
         shrn            v3.4h,   v3.4s,   #10
         shrn2           v2.8h,   v4.4s,   #10
@@ -4001,6 +4058,21 @@ endconst
         st1             {v2.s}[1], [x6], x1            // dst[2 * dst_stride]
         str             s3,  [x0, x1]                  // dst[1 * dst_stride]
         st1             {v3.s}[1], [x6]                // dst[3 * dst_stride]
+.endm
+
+.macro ext_warp4x4t_hv_8bpc_neon
+        ext_warp4x4_hv_compute_8bpc_neon
+        rshrn           v2.4h,   v2.4s,   #7
+        rshrn           v3.4h,   v3.4s,   #7
+        lsl             x1,  x1,  #1
+        rshrn           v4.4h,   v4.4s,   #7
+        rshrn           v5.4h,   v5.4s,   #7
+
+        add             x6,  x0,  x1, lsl #1
+        str             d2,  [x0]                      // tmp[0 * tmp_stride]
+        str             d3,  [x0, x1]                  // tmp[1 * tmp_stride]
+        str             d4,  [x6]                      // tmp[2 * tmp_stride]
+        str             d5,  [x6, x1]                  // tmp[3 * tmp_stride]
 .endm
 
 // void ext_warp4x4_8bpc_neon(pixel *dst, ptrdiff_t dst_stride,
@@ -4038,5 +4110,48 @@ L(ext_warp4x4_copy):
         ldr             w9,  [x4, x3]
         str             w8,  [x5]
         str             w9,  [x5, x1]
+        ret
+endfunc
+
+// void ext_warp4x4t_8bpc_neon(int16_t *tmp, ptrdiff_t tmp_stride,
+//                             const pixel *src, ptrdiff_t src_stride,
+//                             int mx, int my)
+function ext_warp4x4t_8bpc_neon, export=1
+        cbz             w4,  L(ext_warp4x4t_v)
+        cbz             w5,  L(ext_warp4x4t_h)
+
+        // mx != 0 && my != 0
+        ext_warp4x4t_hv_8bpc_neon
+        ret
+
+L(ext_warp4x4t_h):
+        // mx != 0 && my == 0
+        ext_warp4x4t_h_8bpc_neon
+        ret
+
+L(ext_warp4x4t_v):
+        cbz             w5,  L(ext_warp4x4t_copy)
+
+        // mx == 0 && my != 0
+        ext_warp4x4t_v_8bpc_neon
+        ret
+
+L(ext_warp4x4t_copy):
+        // mx == 0 && my == 0
+        lsl             x1,  x1,  #1
+        ldr             s0,  [x2]                      // src[0 * src_stride]
+        add             x4,  x2,  x3, lsl #1
+        ldr             s1,  [x2, x3]                  // src[1 * src_stride]
+        add             x5,  x0,  x1, lsl #1
+        ldr             s2,  [x4]                      // src[2 * src_stride]
+        ldr             s3,  [x4, x3]                  // src[3 * src_stride]
+        ushll           v0.8h, v0.8b, #4
+        ushll           v1.8h, v1.8b, #4
+        ushll           v2.8h, v2.8b, #4
+        ushll           v3.8h, v3.8b, #4
+        str             d0,  [x0]                      // tmp[0 * tmp_stride]
+        str             d1,  [x0, x1]                  // tmp[1 * tmp_stride]
+        str             d2,  [x5]                      // tmp[2 * tmp_stride]
+        str             d3,  [x5, x1]                  // tmp[3 * tmp_stride]
         ret
 endfunc
