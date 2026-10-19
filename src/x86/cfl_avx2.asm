@@ -86,13 +86,13 @@ pd_511:          dd 511
     %endrep
 %endmacro
 
-%macro JMP_TABLE2 3-* ; fn, name, min_log2, labels
-    %assign %%min_log2 %3
-    %xdefine %1_%2_table (%%table - %%min_log2*4)
+%macro JMP_TABLE2 2-* ; fn, min_log2, labels
+    %assign %%min_log2 %2
+    %xdefine %1_table (%%table - %%min_log2*4)
     %xdefine %%base mangle(private_prefix %+ _%1)
     %%table:
-    %rep %0 - 3
-        dd %%base %+ .%4 - (%%table - %%min_log2*4)
+    %rep %0 - 2
+        dd %%base %+ .%3 - (%%table - %%min_log2*4)
         %rotate 1
     %endrep
 %endmacro
@@ -115,19 +115,16 @@ JMP_TABLE cfl_explicit_420_8bpc_avx2, \
     blk.f2.w4.prep, blk.f2.w8.prep, blk.f2.w16.prep, blk.f2.w32.prep,  blk.f2.w64.prep, \
     pred_uv.w4,     pred_uv.w8,     pred_uv.w16,     pred_uv.w32,      pred_uv.w32
 
-JMP_TABLE2 cfl_mh_gen_y_420_uniform_8bpc_avx2, top, 1, \
-    top.8, top.8, top.8, top.17, top.33, top.64
-JMP_TABLE2 cfl_mh_gen_y_420_uniform_8bpc_avx2, blk, 2, \
+JMP_TABLE2 cfl_mh_gen_y_420_uniform_8bpc_avx2, 1, \
+    top.8, top.8, top.8, top.17, top.33, top.63, \
     blk.w4, blk.w8, blk.w16, blk.w32
 
-JMP_TABLE2 cfl_mh_gen_y_420_vstrip_8bpc_avx2, top, 1, \
-    top.4, top.4, top.8, top.17, top.33, top.64
-JMP_TABLE2 cfl_mh_gen_y_420_vstrip_8bpc_avx2, blk, 2, \
+JMP_TABLE2 cfl_mh_gen_y_420_vstrip_8bpc_avx2, 1, \
+    top.4, top.4, top.8, top.17, top.33, top.63, \
     blk.w4, blk.w8, blk.w16, blk.w32
 
-JMP_TABLE2 cfl_mh_gen_y_420_gauss_8bpc_avx2, top, 1, \
-    top.4, top.4, top.8, top.17, top.33, top.64
-JMP_TABLE2 cfl_mh_gen_y_420_gauss_8bpc_avx2, blk, 2, \
+JMP_TABLE2 cfl_mh_gen_y_420_gauss_8bpc_avx2, 1, \
+    top.4, top.4, top.8, top.17, top.33, top.63, \
     blk.w4, blk.w8, blk.w16, blk.w32
 
 cextern div_recip
@@ -3363,8 +3360,8 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     sub                   srcq, nleftq
     add                    t2d, t3d             ; ntop
  DECLARE_REG_TMP 13, 14, 8, 12
-    lea                   tblq, [cfl_mh_gen_y_420_uniform_8bpc_avx2_top_table]
-%define base tblq-cfl_mh_gen_y_420_uniform_8bpc_avx2_top_table
+    lea                   tblq, [cfl_mh_gen_y_420_uniform_8bpc_avx2_table]
+%define base tblq-cfl_mh_gen_y_420_uniform_8bpc_avx2_table
     vpbroadcastd           m14, [base+pb_flt0]
     jz .left.no_top
     sub                   tseq, nleftq
@@ -3476,7 +3473,7 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     dec                  ntopd
     jg .top.33
     jmp .left
-.top.64:
+.top.63:
     movu                    m0, [srcq+ssq*0+0x00]
     movu                    m1, [srcq+ssq*1+0x00]
     movu                    m2, [srcq+ssq*0+0x20]
@@ -3499,7 +3496,7 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     lea                   srcq, [srcq+ssq*2]
     add                   dstq, 64
     dec                  ntopd
-    jg .top.64
+    jg .top.63
 
  DEFINE_ARGS dst, src, srcl, ss, ss3, needed_left, w, h, ystart, nleft, dstl, tbl
 .left:
@@ -3542,9 +3539,8 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     lea                   srcq, [srcq+nleftq*2]
 
 .blk:
-    lea                   tblq, [base+cfl_mh_gen_y_420_uniform_8bpc_avx2_blk_table]
     tzcnt                   wd, wm
-    movsxd                  t0, [tblq+wq*4]
+    movsxd                  t0, [tblq+20+wq*4]
     add                     t0, tblq
     jmp                     t0
 .blk.skip_left:
@@ -3680,8 +3676,8 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     REPX          {and x, 0x1}, t2d, t3d        ; has_t / has_t & dir_t
     add                    t0d, t1d             ; nleft
     sub                   srcq, nleftq
-    lea                   tblq, [cfl_mh_gen_y_420_vstrip_8bpc_avx2_top_table]
-%define base tblq-cfl_mh_gen_y_420_vstrip_8bpc_avx2_top_table
+    lea                   tblq, [cfl_mh_gen_y_420_vstrip_8bpc_avx2_table]
+%define base tblq-cfl_mh_gen_y_420_vstrip_8bpc_avx2_table
     vpbroadcastd           m14, [base+pb_flt1]
     add                    t2d, t3d             ; ntop
     jz .left.no_top
@@ -3863,10 +3859,10 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     dec                  ntopd
     jg .top.33.loop
     jmp .left
-.top.64:
+.top.63:
     pcmpeqw                m13, m13
     psrlw                  m13, 8
-.top.64.loop:
+.top.63.loop:
     movu                    m0, [srcq+ssq*0+0x00]
     movu                    m1, [srcq+ssq*1+0x00]
     movu                    m2, [srcq+ssq*0+0x20]
@@ -3909,7 +3905,7 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     lea                   srcq, [srcq+ssq*2]
     add                   dstq, 64
     dec                  ntopd
-    jg .top.64.loop
+    jg .top.63.loop
 
  DEFINE_ARGS dst, src, srcl, ss, ss3, needed_left, w, h, ystart, nleft, dstl, tbl
 .left:
@@ -3967,10 +3963,8 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     test                nleftd, nleftd
     setz                   t0b
     movd                  xm15, t0d
-    lea                   tblq, [base+cfl_mh_gen_y_420_vstrip_8bpc_avx2_blk_table]
-%define base tblq-cfl_mh_gen_y_420_vstrip_8bpc_avx2_blk_table
     tzcnt                   wd, wm
-    movsxd                  t0, [tblq+wq*4]
+    movsxd                  t0, [tblq+20+wq*4]
     add                     t0, tblq
     jmp                     t0
 .blk.skip_left:
@@ -4190,8 +4184,8 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                    t0d, t1d             ; nleft
     sub                   srcq, nleftq
     add                    t2d, t3d             ; ntop
-    lea                   tblq, [cfl_mh_gen_y_420_gauss_8bpc_avx2_top_table]
-%define base0 tblq-cfl_mh_gen_y_420_gauss_8bpc_avx2_top_table
+    lea                   tblq, [cfl_mh_gen_y_420_gauss_8bpc_avx2_table]
+%define base tblq-cfl_mh_gen_y_420_gauss_8bpc_avx2_table
     pcmpeqw                m13, m13
     psrlw                  m13, 8
     jz .left.no_top
@@ -4199,14 +4193,14 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     setne                  t3b                  ; nleft != 1
     and                    t3d, t4d             ; nleft != 1 && (has_l || !dir_c)
     movd                  xm15, t3d
-    vbroadcasti128         m12, [base0+Llshuf]
+    vbroadcasti128         m12, [base+Llshuf]
     por                    m15, m12
     sub                   tseq, nleftq
     xor                    t4d, 1               ; !has_l && dir_c
     lea                   tseq, [tseq+t4*2]
     test                flagsb, 0x4             ; is_top_sb_edge
     jnz .tse
-    vpbroadcastd           m14, [base0+pb_flt2]
+    vpbroadcastd           m14, [base+pb_flt2]
     lea                   srcq, [srcq+t4*2]
     mov                    r8d, needed_topd
     cmp            needed_topd, 16
@@ -4236,7 +4230,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     jmp                     t0
 
 .tse:
-    vpbroadcastd           m14, [base0+pb_flt2+4]
+    vpbroadcastd           m14, [base+pb_flt2+4]
     xor                    t0d, t0d
     pcmpeqd               xm12, xm12
     pslldq                xm12, 1
@@ -4267,7 +4261,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     test                    hb, 0xb             ; flags
     setz                   t0b
     neg                     t0                  ; restore top ptr post top
-    vpbroadcastd           m14, [base0+pb_flt2]
+    vpbroadcastd           m14, [base+pb_flt2]
     lea                   topq, [tseq+t0*2]     ; top -= (!has_l && dir_c) * 2
     jmp .left
 
@@ -4395,12 +4389,12 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     dec                  ntopd
     jg .top.33.loop
     jmp .left
-.top.64:
+.top.63:
     pand                    m4, m13, [topq+0x00]
     pand                    m5, m13, [topq+0x20]
     pand                    m6, m13, [topq+0x40]
     pand                    m7, m13, [topq+0x60]
-.top.64.loop:
+.top.63.loop:
     movu                    m0, [srcq+ssq*0+0x00]
     movu                    m1, [srcq+ssq*0+0x20]
     movu                    m2, [srcq+ssq*0+0x40]
@@ -4438,7 +4432,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     lea                   srcq, [srcq+ssq*2]
     add                   dstq, 64
     dec                  ntopd
-    jg .top.64.loop
+    jg .top.63.loop
 
  DEFINE_ARGS dst, src, srcl, ss, ss3, needed_left, w, h, top, nleft, dstl, tbl, ystart
 .left:
@@ -4446,7 +4440,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     shr                 nleftd, 1
     jz .blk.skip_left
 .left2:
-    movu                  xm10, [base0+mh_lshuf1-4+nleftq*4]
+    movu                  xm10, [base+mh_lshuf1-4+nleftq*4]
     xor                ystartd, ystartd
     xor                    t0d, t0d
     test                    hb, 0x7             ; flags
@@ -4479,7 +4473,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     vpblendd               xm5, xm7, 0x8
     vpblendd               xm0, xm4, 0xc
     vpblendd               xm1, xm5, 0xc
-    pshufb                 xm2, xm0, [base0+Llshuf_edgel]
+    pshufb                 xm2, xm0, [base+Llshuf_edgel]
     REPX        {psrld x, xm9}, xm0, xm1
     pmaddubsw              xm0, xm14
     REPX        {pand x, xm13}, xm2, xm1
@@ -4503,10 +4497,8 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     test                nleftd, nleftd
     setz                   t0b
     movd                  xm15, t0d
-    lea                   tblq, [base0+cfl_mh_gen_y_420_gauss_8bpc_avx2_blk_table]
-%define base1 tblq-cfl_mh_gen_y_420_gauss_8bpc_avx2_blk_table
     tzcnt                   wd, wm
-    movsxd                  t0, [tblq+wq*4]
+    movsxd                  t0, [tblq+20+wq*4]
     add                     t0, tblq
     jmp                     t0
 .blk.skip_left:
@@ -4519,7 +4511,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     xor                    t0d, t0d
     jmp .blk
 .left.no_top:
-    vpbroadcastd           m14, [base0+pb_flt2]
+    vpbroadcastd           m14, [base+pb_flt2]
     mov                   topq, srcq
     lea                   ss3q, [ssq*3]
     shr                 nleftd, 1
@@ -4528,7 +4520,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
 
 .blk.w4:
     punpcklqdq            xm15, xm15
-    paddb                 xm15, [base1+Llshuf]
+    paddb                 xm15, [base+Llshuf]
     vinserti128            m15, xm15, 1
     vpbroadcastq           xm8, [topq]              ; t0
 .blk.w4.loop:
@@ -4566,7 +4558,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     jge .blk.w4.loop
     jmp .ret
 .blk.w8:
-    por                   xm15, [base1+Llshuf]
+    por                   xm15, [base+Llshuf]
     vinserti128            m15, xm15, 1
     movu                   xm8, [topq]
 .blk.w8.loop:
@@ -4609,7 +4601,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     jge .blk.w8.loop
     jmp .ret
 .blk.w16:
-    vbroadcasti128          m8, [base1+Llshuf]
+    vbroadcasti128          m8, [base+Llshuf]
     por                    m15, m8
     pand                   m12, m13, [topq]
 .blk.w16.loop:
@@ -4653,7 +4645,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     jge .blk.w16.loop
     jmp .ret
 .blk.w32:
-    vbroadcasti128          m8, [base1+Llshuf]
+    vbroadcasti128          m8, [base+Llshuf]
     por                    m15, m8
     pand                    m2, m13, [topq+ 0]
     pand                    m3, m13, [topq+32]
