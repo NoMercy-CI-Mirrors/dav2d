@@ -3501,14 +3501,14 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
  DEFINE_ARGS dst, src, srcl, ss, ss3, needed_left, w, h, ystart, nleft, dstl, tbl
 .left:
     lea                   ss3q, [ssq*3]
-    shr                 nleftd, 1
+    test                nleftd, nleftd
     jz .blk.skip_left
 .left2:
     xor                ystartd, ystartd
     test                    hb, 0x7             ; flags
     cmovz              ystartq, ssq             ; !has_t && dir_c
     lea                  srclq, [srcq+ystartq*2]
-    movu                   xm8, [base+mh_lshuf1-4+nleftq*4]
+    movu                   xm8, [base+mh_lshuf1-4+nleftq*2]
     lea                  dstlq, [dstq+32*32]
 .left.loop:
     movd                   xm0, [srclq+ssq*0]
@@ -3533,10 +3533,10 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     packuswb               xm0, xm0
     pshufb                 xm0, xm8
     movq               [dstlq], xm0
-    lea                  dstlq, [dstlq+nleftq*4]
+    lea                  dstlq, [dstlq+nleftq*2]
     sub           needed_leftd, 4
     jg .left.loop
-    lea                   srcq, [srcq+nleftq*2]
+    add                   srcq, nleftq
 
 .blk:
     tzcnt                   wd, wm
@@ -3552,7 +3552,7 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     jmp .blk
 .left.no_top:
     lea                   ss3q, [ssq*3]
-    shr                 nleftd, 1
+    test                nleftd, nleftd
     jz .blk
     jmp .left2
 
@@ -3910,16 +3910,16 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
  DEFINE_ARGS dst, src, srcl, ss, ss3, needed_left, w, h, ystart, nleft, dstl, tbl
 .left:
     lea                   ss3q, [ssq*3]
-    shr                 nleftd, 1
+    test                nleftd, nleftd
     jz .blk.skip_left
 .left2:
     movu                   xm8, [base+Llshuf_edgel]
-    movu                  xm10, [base+mh_lshuf1-4+nleftq*4]
+    movu                  xm10, [base+mh_lshuf1-4+nleftq*2]
     xor                ystartd, ystartd
     xor                    t0d, t0d
     test                    hb, 0x7             ; flags
     cmovz              ystartq, ssq             ; !has_t && dir_c
-    cmp                 nleftd, 1
+    cmp                 nleftd, 2
     sete                   t0b
     lea                  srclq, [srcq+ystartq*2]
     sub                  srclq, t0
@@ -3954,10 +3954,10 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     packuswb               xm0, xm0
     pshufb                 xm0, xm10
     movq               [dstlq], xm0
-    lea                  dstlq, [dstlq+nleftq*4]
+    lea                  dstlq, [dstlq+nleftq*2]
     sub           needed_leftd, 4
     jg .left.loop
-    lea                   srcq, [srcq+nleftq*2]
+    add                   srcq, nleftq
 
 .blk:
     test                nleftd, nleftd
@@ -3977,7 +3977,7 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     jmp .blk
 .left.no_top:
     lea                   ss3q, [ssq*3]
-    shr                 nleftd, 1
+    test                nleftd, nleftd
     jz .blk
     jmp .left2
 
@@ -4437,16 +4437,16 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
  DEFINE_ARGS dst, src, srcl, ss, ss3, needed_left, w, h, top, nleft, dstl, tbl, ystart
 .left:
     lea                   ss3q, [ssq*3]
-    shr                 nleftd, 1
+    test                nleftd, nleftd
     jz .blk.skip_left
 .left2:
-    movu                  xm10, [base+mh_lshuf1-4+nleftq*4]
+    movu                  xm10, [base+mh_lshuf1-4+nleftq*2]
     xor                ystartd, ystartd
     xor                    t0d, t0d
     test                    hb, 0x7             ; flags
     cmovz              ystartq, ssq             ; !has_t && dir_c
     cmovz                 topq, srcq
-    cmp                 nleftd, 1
+    cmp                 nleftd, 2
     sete                   t0b
     lea                  srclq, [srcq+ystartq*2]
     lea                   topq, [topq+ystartq*1]
@@ -4486,12 +4486,12 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     pshufb                 xm0, xm10
     movq               [dstlq], xm0
     mova                   xm8, xm1
-    lea                  dstlq, [dstlq+nleftq*4]
+    lea                  dstlq, [dstlq+nleftq*2]
     sub           needed_leftd, 4
     jg .left.loop
     sub                   topq, ystartq
-    lea                   srcq, [srcq+nleftq*2]
-    lea                   topq, [topq+nleftq*2]
+    add                   srcq, nleftq
+    add                   topq, nleftq
 
 .blk:
     test                nleftd, nleftd
@@ -4514,7 +4514,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     vpbroadcastd           m14, [base+pb_flt2]
     mov                   topq, srcq
     lea                   ss3q, [ssq*3]
-    shr                 nleftd, 1
+    test                nleftd, nleftd
     jz .blk
     jmp .left2
 
