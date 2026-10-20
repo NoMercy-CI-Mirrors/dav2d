@@ -721,8 +721,7 @@ static inline void splat_intraref(const Dav2dContext *const c,
     refmvs_block *const s_dst = &t->rt.r[by4 * 128 + (t->bx & 127)];
     refmvs_block s_src = (refmvs_block) {
         .ref.pair = -1,
-        .mv[0].n = INVALID_MV,
-        .mv[1].n = INVALID_MV,
+        .mv = { { .n = INVALID_MV }, { .n = INVALID_MV } },
         .bs = bs,
         .by4 = t->by,
         .bx4 = t->bx,
