@@ -3680,13 +3680,13 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                    t2d, t3d             ; ntop
     jz .left.no_top
     cmp                 nleftd, 2
-    setne                  t3b                  ; nleft != 1
-    and                    t3d, t4d             ; nleft != 1 && (has_l || !dir_c)
+    setne                  t3b                  ; nleft == 2
+    and                    t3d, t4d             ; nleft == 2 && (has_l || !dir_c)
     movd                  xm15, t3d
     vbroadcasti128         m13, [base+Llshuf]
     por                    m15, m13
     sub                   tseq, nleftq
-    xor                    t4d, 1               ; !has_l && dir_l
+    xor                    t4d, 1               ; !has_l && dir_c
     lea                   tseq, [tseq+t4*2]
     test                flagsb, 0x4             ; is_top_sb_edge
     jnz .tse
@@ -3714,7 +3714,9 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
 .tse:
     xor                    t0d, t0d
     pcmpeqd               xm13, xm13
+    pcmpeqd                xm4, xm4
     pslldq                xm13, 1
+    psrlw                  xm4, 8
     jmp .tse.start_loop
 .tse.loop:
     pand                  xm15, xm13
@@ -3722,8 +3724,6 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     movu                   xm0, [tseq+t0*2+ 0]
     movu                   xm1, [tseq+t0*2+16]
     movu                   xm2, [tseq+t0*2+-1]
-    pcmpeqw                xm4, xm4
-    psrlw                  xm4, 8
     palignr                xm3, xm1, xm0, 15
     REPX   {pmaddubsw x, xm14}, xm0, xm1
     pshufb                 xm2, xm15
@@ -3804,8 +3804,8 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     paddw                   m0, m1
     paddw                   m0, m2
     psrlw                   m0, 3
-    packuswb                m0, m0
-    vpermq                  m0, m0, q3220
+    vextracti128           xm1, m0, 1
+    packuswb               xm0, xm1
     mova             [dstq+ 0], xm0
     movd             [dstq+16], xm4
     lea                   srcq, [srcq+ssq*2]
