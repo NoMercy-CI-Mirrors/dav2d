@@ -504,7 +504,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
     union mv mv2;
     if (!rf->seq_hdr->mv_traj || tmv2.n == INVALID_TMV) {
         tmv2 = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
-        if (mv2.n == INVALID_TMV) return 0;
+        if (tmv2.n == INVALID_TMV) return 0;
         mv2 = tmv_projection(tmv2, rf->pocdiff[ref.ref[1]],
                              rt->rp_proj[off_8x8 >> 5].ref[off_8x8 & 31]);
     } else {
