@@ -2053,9 +2053,11 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
         }
     }
     if (sample_step > 1) {
-        for (int n = 0; n < rf->frm_hdr->n_ref_frames; n++)
-            dsp->fill_gap_traj(rp_traj[n], stride, col_start8, col_end8,
-                               row_start8, row_end8, mfmv_sbsz8, sbsz8);
+        if (rf->seq_hdr->mv_traj) {
+            for (int n = 0; n < rf->frm_hdr->n_ref_frames; n++)
+                dsp->fill_gap_traj(rp_traj[n], stride, col_start8, col_end8,
+                                   row_start8, row_end8, mfmv_sbsz8, sbsz8);
+        }
         dsp->fill_gap_proj(rp_proj, stride, col_start8, col_end8,
                            row_start8, row_end8, mfmv_sbsz8, sbsz8);
     }
