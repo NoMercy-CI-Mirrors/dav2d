@@ -94,3 +94,109 @@ cglobal stx4_16bpc, 4, 7, 6, cf, stride, tp, kernel, eob, bdmax
     vextracti128 [cfq+strideq*0], m0, 1
     vextracti128 [cfq+strideq*4], m2, 1
     RET
+
+%if WIN64
+DECLARE_REG_TMP 5
+%else
+DECLARE_REG_TMP 8
+%endif
+
+cglobal stx8_16bpc, 5, 7, 10, 48*4, cf, stride, tp, mi, kernel, eob, bdmax
+    lea              t0, [pd_bdmax]
+    lzcnt        bdmaxd, bdmaxm             ; 20 (12bpc) or 22 (10bpc)
+    vpbroadcastd     m9, [t0+bdmaxq*2-40]
+    mov            eobd, eobm
+    vpbroadcastd     m0, [pd_63]
+    lea              r6, [cfq+eobq*4]
+    neg            eobq
+    REPX   {mova x, m0}, m1, m2, m3, m4, m5
+.loop:
+    vpbroadcastd     m8, [r6+eobq*4]
+    pmovsxbd         m6, [kernelq+8*0]
+    pmovsxbd         m7, [kernelq+8*1]
+    REPX {pmulld x, m8}, m6, m7
+    paddd            m0, m6
+    paddd            m1, m7
+    pmovsxbd         m6, [kernelq+8*2]
+    pmovsxbd         m7, [kernelq+8*3]
+    REPX {pmulld x, m8}, m6, m7
+    paddd            m2, m6
+    paddd            m3, m7
+    pmovsxbd         m6, [kernelq+8*4]
+    pmovsxbd         m7, [kernelq+8*5]
+    REPX {pmulld x, m8}, m6, m7
+    paddd            m4, m6
+    paddd            m5, m7
+    add         kernelq, 48
+    inc            eobq
+    jle .loop
+    pcmpeqd          m8, m8
+    pcmpgtd          m6, m0, m8
+    pcmpgtd          m7, m1, m8
+    psubd            m0, m6
+    psubd            m1, m7
+    pcmpgtd          m6, m2, m8
+    pcmpgtd          m7, m3, m8
+    psubd            m2, m6
+    psubd            m3, m7
+    pcmpgtd          m6, m4, m8
+    pcmpgtd          m7, m5, m8
+    psubd            m4, m6
+    psubd            m5, m7
+    psubd            m8, m9
+    REPX  {psrad x, 7 }, m0, m1, m2, m3, m4, m5
+    REPX {pminsd x, m9}, m0, m1, m2, m3, m4, m5
+    REPX {pmaxsd x, m8}, m0, m1, m2, m3, m4, m5
+
+    lea             miq, [miq*3]
+    mova [rsp+0*mmsize], m0
+    mova [rsp+1*mmsize], m1
+    mova [rsp+2*mmsize], m2
+    mova [rsp+3*mmsize], m3
+    mova [rsp+4*mmsize], m4
+    mova [rsp+5*mmsize], m5
+    lea              r4, [coeff8x8_mapping]
+    shl             mid, 4
+    lea             miq, [r4+miq+48]
+    pxor             m1, m1
+    mova     [cfq+0*32], m1
+    mova     [cfq+1*32], m1
+    mova     [cfq+2*32], m1
+    mova     [cfq+3*32], m1
+
+    test            tpd, tpd
+    jz .tp
+    mov              r2, -48
+    sub         strideq, 8
+    jg .stride
+.plain:
+    mov             r4d, [rsp+48*4+r2*4]
+    movzx           r5d, byte [miq+r2]
+    mov      [cfq+r5*4], r4d
+    inc              r2
+    jl .plain
+    RET
+.stride:
+    movzx           r5d, byte [miq+r2]
+    mov             r4d, [rsp+48*4+r2*4]
+    rorx             r6, r5, 3
+    imul            r6d, strided
+    add             r5d, r6d
+    mov      [cfq+r5*4], r4d
+    inc              r2
+    jl .stride
+    RET
+.tp:
+    mov              r2, -48
+    tzcnt       strided, strided
+.loop_tp:
+    movzx           r5d, byte [miq+r2]
+    mov             r4d, [rsp+48*4+r2*4]
+    rorx             r6, r5, 3
+    and             r5d, 7
+    shlx            r5d, r5d, strided
+    add             r5d, r6d
+    mov      [cfq+r5*4], r4d
+    inc              r2
+    jl .loop_tp
+    RET

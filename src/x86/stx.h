@@ -38,9 +38,7 @@ static ALWAYS_INLINE void stx_dsp_init_x86(Dav2dStxDSPContext *const c)
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
     c->stxfm4 = BF(dav2d_stx4, avx2);
-#if BITDEPTH == 8
     c->stxfm8 = BF(dav2d_stx8, avx2);
-#endif
 
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX512ICL)) return;
 
