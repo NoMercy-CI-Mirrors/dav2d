@@ -5294,14 +5294,17 @@ int dav2d_decode_frame(Dav2dFrameContext *const f) {
             if (!res && !f->frame_hdr->disable_cdf_update &&
                 (f->task_thread.update_set || f->seq_hdr->avg_cdf_type))
             {
-                const int shift = f->frame_hdr->tiling.t.log2_cols +
-                                  f->frame_hdr->tiling.t.log2_rows;
-                if (shift && f->seq_hdr->avg_cdf_type) {
-                    const int n_tiles = 1 << shift;
+                const int n_tiles = f->frame_hdr->tiling.t.cols *
+                                    f->frame_hdr->tiling.t.rows;
+                if (n_tiles > 1 && f->seq_hdr->avg_cdf_type) {
+                    const int shift = imin(ulog2(n_tiles), 3);
+                    const int n_tiles_sh = 1 << shift;
+                    assert(n_tiles_sh <= n_tiles);
                     dav2d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);
-                    for (int n = 1; n < n_tiles; n++)
+                    for (int n = 1; n < n_tiles_sh; n++) {
                         dav2d_cdf_shift_accumulate(f->out_cdf.data.cdf,
                                                    &f->ts[n].cdf, shift);
+                    }
                 } else {
                     memcpy(f->out_cdf.data.cdf,
                            &f->ts[f->frame_hdr->tiling.update].cdf,
