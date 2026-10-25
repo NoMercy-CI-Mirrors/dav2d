@@ -334,6 +334,9 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *const p[3],
     lr_uv[0][1] = &lr_mask_uv->lr[2][unit_idx[1]];
     int restore = 1; // TODO: restore logic for disabling backups
     int x = 0, bit = 0, bit_uv = 0;
+    const uint16_t *col_start_sb = f->frame_hdr->tiling.t.col_start_sb;
+    const uint16_t *col_start_sb_uv = col_start_sb;
+    const int sbsz = 4 * f->sb_step;
     for (; x < w; edges |= LR_HAVE_LEFT) {
         // Only run chroma filters every 64 chroma samples
         const int iter_planes = restore_planes &
@@ -352,8 +355,12 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *const p[3],
             stripe_w = w - x;
         }
         int next_iter_start_x = next_x & ~(unit_size[0] - 1);
-        if (next_iter_start_x && w - next_iter_start_x < unit_size[0] >> 1)
+        if (next_iter_start_x >= col_start_sb[1] * sbsz) col_start_sb++;
+        if (next_iter_start_x > col_start_sb[0] * sbsz &&
+            w - next_iter_start_x < unit_size[0] >> 1)
+        {
             next_iter_start_x -= unit_size[0];
+        }
         int next_u_idx = unit_idx[0] + ((next_iter_start_x >> 6) & 3);
         lr[!bit] = &lr_mask_y[next_iter_start_x >> 8].lr[0][next_u_idx];
 
@@ -365,8 +372,13 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *const p[3],
                 stripe_w_uv = (w >> ss_hor) - x_uv;
             }
             next_iter_start_x = next_x_uv & ~(unit_size[1] - 1);
-            if (next_iter_start_x && (w >> ss_hor) - next_iter_start_x < unit_size[1] >> 1)
+            if (next_iter_start_x >= col_start_sb_uv[1] * sbsz >> ss_hor)
+                col_start_sb_uv++;
+            if (next_iter_start_x > col_start_sb_uv[0] * sbsz >> ss_hor &&
+                (w >> ss_hor) - next_iter_start_x < unit_size[1] >> 1)
+            {
                 next_iter_start_x -= unit_size[1];
+            }
             next_u_idx = unit_idx[1] + ((next_iter_start_x >> (shift_hor - 2)) & 3);
             const Av2Restoration *const next_rest_uv = &lr_mask_uv[next_iter_start_x >> shift_hor];
             lr_uv[!bit_uv][0] = &next_rest_uv->lr[1][next_u_idx];
