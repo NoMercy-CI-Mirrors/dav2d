@@ -131,16 +131,23 @@ static NOINLINE void parse_tile_info(Dav2dTileInfo *const thdr,
         // done based on the sequence header's sb128 (not the frame's), which
         // can be different for keyframes
         const int seq_sbsz_log2 = 6 + seq_sb128;
+        // width/height in full SBs, aka rounded down (but +7 so it's in luma
+        // bw/bh units, not pixel units)
         const int fsbw = imax(1, (w + 7) >> seq_sbsz_log2);
         const int fsbh = imax(1, (h + 7) >> seq_sbsz_log2);
+        // width height in extended SBs, aka rounded up
+        const int ssbw = 1 + ((w - 1) >> seq_sbsz_log2);
+        const int ssbh = 1 + ((h - 1) >> seq_sbsz_log2);
 
         for (thdr->log2_cols = thdr->min_log2_cols;
              thdr->log2_cols < thdr->max_log2_cols && dav2d_get_bit(gb);
              thdr->log2_cols++) ;
-        const int tile_w = imax(1, fsbw >> thdr->log2_cols);
+        const int tile_w = fsbw >> thdr->log2_cols;
         int extra = imax(0, fsbw - (tile_w << thdr->log2_cols));
+        if (tile_w == 0) extra += ssbw - fsbw;
         thdr->cols = 0;
-        for (int sbx = 0; sbx < fsbw;
+        const int max_cols = 1 << thdr->log2_cols;
+        for (int sbx = 0; sbx < ssbw && thdr->cols < max_cols;
              sbx += tile_w + (extra > 0), thdr->cols++, extra--)
         {
             thdr->col_start_sb[thdr->cols] = sbx * sbmul;
@@ -151,10 +158,12 @@ static NOINLINE void parse_tile_info(Dav2dTileInfo *const thdr,
         for (thdr->log2_rows = thdr->min_log2_rows;
              thdr->log2_rows < thdr->max_log2_rows && dav2d_get_bit(gb);
              thdr->log2_rows++) ;
-        const int tile_h = imax(1, fsbh >> thdr->log2_rows);
+        const int tile_h = fsbh >> thdr->log2_rows;
         extra = imax(0, fsbh - (tile_h << thdr->log2_rows));
+        if (tile_h == 0) extra += ssbh - fsbh;
         thdr->rows = 0;
-        for (int sby = 0; sby < fsbh;
+        const int max_rows = 1 << thdr->log2_rows;
+        for (int sby = 0; sby < ssbh && thdr->rows < max_rows;
              sby += tile_h + (extra > 0), thdr->rows++, extra--)
         {
             thdr->row_start_sb[thdr->rows] = sby * sbmul;
@@ -983,12 +992,12 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
             const int seq_sbh = (seqhdr->max_height + seq_sbsz_min1) >> seq_sbsz_log2;
             reuse_allowed = seq_sbw == sbw && seq_sbh == sbh;
         } else {
-            const int tile_w =
-                (sbw + seqhdr->tiling.t.cols - 1) >> seqhdr->tiling.t.log2_cols;
-            const int tile_h =
-                (sbh + seqhdr->tiling.t.rows - 1) >> seqhdr->tiling.t.log2_rows;
-            reuse_allowed = tile_w * (seqhdr->tiling.t.cols - 1) < sbw &&
-                            tile_h * (seqhdr->tiling.t.rows - 1) < sbh;
+            const int log2_cols = seqhdr->tiling.t.log2_cols, cols = 1 << log2_cols;
+            const int log2_rows = seqhdr->tiling.t.log2_rows, rows = 1 << log2_rows;
+            const int tile_w = (sbw + cols - 1) >> log2_cols;
+            const int tile_h = (sbh + rows - 1) >> log2_rows;
+            reuse_allowed = tile_w * (cols - 1) < sbw && tile_h * (rows - 1) < sbh;
+
         }
     }
     if (reuse_allowed && (seqhdr->tiling.present == 1 ||
