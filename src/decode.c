@@ -1680,7 +1680,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             f->frame_hdr->segmentation.d.skip_mask) & (1 << b->seg_id))) &&
         f->frame_hdr->skip_mode_enabled && bw4 * bh4 > 2 && !t->intra_region)
     {
-        const int ctx = nx[0]->skip_mode[xoff[0]] + nx[1]->skip_mode[xoff[1]];
+        const int ctx = (idx > 0 ? nx[0]->skip_mode[xoff[0]] : 0) +
+                        (idx > 1 ? nx[1]->skip_mode[xoff[1]] : 0);
         b->skip_mode = dav2d_msac_decode_bool_adapt(&ts->msac,
                            ts->cdf.m.skip_mode[ctx]);
         DEBUG_BLOCK_printf("%*sPost-skip_mode[ctx=%d,%d]: r=%d\n",
@@ -1762,7 +1763,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     } else if (b->intra && !intrabc) {
         if (has_luma) b->skip_txfm = 0;
     } else {
-        const int ctx = nx[0]->skip_txfm[xoff[0]] + nx[1]->skip_txfm[xoff[1]] +
+        const int ctx = (idx > 0 ? nx[0]->skip_txfm[xoff[0]] : 0) +
+                        (idx > 1 ? nx[1]->skip_txfm[xoff[1]] : 0) +
                         b->skip_mode * 3;
         b->skip_txfm = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                     ts->cdf.m.skip_txfm[ctx]);
@@ -2642,8 +2644,10 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 };
                 const int mode_ctx = amvd_mode_context[coded_mode - NEARMV_NEWMV];
                 const int ctx =
-                    (nx[0]->ref[0][xoff[0]] == b->ref.ref[0] && nx[0]->amvd[xoff[0]]) +
-                    (nx[1]->ref[0][xoff[1]] == b->ref.ref[0] && nx[1]->amvd[xoff[1]]);
+                    (idx > 0 && nx[0]->ref[0][xoff[0]] == b->ref.ref[0] &&
+                     nx[0]->amvd[xoff[0]]) +
+                    (idx > 1 && nx[1]->ref[0][xoff[1]] == b->ref.ref[0] &&
+                     nx[1]->amvd[xoff[1]]);
                 b->amvd = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                        ts->cdf.m.amvd[mode_ctx][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=%d|%d,%d]: r=%d\n",
@@ -3016,8 +3020,10 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             if (f->seq_hdr->adaptive_mvd && b->inter_mode == NEWMV) {
                 const int ctx =
-                    (nx[0]->ref[0][xoff[0]] == b->ref.ref[0] && nx[0]->amvd[xoff[0]]) +
-                    (nx[1]->ref[0][xoff[1]] == b->ref.ref[0] && nx[1]->amvd[xoff[1]]);
+                    (idx > 0 && nx[0]->ref[0][xoff[0]] == b->ref.ref[0] &&
+                     nx[0]->amvd[xoff[0]]) +
+                    (idx > 1 && nx[1]->ref[0][xoff[1]] == b->ref.ref[0] &&
+                     nx[1]->amvd[xoff[1]]);
                 b->amvd = dav2d_msac_decode_bool_adapt(&ts->msac,
                                                        ts->cdf.m.amvd[4][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-amvd[ctx=4|%d,%d]: r=%d\n",
