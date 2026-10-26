@@ -2044,7 +2044,7 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
         const int tip_delta = rf->tip.delta;
         dsp->tip_projection(rp_proj, stride, col_start8, col_end8,
                             h8, sample_step, tip_delta);
-        if (rf->seq_hdr->tip_hole_fill) {
+        if (rf->frm_hdr->tip.hole_fill) {
             dsp->tip_fill_holes(rp_proj, stride, col_start8, col_end8,
                                 h8, sample_step);
             dsp->tip_smoothen(rp_proj, stride, col_start8, col_end8,
