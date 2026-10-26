@@ -34,6 +34,7 @@ decl_splat_comp_warpmv_fn(dav2d_splat_comp_warpmv_avx2);
 decl_splat_comp_wedgemv_fn(dav2d_splat_comp_wedgemv_avx2);
 
 decl_tip_proj_fn(dav2d_tip_projection_avx2);
+decl_tip_fn(dav2d_tip_fill_holes_avx2);
 
 static ALWAYS_INLINE void refmvs_dsp_init_x86(Dav2dRefmvsDSPContext *const c) {
 #if ARCH_X86_64
@@ -47,5 +48,6 @@ static ALWAYS_INLINE void refmvs_dsp_init_x86(Dav2dRefmvsDSPContext *const c) {
     c->splat_comp_wedgemv = dav2d_splat_comp_wedgemv_avx2;
 
     c->tip_projection = dav2d_tip_projection_avx2;
+    c->tip_fill_holes = dav2d_tip_fill_holes_avx2;
 #endif
 }

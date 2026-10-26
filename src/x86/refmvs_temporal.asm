@@ -33,9 +33,20 @@ pw_div_mult: dw    0, 1024, 16384, 963, 8192, 910, 5461, 862
              dw 2048,  682,  1820, 655, 1638, 630, 1489, 606
              dw 1365,  585,  1260, 564, 1170, 546, 1092, 528
 
+pb_0to7: db 0, 1, 2, 3, 4, 5, 6, 7
+pb_082a4c6e: db 0, 8, 2, 10, 4, 12, 6, 14
+pb_06012345: db 0, 6, 0, 1, 2, 3, 4, 5
+pb_23456717: db 2, 3, 4, 5, 6, 7, 1, 7
+pb_04060123: db 0, 4, 0, 6, 0, 1, 2, 3
+
 pw_mv_invalid: dw 0x2000, 0
 pw_8: times 2 dw 8
 pw_m2047: times 2 dw -2047
+pd_8: dd 8
+pd_16: dd 16
+
+pb_shr: times 2 db 0
+pb_shl: db 1, 2, 3, 4, 5, 6, 7, 7
 
 SECTION .text
 
@@ -197,6 +208,355 @@ cglobal tip_projection, 4, 10, 10, 32 * 4, rp, stride, col_start8, col_end8, \
     dec                      hd
     jg .ss1_yloop
     add                      xd, 8
+    cmp                      xd, col_end8d
+    jl .ss1_xloop
+    RET
+
+INIT_YMM avx2
+cglobal tip_fill_holes, 4, 9, 14, rp, stride, col_start8, col_end8, \
+                                  h8, tmvp_sample_step
+    vpbroadcastd             m6, [pw_mv_invalid]
+    movd                    xm8, col_end8d
+    vpbroadcastd             m8, xm8
+    movifnidn               h8d, h8m
+    lea                 strideq, [strideq*5]
+    cmp dword tmvp_sample_stepm, 1
+    je .sample_step_1
+    pmovzxbd                 m0, [pb_082a4c6e]
+    vpbroadcastd             m1, [pd_16]
+    psubd                    m8, m0
+    psubd                    m9, m8, m1
+    pmovzxbd                m11, [pb_06012345]
+    pmovzxbd                m12, [pb_23456717]
+    pmovzxbd                 m7, [pb_04060123]
+    DEFINE_ARGS rp, stride, x, col_end8, h8, y
+    ; fall-through to .sample_step_2. Here, we are sure that sbsz8 is 16 or 32,
+    ; and therefore that col/row_start8 are at least 16-aligned. We can also
+    ; guarantee that mfmv_sbsz8=16.
+.ss2_xloop:
+    movd                   xm10, xd
+    vpbroadcastd            m10, xm10
+    mov                     r6d, xd
+    mov                     r7d, xd
+    and                     r6d, ~31
+    and                     r7d, 31
+    lea                      r6, [r6*5]
+    add                      r6, rpq
+    pcmpgtd                 m13, m8, m10
+    pcmpgtd                 m10, m9, m10            ; x+[0..30] < col_end8
+    xor                      yd, yd
+
+    ; deal with situation where we are unaligned or overhang
+    ; in that case, do single-lane
+    test                     xd, 31
+    jnz .ss2_half
+    lea                     r8d, [col_end8d-16]
+    sub                     r8d, xd
+    jle .ss2_half
+
+.ss2_yloop:
+    ; FIXME ideally, we can prevent this load by re-using the load from the
+    ; previous loop iteration
+    mova                     m0, [r6+mmsize*0+r7*4]
+    mova                     m1, [r6+mmsize*2+r7*4]
+    vpblendd                 m0, [r6+mmsize*1+r7*4-4], 10101010b
+    vpblendd                 m1, [r6+mmsize*3+r7*4-4], 10101010b
+    vpblendvb                m0, m6, m0, m13
+    vpblendvb                m1, m6, m1, m10
+
+    vpermd                   m2, m11, m0            ; right-shift-by-one
+    vpermd                   m3, m11, m1
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    pcmpeqd                  m5, m1, m6
+    vpblendvb                m0, m2, m4             ; if right_mv == invalid:
+    vpblendvb                m1, m3, m5             ;     right_mv = cur_mv
+
+    vpermd                   m2, m7, m0             ; right-shift-by-two
+    vpermd                   m3, m7, m1
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    pcmpeqd                  m5, m1, m6
+    vpblendvb                m0, m2, m4             ; if right2_mv == invalid:
+    vpblendvb                m1, m3, m5             ;     right2_mv = cur_mv
+
+    pshufd                   m2, m0, q2200          ; right-shift-by-four
+    pshufd                   m3, m1, q2200
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    pcmpeqd                  m5, m1, m6
+    vpblendvb                m0, m2, m4             ; if right4_mv == invalid:
+    vpblendvb                m1, m3, m5             ;     right4_mv = cur_mv
+
+    test                     yd, 15
+    jz .skip_top_ss2
+    mova                     m2, [r8+mmsize*0+r7*4]
+    mova                     m3, [r8+mmsize*2+r7*4]
+    vpblendd                 m2, [r8+mmsize*1+r7*4-4], 10101010b
+    vpblendd                 m3, [r8+mmsize*3+r7*4-4], 10101010b
+    pcmpeqd                  m4, m2, m6             ; is mv invalid
+    pcmpeqd                  m5, m3, m6
+    vpblendvb                m2, m0, m4             ; if top_mv == invalid:
+    vpblendvb                m3, m1, m5             ;     top_mv = cur_mv
+    mova     [r8+mmsize*0+r7*4], m2                 ; rp_proj_ptr->mv[pos] =
+    mova     [r8+mmsize*2+r7*4], m3                 ;     out_mv
+    REPX          {psrlq x, 32}, m2, m3
+    mova     [r8+mmsize*1+r7*4], m2
+    mova     [r8+mmsize*3+r7*4], m3
+.skip_top_ss2:
+    mov                      r8, r6                 ; top pointer for next iter
+    lea                      r6, [r6+strideq*2]
+    add                      yd, 2
+    test                     yd, 15
+    jz .skip_bottom_ss2
+    mova                     m2, [r6+mmsize*0+r7*4]
+    mova                     m3, [r6+mmsize*2+r7*4]
+    vpblendd                 m2, [r6+mmsize*1+r7*4-4], 10101010b
+    vpblendd                 m3, [r6+mmsize*3+r7*4-4], 10101010b
+    pcmpeqd                  m4, m2, m6             ; is mv invalid
+    pcmpeqd                  m5, m3, m6
+    vpblendvb                m2, m0, m4             ; if bottom_mv == invalid:
+    vpblendvb                m3, m1, m5             ;     bottom_mv = cur_mv
+    mova     [r6+mmsize*0+r7*4], m2                 ; rp_proj_ptr->mv[pos] =
+    mova     [r6+mmsize*2+r7*4], m3                 ;     out_mv
+    REPX          {psrlq x, 32}, m2, m3
+    mova     [r6+mmsize*1+r7*4], m2
+    mova     [r6+mmsize*3+r7*4], m3
+.skip_bottom_ss2:
+    vpermd                   m2, m12, m0            ; left-shift-by-one-mv
+    vpermd                   m3, m12, m1
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    pcmpeqd                  m5, m1, m6
+    vpblendvb                m0, m2, m4             ; if left_mv == invalid:
+    vpblendvb                m1, m3, m5             ;     left_mv = cur_mv
+    ; it may be possible to prevent this store in some situations, since we
+    ; will re-store it ("top") in the next iteration, unless we're crossing
+    ; a mfmv_sbsz8 boundary
+    mova     [r8+mmsize*0+r7*4], m0                 ; rp_proj_ptr->mv[pos] =
+    mova     [r8+mmsize*2+r7*4], m1                 ;     out_mv
+    REPX          {psrlq x, 32}, m0, m1
+    mova     [r8+mmsize*1+r7*4], m0
+    mova     [r8+mmsize*3+r7*4], m1
+    cmp                      yd, h8d
+    jl .ss2_yloop
+    add                      xd, mmsize
+    cmp                      xd, col_end8d
+    jl .ss2_xloop
+    RET
+
+.ss2_half:
+.ss2_yloop_half:
+    ; FIXME ideally, we can prevent this load by re-using the load from the
+    ; previous loop iteration
+    mova                     m0, [r6+mmsize*0+r7*4]
+    vpblendd                 m0, [r6+mmsize*1+r7*4-4], 10101010b
+    vpblendvb                m0, m6, m0, m13
+
+    vpermd                   m2, m11, m0            ; right-shift-by-one
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    vpblendvb                m0, m2, m4             ; if right_mv == invalid:
+                                                    ;     right_mv = cur_mv
+    vpermd                   m2, m7, m0             ; right-shift-by-two
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    vpblendvb                m0, m2, m4             ; if right2_mv == invalid:
+                                                    ;     right2_mv = cur_mv
+    pshufd                   m2, m0, q2200          ; right-shift-by-four
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    vpblendvb                m0, m2, m4             ; if right4_mv == invalid:
+                                                    ;     right4_mv = cur_mv
+    test                     yd, 15
+    jz .skip_top_ss2_half
+    mova                     m2, [r8+mmsize*0+r7*4]
+    vpblendd                 m2, [r8+mmsize*1+r7*4-4], 10101010b
+    pcmpeqd                  m4, m2, m6             ; is mv invalid
+    vpblendvb                m2, m0, m4             ; if top_mv == invalid:
+                                                    ;     top_mv = cur_mv
+    mova     [r8+mmsize*0+r7*4], m2                 ; rp_proj_ptr->mv[pos] =
+                                                    ;     out_mv
+    psrlq                    m2, 32
+    mova     [r8+mmsize*1+r7*4], m2
+.skip_top_ss2_half:
+    mov                      r8, r6                 ; top pointer for next iter
+    lea                      r6, [r6+strideq*2]
+    add                      yd, 2
+    test                     yd, 15
+    jz .skip_bottom_ss2_half
+    mova                     m2, [r6+mmsize*0+r7*4]
+    vpblendd                 m2, [r6+mmsize*1+r7*4-4], 10101010b
+    pcmpeqd                  m4, m2, m6             ; is mv invalid
+    vpblendvb                m2, m0, m4             ; if bottom_mv == invalid:
+                                                    ;     bottom_mv = cur_mv
+    mova     [r6+mmsize*0+r7*4], m2                 ; rp_proj_ptr->mv[pos] =
+                                                    ;     out_mv
+    psrlq                    m2, 32
+    mova     [r6+mmsize*1+r7*4], m2
+.skip_bottom_ss2_half:
+    vpermd                   m2, m12, m0            ; left-shift-by-one-mv
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    vpblendvb                m0, m2, m4             ; if left_mv == invalid:
+                                                    ;     left_mv = cur_mv
+    ; it may be possible to prevent this store in some situations, since we
+    ; will re-store it ("top") in the next iteration, unless we're crossing
+    ; a mfmv_sbsz8 boundary
+    mova     [r8+mmsize*0+r7*4], m0                 ; rp_proj_ptr->mv[pos] =
+                                                    ;     out_mv
+    psrlq                    m0, 32
+    mova     [r8+mmsize*1+r7*4], m0
+    cmp                      yd, h8d
+    jl .ss2_yloop_half
+    add                      xd, mmsize/2
+    cmp                      xd, col_end8d
+    jl .ss2_xloop
+    RET
+
+.sample_step_1:
+    pmovzxbd                 m0, [pb_0to7]
+    vpbroadcastd             m1, [pd_8]
+    psubd                    m8, m0
+    psubd                    m9, m8, m1
+    pmovzxbd                m11, [pb_shr]
+    pmovzxbd                m12, [pb_shl]
+    ; col/row_start8 are 8-aligned. mfmv_sbsz8=8.
+.ss1_xloop:
+    movd                   xm10, xd
+    vpbroadcastd            m10, xm10
+    mov                     r6d, xd
+    mov                     r7d, xd
+    and                     r6d, ~31
+    and                     r7d, 31
+    lea                      r6, [r6*5]
+    add                      r6, rpq
+    pcmpgtd                 m13, m8, m10
+    pcmpgtd                 m10, m9, m10            ; x+[0..15] < col_end8
+    xor                      yd, yd
+
+    ; deal with situation where we are unaligned or overhang
+    ; in that case, do single-lane
+    ; FIXME this could - instead of single-lane - do single instructions
+    ; instead of pairs
+    test                     xd, 15
+    jnz .ss1_half
+    lea                     r8d, [col_end8d-8]
+    sub                     r8d, xd
+    jle .ss1_half
+
+.ss1_yloop:
+    ; FIXME ideally, we can prevent this load by re-using the load from the
+    ; previous loop iteration
+    vpblendvb                m0, m6, [r6+mmsize*0+r7*4], m13
+    vpblendvb                m1, m6, [r6+mmsize*1+r7*4], m10
+
+    vpermd                   m2, m11, m0            ; right-shift-by-one
+    vpermd                   m3, m11, m1
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    pcmpeqd                  m5, m1, m6
+    vpblendvb                m0, m2, m4             ; if right_mv == invalid:
+    vpblendvb                m1, m3, m5             ;     right_mv = cur_mv
+
+    vpermq                   m2, m0, q2100          ; right-shift-by-two
+    vpermq                   m3, m1, q2100
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    pcmpeqd                  m5, m1, m6
+    vpblendvb                m0, m2, m4             ; if right2_mv == invalid:
+    vpblendvb                m1, m3, m5             ;     right2_mv = cur_mv
+
+    vinserti128              m2, m0, xm0, 1         ; right-shift-by-four
+    vinserti128              m3, m1, xm1, 1
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    pcmpeqd                  m5, m1, m6
+    vpblendvb                m0, m2, m4             ; if right4_mv == invalid:
+    vpblendvb                m1, m3, m5             ;     right4_mv = cur_mv
+
+    test                     yd, 7
+    jz .skip_top_ss1
+    mova                     m2, [r8+mmsize*0+r7*4]
+    mova                     m3, [r8+mmsize*1+r7*4]
+    pcmpeqd                  m4, m2, m6             ; is mv invalid
+    pcmpeqd                  m5, m3, m6
+    vpblendvb                m2, m0, m4             ; if top_mv == invalid:
+    vpblendvb                m3, m1, m5             ;     top_mv = cur_mv
+    mova     [r8+mmsize*0+r7*4], m2                 ; rp_proj_ptr->mv[pos] =
+    mova     [r8+mmsize*1+r7*4], m3                 ;     out_mv
+.skip_top_ss1:
+    mov                      r8, r6                 ; top pointer for next iter
+    add                      r6, strideq
+    inc                      yd
+    test                     yd, 7
+    jz .skip_bottom_ss1
+    mova                     m2, [r6+mmsize*0+r7*4]
+    mova                     m3, [r6+mmsize*1+r7*4]
+    pcmpeqd                  m4, m2, m6             ; is mv invalid
+    pcmpeqd                  m5, m3, m6
+    vpblendvb                m2, m0, m4             ; if bottom_mv == invalid:
+    vpblendvb                m3, m1, m5             ;     bottom_mv = cur_mv
+    mova     [r6+mmsize*0+r7*4], m2                 ; rp_proj_ptr->mv[pos] =
+    mova     [r6+mmsize*1+r7*4], m3                 ;     out_mv
+.skip_bottom_ss1:
+    vpermd                   m2, m12, m0            ; left-shift-by-one-mv
+    vpermd                   m3, m12, m1
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    pcmpeqd                  m5, m1, m6
+    vpblendvb                m0, m2, m4             ; if left_mv == invalid:
+    vpblendvb                m1, m3, m5             ;     left_mv = cur_mv
+    ; it may be possible to prevent this store in some situations, since we
+    ; will re-store it ("top") in the next iteration, unless we're crossing
+    ; a mfmv_sbsz8 boundary
+    mova     [r8+mmsize*0+r7*4], m0                 ; rp_proj_ptr->mv[pos] =
+    mova     [r8+mmsize*1+r7*4], m1                 ;     out_mv
+    cmp                      yd, h8d
+    jl .ss1_yloop
+    add                      xd, mmsize/2
+    cmp                      xd, col_end8d
+    jl .ss1_xloop
+    RET
+.ss1_half:
+.ss1_yloop_half:
+    ; FIXME ideally, we can prevent this load by re-using the load from the
+    ; previous loop iteration
+    vpblendvb                m0, m6, [r6+mmsize*0+r7*4], m13
+
+    vpermd                   m2, m11, m0            ; right-shift-by-one
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    vpblendvb                m0, m2, m4             ; if right_mv == invalid:
+                                                    ;     right_mv = cur_mv
+    vpermq                   m2, m0, q2100          ; right-shift-by-two
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    vpblendvb                m0, m2, m4             ; if right2_mv == invalid:
+                                                    ;     right2_mv = cur_mv
+    vinserti128              m2, m0, xm0, 1         ; right-shift-by-four
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    vpblendvb                m0, m2, m4             ; if right4_mv == invalid:
+                                                    ;     right4_mv = cur_mv
+    test                     yd, 7
+    jz .skip_top_ss1_half
+    mova                     m2, [r8+mmsize*0+r7*4]
+    pcmpeqd                  m4, m2, m6             ; is mv invalid
+    vpblendvb                m2, m0, m4             ; if top_mv == invalid:
+                                                    ;     top_mv = cur_mv
+    mova     [r8+mmsize*0+r7*4], m2                 ; rp_proj_ptr->mv[pos] =
+                                                    ;     out_mv
+.skip_top_ss1_half:
+    mov                      r8, r6                 ; top pointer for next iter
+    add                      r6, strideq
+    inc                      yd
+    test                     yd, 7
+    jz .skip_bottom_ss1_half
+    mova                     m2, [r6+mmsize*0+r7*4]
+    pcmpeqd                  m4, m2, m6             ; is mv invalid
+    vpblendvb                m2, m0, m4             ; if bottom_mv == invalid:
+                                                    ;     bottom_mv = cur_mv
+    mova     [r6+mmsize*0+r7*4], m2                 ; rp_proj_ptr->mv[pos] =
+                                                    ;     out_mv
+.skip_bottom_ss1_half:
+    vpermd                   m2, m12, m0            ; left-shift-by-one-mv
+    pcmpeqd                  m4, m0, m6             ; is mv invalid
+    vpblendvb                m0, m2, m4             ; if left_mv == invalid:
+                                                    ;     left_mv = cur_mv
+    ; it may be possible to prevent this store in some situations, since we
+    ; will re-store it ("top") in the next iteration, unless we're crossing
+    ; a mfmv_sbsz8 boundary
+    mova     [r8+mmsize*0+r7*4], m0                 ; rp_proj_ptr->mv[pos] =
+                                                    ;     out_mv
+    cmp                      yd, h8d
+    jl .ss1_yloop_half
+    add                      xd, mmsize/4
     cmp                      xd, col_end8d
     jl .ss1_xloop
     RET
