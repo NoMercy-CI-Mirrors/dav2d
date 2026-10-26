@@ -245,6 +245,29 @@ static void deblock_v_sb64uv_c(pixel *dst, const ptrdiff_t stride,
     }
 }
 
+static void apply_sub_pu(int *q_thr, int *side_thr, int subpu) {
+    *q_thr >>= subpu;
+    *side_thr >>= subpu;
+
+    // Zero q_thr if side_thr is 0.
+    //
+    // We skip this for low bit-depth since side_thr is already large before
+    // q_thr is bigger than it. See the table below of qidx thresholds.
+    // ------------------------
+    // qidx | q_thr | side_thr
+    // ------------------------
+    // ...
+    // 194  |    20 | 21
+    // 195  |    21 | 21
+    // 196  |    22 | 22
+    // 197  |    22 | 22
+    // 198  |    23 | 22
+    // ...
+    if (BITDEPTH > 8)
+        *q_thr = *side_thr ? *q_thr : 0;
+    assert(*side_thr != 0 || *q_thr == 0);
+}
+
 static void setup_thr_cols_sb64_seg_c(pixel (*thr_dst)[16 * 16],
                                       const uint8_t *const segmap,
                                       const ptrdiff_t seg_stride,
@@ -265,15 +288,16 @@ static void setup_thr_cols_sb64_seg_c(pixel (*thr_dst)[16 * 16],
             const int cur_side_thr = thr_lut[1][seg_id];
             const int subpu = 3 * ((mask[x4][4][0] >> y4) & 1);
 
-            const int edge_q_thr = cur_q_thr && prev_q_thr ?
+            int edge_q_thr = cur_q_thr && prev_q_thr ?
                 (cur_q_thr + prev_q_thr + 1) >> 1 : cur_q_thr | prev_q_thr;
-            const int edge_side_thr = cur_side_thr && prev_side_thr ?
+            int edge_side_thr = cur_side_thr && prev_side_thr ?
                 (cur_side_thr + prev_side_thr + 1) >> 1 :
                 cur_side_thr | prev_side_thr;
+            apply_sub_pu(&edge_q_thr, &edge_side_thr, subpu);
 
             // store transposed
-            thr_dst[0][x4 * dst_stride + y4] = edge_q_thr >> subpu;
-            thr_dst[1][x4 * dst_stride + y4] = edge_side_thr >> subpu;
+            thr_dst[0][x4 * dst_stride + y4] = edge_q_thr;
+            thr_dst[1][x4 * dst_stride + y4] = edge_side_thr;
 
             prev_q_thr = cur_q_thr;
             prev_side_thr = cur_side_thr;
@@ -314,14 +338,15 @@ static void setup_thr_rows_sb64_seg_c(pixel (*thr_dst)[16 * 16],
             const int cur_side_thr = thr_lut[1][seg_id];
             const int subpu = 3 * ((mask[y4][4][0] >> x4) & 1);
 
-            const int edge_q_thr = cur_q_thr && prev_q_thr ?
+            int edge_q_thr = cur_q_thr && prev_q_thr ?
                 (cur_q_thr + prev_q_thr + 1) >> 1 : cur_q_thr | prev_q_thr;
-            const int edge_side_thr = cur_side_thr && prev_side_thr ?
+            int edge_side_thr = cur_side_thr && prev_side_thr ?
                 (cur_side_thr + prev_side_thr + 1) >> 1 :
                 cur_side_thr | prev_side_thr;
+            apply_sub_pu(&edge_q_thr, &edge_side_thr, subpu);
 
-            thr_dst[0][x4 + y4 * dst_stride] = edge_q_thr >> subpu;
-            thr_dst[1][x4 + y4 * dst_stride] = edge_side_thr >> subpu;
+            thr_dst[0][x4 + y4 * dst_stride] = edge_q_thr;
+            thr_dst[1][x4 + y4 * dst_stride] = edge_side_thr;
 
             prev_q_thr = cur_q_thr;
             prev_side_thr = cur_side_thr;
@@ -349,16 +374,24 @@ static void setup_thr_rows_sb64_dq_c(pixel (*thr_dst)[16 * 16],
         (cur_side_thr + prev_side_thr + 1) >> 1 : cur_side_thr | prev_side_thr;
 
     for (int x4 = 0; x4 < w4; x4++) {
-        const int subpu = 3 * ((mask[0][4][0] >> x4) & 1);
+        int q_thr, side_thr, subpu;
 
-        thr_dst[0][x4] = a_edge_q_thr >> subpu;
-        thr_dst[1][x4] = a_edge_side_thr >> subpu;
+        subpu = 3 * ((mask[0][4][0] >> x4) & 1);
+        q_thr = a_edge_q_thr;
+        side_thr = a_edge_side_thr;
+        apply_sub_pu(&q_thr, &side_thr, subpu);
+
+        thr_dst[0][x4] = q_thr;
+        thr_dst[1][x4] = side_thr;
 
         for (int y4 = 1; y4 < h4; y4++) {
-            const int subpu = 3 * ((mask[y4][4][0] >> x4) & 1);
+            subpu = 3 * ((mask[y4][4][0] >> x4) & 1);
+            q_thr = cur_q_thr;
+            side_thr = cur_side_thr;
+            apply_sub_pu(&q_thr, &side_thr, subpu);
 
-            thr_dst[0][x4 + y4 * dst_stride] = cur_q_thr >> subpu;
-            thr_dst[1][x4 + y4 * dst_stride] = cur_side_thr >> subpu;
+            thr_dst[0][x4 + y4 * dst_stride] = q_thr;
+            thr_dst[1][x4 + y4 * dst_stride] = side_thr;
         }
     }
 }
@@ -386,8 +419,12 @@ static void setup_thr_sb64_simple_c(pixel (*thr_dst)[16 * 16],
     for (int y4 = 0; y4 < h4; y4++) {
         for (int x4 = 0; x4 < w4; x4++) {
             const int subpu = 3 * ((mask[x4][4][0] >> y4) & 1);
-            thr_dst[0][x4 * dst_stride + y4] = edge_q_thr >> subpu;
-            thr_dst[1][x4 * dst_stride + y4] = edge_side_thr >> subpu;
+            int q_thr = edge_q_thr;
+            int side_thr = edge_side_thr;
+            apply_sub_pu(&q_thr, &side_thr, subpu);
+
+            thr_dst[0][x4 * dst_stride + y4] = q_thr;
+            thr_dst[1][x4 * dst_stride + y4] = side_thr;
         }
     }
 }
