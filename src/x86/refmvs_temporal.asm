@@ -957,3 +957,125 @@ cglobal fill_gap_proj, 4, 12, 16, 4 * mmsize, \
     cmp                      xd, col_end8d
     jl .xloop
     RET
+
+INIT_YMM avx2
+cglobal fill_gap_traj, 4, 12, 16, rp, stride, col_start8, col_end8, h8
+    vpbroadcastd             m9, [pw_mv_invalid]
+    pmovzxbd                m12, [pb_23456717]
+    vpbroadcastd            m13, [pb_2]
+    vpbroadcastd            m14, [pb_2_3]
+    vpbroadcastq            m15, [pw_div]
+    movifnidn               h8d, h8m
+    DEFINE_ARGS rp, stride, x, col_end8, h8, y
+.xloop:
+    ; sample_step is always 2. Therefore, we are sure that sbsz8 is 16 or 32,
+    ; and so col/row_start8 are at least 16-aligned
+    movd                    xm8, xd
+    movd                    xm6, col_end8d
+    pmovzxbd                 m5, [pb_3b5d7f9x]
+    pmovsxbd                 m4, [pb_7x0_m1]
+    mov                     r6d, xd
+    mov                     r7d, xd
+    vpbroadcastd             m8, xm8
+    vpbroadcastd             m6, xm6
+    and                     r6d, ~31
+    and                     r7d, 31
+    paddd                    m8, m5
+    pcmpgtd                  m8, m6
+    lea                      r6, [rpq+r6*4]
+    por                      m8, m4
+
+    xor                      yd, yd
+    mova                     m0, [r6+32*0+r7*4]
+    vpblendd                 m0, [r6+32*1+r7*4-4], 10101010b
+    pcmpeqd                  m1, m0, m9             ; is mv invalid
+    vpermd                   m2, m12, m0
+    vpermd                   m3, m12, m1
+    por                      m3, m8
+.yloop:
+    ; average top/left & top/right into top/right output
+    ; if left_mv == invalid: center_mv = invalid
+    ; else if right_mv == invalid: center_mv = left_mv
+    ; else: center_mv = signed_average(left_mv, right_mv)
+    vpblendvb                m4, m2, m0, m3
+    vpblendvb                m4, m9, m1
+    paddw                    m4, m0
+    psraw                    m5, m4, 15
+    pavgw                    m4, m5
+
+    ; write out interleaved version of top/left & top/right
+    pslldq                  m10, m4, 4
+    psrldq                  m11, m0, 4
+    vpblendd                m10, m0, m10, 10101010b
+    vpblendd                m11, m4, 10101010b
+    mova         [r6+32*0+r7*4], m10
+    mova         [r6+32*1+r7*4], m11
+
+    add                      yd, 2
+    cmp                      yd, h8d
+    jg .ybreak
+    lea                     r11, [r6+strideq*4]
+    je .skip_bottom
+
+    ; bottom & bottom/right pixels
+    lea                      r6, [r6+strideq*8]
+    pandn                    m2, m3, m2             ; zero invalid mvs
+    paddw                    m2, m0                 ; sum_x/y = center + right
+    mova                     m4, [r6+32*0+r7*4]
+    vpblendd                 m4, [r6+32*1+r7*4-4], 10101010b
+    pcmpeqd                  m5, m4, m9             ; is mv invalid
+    vpermd                   m6, m12, m4
+    vpermd                   m7, m12, m5
+    por                      m7, m8
+    test                     yd, 15
+    jz .skip_bottom
+
+    ; average top/left & bottom/left into bottom/left output
+    vpblendvb               m10, m4, m0, m5
+    vpblendvb               m10, m9, m1
+    paddw                   m10, m0
+    psraw                   m11, m10, 15
+    pavgw                   m10, m11
+
+    ; add bottom/left to bottom/right aggregator
+    pandn                   m11, m5, m4             ; zero invalid mvs
+    paddw                    m2, m11                ; sum_x/y
+    paddb                    m3, m5
+    paddb                    m3, m13
+
+    ; add bottom/right to bottom/right aggregator
+    pandn                    m6, m7, m6             ; zero invalid mvs
+    paddw                    m2, m6                 ; sum_x/y
+    paddb                    m3, m7
+
+    ; generate bottom/right output mv
+    paddw                    m2, m2
+    paddb                    m3, m3
+    paddb                    m3, m14, m3
+    pabsw                    m0, m2
+    pshufb                   m3, m15, m3
+    pmulhrsw                 m0, m3
+    psignw                   m0, m2
+
+    ; if top/left mv is invalid: output bottom/right mv = invalid
+    vpblendvb                m0, m9, m1
+
+    ; interleave bottom/left & bottom/right output mv & write-out
+    pslldq                   m2, m0, 4
+    psrldq                  m11, m10, 4
+    vpblendd                m10, m2, 10101010b
+    vpblendd                m11, m0, 10101010b
+.skip_bottom:
+    mova        [r11+32*0+r7*4], m10
+    mova        [r11+32*1+r7*4], m11
+    mova                     m0, m4
+    mova                     m1, m5
+    mova                     m2, m6
+    mova                     m3, m7
+    cmp                      yd, h8d
+    jl .yloop
+.ybreak:
+    add                      xd, 16
+    cmp                      xd, col_end8d
+    jl .xloop
+    RET
