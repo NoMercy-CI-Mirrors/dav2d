@@ -39,11 +39,17 @@ pb_06012345: db 0, 6, 0, 1, 2, 3, 4, 5
 pb_23456717: db 2, 3, 4, 5, 6, 7, 1, 7
 pb_04060123: db 0, 4, 0, 6, 0, 1, 2, 3
 
+pd_32768: dd 32768
+pw_m32768: times 2 dw -32768
 pw_mv_invalid: dw 0x2000, 0
+pb_6_7: times 2 db 6, 7
 pw_8: times 2 dw 8
 pw_m2047: times 2 dw -2047
 pd_8: dd 8
 pd_16: dd 16
+
+; the -1 is a magical value required to detect sum_n=0
+pw_neg_idiv_plus_32768: dw -1, -32768, 0, 10923, 16384, 19661
 
 pb_shr: times 2 db 0
 pb_shl: db 1, 2, 3, 4, 5, 6, 7, 7
@@ -557,6 +563,195 @@ cglobal tip_fill_holes, 4, 9, 14, rp, stride, col_start8, col_end8, \
     cmp                      yd, h8d
     jl .ss1_yloop_half
     add                      xd, mmsize/4
+    cmp                      xd, col_end8d
+    jl .ss1_xloop
+    RET
+
+cglobal tip_smoothen, 4, 9, 16, rp, stride, col_start8, col_end8, \
+                                h8, tmvp_sample_step
+    pxor                     m6, m6
+    pcmpeqd                 m15, m15
+    vpbroadcastd             m7, [pd_32768]
+    vbroadcasti128           m8, [pw_neg_idiv_plus_32768]
+    vpbroadcastd             m9, [pw_mv_invalid]
+    movifnidn               h8d, h8m
+    lea                 strideq, [strideq*5]
+    cmp dword tmvp_sample_stepm, 1
+    je .sample_step_1
+    DEFINE_ARGS rp, stride, x, col_end8, h8, y
+    ; fall-through to .sample_step_2. Here, we are sure that sbsz8 is 16 or 32,
+    ; and therefore that col/row_start8 are at least 16-aligned
+    pmovzxbd                 m0, [pb_06012345]
+    pmovzxbd                 m1, [pb_23456717]
+.ss2_xloop:
+    mov                     r6d, xd
+    mov                     r7d, xd
+    and                     r6d, ~31
+    and                     r7d, 31
+    lea                      r6, [r6*5]
+    add                      r6, rpq
+    movd                    xm3, xd
+    movd                    xm4, col_end8d
+    vpmovzxbd                m2, [pb_082a4c6e]
+    vpbroadcastd             m3, xm3
+    vpbroadcastd             m4, xm4
+    paddd                    m3, m2
+    pcmpgtd                 m13, m4, m3
+
+    xor                      yd, yd
+    mova                     m4, [r6+mmsize*0+r7*4]
+    vpblendd                 m4, [r6+mmsize*1+r7*4-4], 10101010b
+    vpblendvb                m4, m9, m4, m13        ; mv.x/y = rp_proj_ptr->mv[pos]
+.ss2_yloop:
+    vpermd                   m2, m0, m4
+    vpermd                   m3, m1, m4
+    vpblendd                 m2, m9, 00000001b
+    vpblendd                 m3, m9, 10000000b
+    pcmpeqd                 m10, m2, m9
+    pcmpeqd                 m11, m3, m9
+    pcmpeqd                 m12, m4, m9
+    vpblendvb                m2, m6, m10
+    vpblendvb                m3, m6, m11
+    paddb                   m10, m11
+    vpblendvb               m11, m4, m6, m12
+    paddw                    m2, m3
+    paddb                    m3, m10, m12           ; # invalid mvs in sum_mv
+    paddw                    m2, m11                ; sum_x/y
+    test                     yd, 15
+    jz .skip_top_ss2
+    psubb                    m3, m15
+    pcmpeqd                 m10, m14, m9            ; is top_mv invalid
+    vpblendvb               m14, m6, m10
+    paddb                    m3, m10
+    paddw                    m2, m14
+.skip_top_ss2:
+    add                      yd, 2
+    mov                      r8, r6
+    lea                      r6, [r6+strideq*2]
+    cmp                      yd, h8d
+    jge .skip_bottom_ss2
+    mova                    m14, m4
+    mova                     m4, [r6+mmsize*0+r7*4]
+    vpblendd                 m4, [r6+mmsize*1+r7*4-4], 10101010b
+    vpblendvb                m4, m9, m4, m13        ; mv.x/y = rp_proj_ptr->mv[pos]
+    test                     yd, 15
+    jz .skip_bottom_ss2
+    psubb                    m3, m15
+    pcmpeqd                 m10, m4, m9
+    vpblendvb               m11, m4, m6, m10
+    paddb                    m3, m10
+    paddw                    m2, m11
+.skip_bottom_ss2:
+    vpbroadcastd            m12, [pb_6_7]
+    paddb                    m3, m3
+    paddb                    m3, m12, m3            ; sum_n -> pshufb indices
+    vpbroadcastd            m12, [pw_m32768]
+    pshufb                   m3, m8, m3
+    pcmpeqd                  m5, m3, m15            ; sum_n == 0
+    pabsw                   m11, m2
+    punpcklwd               m10, m3, m12            ; interleave idiv[..] & -32768
+    punpckhwd                m3, m12
+    punpcklwd               m12, m11, m11           ; sum_x/y
+    punpckhwd               m11, m11, m11
+    pmaddwd                 m10, m12
+    pmaddwd                 m11, m3
+    REPX       {psubd x, m7, x}, m10, m11
+    REPX          {psrad x, 16}, m10, m11
+    packssdw                m10, m11
+    psignw                   m2, m10, m2
+    vpblendvb                m2, m9, m5             ; if sum_n == 0:
+                                                    ;     out_mv.y = INVALID_MV
+    mova     [r8+mmsize*0+r7*4], m2                 ; rp_proj_ptr->mv[pos] = mv_line
+    psrlq                    m2, 32
+    mova     [r8+mmsize*1+r7*4], m2
+    cmp                      yd, h8d
+    jl .ss2_yloop
+    add                      xd, 16
+    cmp                      xd, col_end8d
+    jl .ss2_xloop
+    RET
+.sample_step_1:
+    ; col/row_start8 are 8-aligned
+    pmovzxbd                 m0, [pb_shr]
+    pmovzxbd                 m1, [pb_shl]
+.ss1_xloop:
+    mov                     r6d, xd
+    mov                     r7d, xd
+    and                     r6d, ~31
+    and                     r7d, 31
+    lea                      r6, [r6*5]
+    add                      r6, rpq
+    movd                    xm3, xd
+    movd                    xm4, col_end8d
+    vpmovzxbd                m2, [pb_0to7]
+    vpbroadcastd             m3, xm3
+    vpbroadcastd             m4, xm4
+    paddd                    m3, m2
+    pcmpgtd                 m13, m4, m3
+
+    xor                      yd, yd
+    vpblendvb                m4, m9, [r6+r7*4], m13 ; mv.x/y = rp_proj_ptr->mv[pos]
+.ss1_yloop:
+    vpermd                   m2, m0, m4
+    vpermd                   m3, m1, m4
+    vpblendd                 m2, m9, 00000001b
+    vpblendd                 m3, m9, 10000000b
+    pcmpeqd                 m10, m2, m9
+    pcmpeqd                 m11, m3, m9
+    pcmpeqd                 m12, m4, m9
+    vpblendvb                m2, m6, m10
+    vpblendvb                m3, m6, m11
+    paddb                   m10, m11
+    vpblendvb               m11, m4, m6, m12
+    paddw                    m2, m3
+    paddb                    m3, m10, m12           ; # invalid mvs in sum_mv
+    paddw                    m2, m11                ; sum_x/y
+    test                     yd, 7
+    jz .skip_top_ss1
+    psubb                    m3, m15
+    pcmpeqd                 m10, m14, m9            ; is top_mv invalid
+    vpblendvb               m14, m6, m10
+    paddb                    m3, m10
+    paddw                    m2, m14
+.skip_top_ss1:
+    inc                      yd
+    mov                      r8, r6
+    add                      r6, strideq
+    cmp                      yd, h8d
+    je .skip_bottom_ss1
+    mova                    m14, m4
+    vpblendvb                m4, m9, [r6+r7*4], m13 ; mv.x/y = rp_proj_ptr->mv[pos]
+    test                     yd, 7
+    jz .skip_bottom_ss1
+    psubb                    m3, m15
+    pcmpeqd                 m10, m4, m9
+    vpblendvb               m11, m4, m6, m10
+    paddb                    m3, m10
+    paddw                    m2, m11
+.skip_bottom_ss1:
+    vpbroadcastd            m12, [pb_6_7]
+    paddb                    m3, m3
+    paddb                    m3, m12, m3            ; sum_n -> pshufb indices
+    vpbroadcastd            m12, [pw_m32768]
+    pshufb                   m3, m8, m3
+    pcmpeqd                  m5, m3, m15            ; sum_n == 0
+    pabsw                   m11, m2
+    punpcklwd               m10, m3, m12            ; interleave idiv[..] & -32768
+    punpckhwd                m3, m12
+    punpcklwd               m12, m11, m11           ; sum_x/y
+    punpckhwd               m11, m11, m11
+    pmaddwd                 m10, m12
+    pmaddwd                 m11, m3
+    REPX       {psubd x, m7, x}, m10, m11
+    REPX          {psrad x, 16}, m10, m11
+    packssdw                m10, m11
+    psignw                   m2, m10, m2
+    vpblendvb                m2, m9, m5             ; if sum_n == 0:
+                                                    ;     out_mv.y = INVALID_MV
+    mova              [r8+r7*4], m2                 ; rp_proj_ptr->mv[pos] = mv_line
+    cmp                      yd, h8d
+    jl .ss1_yloop
+    add                      xd, 8
     cmp                      xd, col_end8d
     jl .ss1_xloop
     RET
