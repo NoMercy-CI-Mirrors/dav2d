@@ -596,6 +596,107 @@ static void check_splat_comp_wedgemv(const Dav2dRefmvsDSPContext *const c) {
     report("splat_comp_wedgemv");
 }
 
+static void dump_tip_proj(const char *const tag,
+                          const refmvs_sngl_mv_block *const a,
+                          const ptrdiff_t sub_pos, const int check_all_refs)
+{
+    if (a->mv[sub_pos].n != INVALID_TMV) {
+        fprintf(stderr, "%s: mv=y:%d,x:%d,ref:%d\n", tag,
+                a->mv[sub_pos].y, a->mv[sub_pos].x, a->refdist[sub_pos]);
+    } else if (check_all_refs) {
+        fprintf(stderr, "%s: mv=y:0x%x[invalid],ref:%d\n", tag,
+                a->mv[sub_pos].n, a->refdist[sub_pos]);
+    } else {
+        fprintf(stderr, "%s: mv=y:0x%x[invalid]\n", tag, a->mv[sub_pos].n);
+    }
+}
+
+static int check_tip_proj(const refmvs_sngl_mv_block *const a, const ptrdiff_t as,
+                          const refmvs_sngl_mv_block *const b, const ptrdiff_t bs,
+                          const int col_start8, const int col_end8,
+                          const int h8, const int sample_step,
+                          const int check_all_refs)
+{
+    for (int y = 0; y < h8; y += sample_step) {
+        for (int x = col_start8; x < col_end8; x += sample_step) {
+            const ptrdiff_t a_pos = (y * as + x) >> 5;
+            const ptrdiff_t b_pos = (y * bs + x) >> 5;
+            const ptrdiff_t sub_pos = x & 31;
+            if (a[a_pos].mv[sub_pos].n != b[b_pos].mv[sub_pos].n ||
+                ((a[a_pos].mv[sub_pos].n != INVALID_TMV || check_all_refs) &&
+                 a[a_pos].refdist[sub_pos] != b[b_pos].refdist[sub_pos]))
+            {
+                if (fail()) {
+                    fprintf(stderr, "tip_proj y8=%d,x8=%d\n", y, x);
+                    dump_tip_proj("c", &a[a_pos], sub_pos, check_all_refs);
+                    dump_tip_proj("s", &b[b_pos], sub_pos, check_all_refs);
+                }
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static void check_tip_projection_fn(const Dav2dRefmvsDSPContext *const c) {
+    refmvs_sngl_mv_block c_dst[256], a_dst[256];
+
+    declare_func(void, refmvs_sngl_mv_block *rp_proj, ptrdiff_t stride,
+                 int col_start8, int col_end8, int h8,
+                 int tmvp_sample_step, int tip_delta);
+
+    for (int sample_step = 1; sample_step <= 2; sample_step++)
+        if (check_func(c->tip_projection, "tip_projection_ss%d", sample_step)) {
+            const int sb128 = sample_step == 1 ? rnd() % 3 : 1 + (rnd() & 1);
+            const int sbsz8 = 8 << sb128;
+            const int tip_delta = 1 + (rnd() % 31);
+            const ptrdiff_t stride = 256;
+
+            const int have_right = rnd() & 1;
+            const int col_start8 = (rnd() & 255) & ~(sbsz8 - 1);
+            const int w8 = have_right ?
+                (sbsz8 + (rnd() % (257 - sbsz8 - col_start8))) & ~(sbsz8 - 1) :
+                1 + (rnd() % (256 - col_start8));
+            assert(w8 > 0);
+            const int col_end8 = col_start8 + w8;
+            assert(col_start8 >= 0 && col_end8 <= 256 && col_start8 < col_end8);
+            const int h8 = 1 + (rnd() & (sbsz8 - 1));
+
+            for (int y = 0; y < 32; y += sample_step) {
+                // initialize full rows for bench
+                for (int x = 0; x < 256; x += sample_step) {
+                    const ptrdiff_t pos = (y * stride + x) >> 5;
+                    const ptrdiff_t sub_pos = x & 31;
+                    if (rnd() & 1) {
+                        a_dst[pos].mv[sub_pos].n = INVALID_TMV;
+                    } else {
+                        a_dst[pos].mv[sub_pos].y = gen_mv(11, 3);
+                        a_dst[pos].mv[sub_pos].x = gen_mv(11, 3);
+                        a_dst[pos].refdist[sub_pos] = 1 + (rnd() % 31);
+                    }
+                }
+            }
+            memcpy(c_dst, a_dst, sizeof(*a_dst) * stride);
+
+            call_ref(c_dst, stride, col_start8, col_end8, h8,
+                     sample_step, tip_delta);
+            call_new(a_dst, stride, col_start8, col_end8, h8,
+                     sample_step, tip_delta);
+            // check one block before/after each, not just the parts
+            // written to by the code, to ensure the area around it
+            // was left unclobbered
+            check_tip_proj(c_dst, stride, a_dst, stride,
+                           imax(0, col_start8 - sample_step), have_right ?
+                           imin(col_end8 + sample_step, 256) : col_end8,
+                           h8, sample_step, 1);
+            bench_new(alternate(c_dst, a_dst), stride,
+                      0, 256, 32, sample_step, tip_delta);
+        }
+
+    report("tip_projection");
+}
+
 void checkasm_check_refmvs(void) {
     Dav2dRefmvsDSPContext c;
     dav2d_refmvs_dsp_init(&c);
@@ -606,4 +707,6 @@ void checkasm_check_refmvs(void) {
     check_splat_warpmv(&c);
     check_splat_comp_warpmv(&c);
     check_splat_comp_wedgemv(&c);
+
+    check_tip_projection_fn(&c);
 }
