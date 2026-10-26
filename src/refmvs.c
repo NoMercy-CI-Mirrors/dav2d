@@ -394,21 +394,21 @@ static void add_spatial_candidate(const int y_off, const int x_off,
         } else if (ref.ref[1] != b->ref.ref[0] && ref.ref[1] != b->ref.ref[1])
             return;
         const int nc = ref.ref[ns] != b->ref.ref[0];
+        const mv cand_mv = ((b->mf & 1) && gmv[ns].n != INVALID_MV) ?
+                           gmv[ns] : b->mv[nc];
         int oidx;
         for (oidx = 0; oidx < st->sngl_cnt; oidx++)
             if (ref.ref[!ns] == st->sngl.ref[oidx])
                 break;
         if (oidx < st->sngl_cnt) {
-            union mv cand_mv[2];
-            cand_mv[ns] = b->mv[nc];
-            cand_mv[!ns] = st->sngl.mv[oidx];
+            union mv cand_mvs[2];
+            cand_mvs[ns] = cand_mv;
+            cand_mvs[!ns] = st->sngl.mv[oidx];
             add_candidate_comp(DB_ARGS(rf, st->by4, st->bx4,
                                        y_off, x_off, "mvxp-spc")
                                st->dr, &st->drvd_cnt, 4, weight, 8,
-                               cand_mv, &st->drvd_iter_cntr, 2);
+                               cand_mvs, &st->drvd_iter_cntr, 2);
         }
-        const mv cand_mv = ((b->mf & 1) && gmv[nc].n != INVALID_MV) ?
-                           gmv[ns] : b->mv[nc];
         add_candidate_c2s(DB_ARGS(rf, st->by4, st->bx4,
                                   y_off, x_off, "sngl-c", ns)
                           &st->sngl, &st->sngl_cnt, 4, b->ref.ref[nc],
