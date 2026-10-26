@@ -1412,7 +1412,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     }
     if (hdr->allow_intrabc) {
         hdr->max_bvp_drl_bits = seqhdr->allow_max_bvp_drl_bits ?
-            dav2d_get_ref_uniform(gb, 3, seqhdr->def_max_bvp_drl_bits) + 1 :
+            dav2d_get_ref_uniform(gb, 3, seqhdr->def_max_bvp_drl_bits - 1) + 1 :
             seqhdr->def_max_bvp_drl_bits;
     }
 #if DEBUG_FRAME_HDR
@@ -1426,7 +1426,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 
     if (IS_INTER_OR_SWITCH(hdr)) {
         hdr->max_drl_bits = seqhdr->allow_frame_max_drl_bits ?
-            dav2d_get_ref_uniform(gb, 3, seqhdr->def_max_drl_bits) + 1 :
+            dav2d_get_ref_uniform(gb, 5, seqhdr->def_max_drl_bits - 1) + 1 :
             seqhdr->def_max_drl_bits;
         if (!hdr->force_integer_mv)
             hdr->mv_precision = dav2d_get_bit(gb) ? 2 : 1 + 2 * dav2d_get_bit(gb);
