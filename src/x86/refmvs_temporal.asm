@@ -28,20 +28,36 @@
 
 SECTION_RODATA 32
 
-pw_div_mult: dw    0, 1024, 16384, 963, 8192, 910, 5461, 862
-             dw 4096,  819,  3276, 780, 2730, 744, 2340, 712
-             dw 2048,  682,  1820, 655, 1638, 630, 1489, 606
-             dw 1365,  585,  1260, 564, 1170, 546, 1092, 528
+pd_div_mult: dd    0, 16384, 8192, 5461, 4096, 3276, 2730, 2340
+             dd 2048,  1820, 1638, 1489, 1365, 1260, 1170, 1092
+             dd 1024,   963,  910,  862,  819,  780,  744,  712
+             dd  682,   655,  630,  606,  585,  564,  546,  528
 
+msk_A: times 2 db  0, -1, -1, -1
+       times 2 db  8, -1, -1, -1
+       times 2 db  4, -1, -1, -1
+       times 2 db 12, -1, -1, -1
+msk_B: times 2 db  2, -1, -1, -1
+       times 2 db 10, -1, -1, -1
+       times 2 db  6, -1, -1, -1
+       times 2 db 14, -1, -1, -1
+msk_C: db 0, 0, 2, 2, 4, 4, 6, 6, 8, 8, 10, 10, 12, 12, 14, 14
+
+pw_div: dw 16384, 8192, 85 << 6, 4096
 pb_0to7: db 0, 1, 2, 3, 4, 5, 6, 7
+pb_3b5d7f9x: db 3, 11, 5, 13, 7, 15, 9, -1
 pb_082a4c6e: db 0, 8, 2, 10, 4, 12, 6, 14
 pb_06012345: db 0, 6, 0, 1, 2, 3, 4, 5
 pb_23456717: db 2, 3, 4, 5, 6, 7, 1, 7
 pb_04060123: db 0, 4, 0, 6, 0, 1, 2, 3
+pb_7x0_m1: times 7 db 0
+           db -1
 
 pd_32768: dd 32768
 pw_m32768: times 2 dw -32768
 pw_mv_invalid: dw 0x2000, 0
+pb_2: times 4 db 2
+pb_2_3: times 2 db 2, 3
 pb_6_7: times 2 db 6, 7
 pw_8: times 2 dw 8
 pw_m2047: times 2 dw -2047
@@ -61,14 +77,12 @@ SECTION .text
 INIT_YMM avx2
 cglobal tip_projection, 4, 10, 10, 32 * 4, rp, stride, col_start8, col_end8, \
                                            h8, tmvp_sample_step, tip_delta
-    mova                     m2, [pw_div_mult+0*32]
-    mova                     m3, [pw_div_mult+1*32]
     vpbroadcastd             m6, tip_deltam
-    pmaddwd                  m0, m2, m6
-    pmaddwd                  m1, m3, m6
     vpbroadcastb            xm8, xm6
-    pslld                    m6, 16
-    REPX        {pmaddwd x, m6}, m2, m3
+    pmaddwd                  m0, m6, [pd_div_mult+0*32]
+    pmaddwd                  m1, m6, [pd_div_mult+1*32]
+    pmaddwd                  m2, m6, [pd_div_mult+2*32]
+    pmaddwd                  m3, m6, [pd_div_mult+3*32]
     mova             [rsp+0*32], m0
     mova             [rsp+1*32], m1
     mova             [rsp+2*32], m2
@@ -80,6 +94,8 @@ cglobal tip_projection, 4, 10, 10, 32 * 4, rp, stride, col_start8, col_end8, \
     lea                 strideq, [strideq*5]
     cmp dword tmvp_sample_stepm, 1
     je .sample_step_1
+    mov                     r6m, r11
+    mov                      r8, rsp
     DEFINE_ARGS rp, stride, x, col_end8, hb, h
     ; fall-through to .sample_step_2. Here, we are sure that sbsz8 is 16 or 32,
     ; and therefore that col/row_start8 are at least 16-aligned
@@ -122,31 +138,32 @@ cglobal tip_projection, 4, 10, 10, 32 * 4, rp, stride, col_start8, col_end8, \
     add                      xd, 16
     cmp                      xd, col_end8d
     jl .ss2_xloop
+    mov                     r11, r6m
     RET
 .load_row_ss2:
     ; why no gatherdq? because it's 3x as slow :(
     mova                     m4, [r6+32*0+r7*4]     ; mv.x/y = rp_proj_ptr->mv[pos]
     vpblendd                 m4, [r6+32*1+r7*4-4], 10101010b
-    movzx                   r8d, byte [r6+32*4+r7+0]
-    movzx                   r9d, byte [r6+32*4+r7+2]
-    vpbroadcastd            xm0, [rsp+gprsize+r8*4]
-    vpbroadcastd            xm1, [rsp+gprsize+r9*4]
-    movzx                   r8d, byte [r6+32*4+r7+8]
-    movzx                   r9d, byte [r6+32*4+r7+10]
-    vpbroadcastd            xm2, [rsp+gprsize+r8*4]
-    vpbroadcastd            xm3, [rsp+gprsize+r9*4]
+    movzx                   r9d, byte [r6+32*4+r7+0]
+    movzx                  r11d, byte [r6+32*4+r7+2]
+    vpbroadcastd            xm0, [r8+r9*4]
+    vpbroadcastd            xm1, [r8+r11*4]
+    movzx                   r9d, byte [r6+32*4+r7+8]
+    movzx                  r11d, byte [r6+32*4+r7+10]
+    vpbroadcastd            xm2, [r8+r9*4]
+    vpbroadcastd            xm3, [r8+r11*4]
     vpblendd                xm0, xm2, 1100b
     vpblendd                xm1, xm3, 1100b
-    movzx                   r8d, byte [r6+32*4+r7+4]
-    movzx                   r9d, byte [r6+32*4+r7+6]
-    vpbroadcastd             m2, [rsp+gprsize+r8*4]
-    vpbroadcastd             m3, [rsp+gprsize+r9*4]
+    movzx                   r9d, byte [r6+32*4+r7+4]
+    movzx                  r11d, byte [r6+32*4+r7+6]
+    vpbroadcastd             m2, [r8+r9*4]
+    vpbroadcastd             m3, [r8+r11*4]
     vpblendd                 m0, m2, 110000b
     vpblendd                 m1, m3, 110000b
-    movzx                   r8d, byte [r6+32*4+r7+12]
-    movzx                   r9d, byte [r6+32*4+r7+14]
-    vpbroadcastd             m2, [rsp+gprsize+r8*4]
-    vpbroadcastd             m3, [rsp+gprsize+r9*4]
+    movzx                   r9d, byte [r6+32*4+r7+12]
+    movzx                  r11d, byte [r6+32*4+r7+14]
+    vpbroadcastd             m2, [r8+r9*4]
+    vpbroadcastd             m3, [r8+r11*4]
     vpblendd                 m0, m2, 11000000b
     vpblendd                 m1, m3, 11000000b
     psraw                    m3, m4, 15
@@ -754,4 +771,189 @@ cglobal tip_smoothen, 4, 9, 16, rp, stride, col_start8, col_end8, \
     add                      xd, 8
     cmp                      xd, col_end8d
     jl .ss1_xloop
+    RET
+
+INIT_YMM avx2
+cglobal fill_gap_proj, 4, 12, 16, 4 * mmsize, \
+                                  rp, stride, col_start8, col_end8, h8
+    lea                      r8, [pd_div_mult]
+    vpbroadcastd             m7, [pw_8]
+    vpbroadcastd             m9, [pw_mv_invalid]
+    vpbroadcastd            m10, [pw_m2047]
+    movifnidn               h8d, h8m
+    lea                 strideq, [strideq*5]
+    DEFINE_ARGS rp, stride, x, col_end8, h8, y
+.xloop:
+    ; sample_step is always 2. Therefore, we are sure that sbsz8 is 16 or 32,
+    ; and so col/row_start8 are at least 16-aligned
+    movd                    xm8, xd
+    movd                    xm6, col_end8d
+    pmovzxbd                 m5, [pb_3b5d7f9x]
+    pmovsxbd                 m4, [pb_7x0_m1]
+    mov                     r6d, xd
+    mov                     r7d, xd
+    vpbroadcastd             m8, xm8
+    vpbroadcastd             m6, xm6
+    and                     r6d, ~31
+    and                     r7d, 31
+    paddd                    m8, m5
+    lea                      r6, [r6*5]
+    pcmpgtd                  m8, m6
+    add                      r6, rpq
+    por                      m8, m4
+
+    xor                      yd, yd
+    call m(tip_projection).load_row_ss2
+    pmaddwd                  m0, m2
+    pmaddwd                  m1, m3
+    pmovzxbd                 m6, [pb_23456717]
+    vpermq                   m2, m0, q0132
+    pcmpeqd                 m14, m4, m9             ; is mv invalid
+    vpermd                   m6, m14
+    por                      m6, m8
+.yloop:
+    mova         [rsp+0*mmsize], m14
+    vbroadcasti128           m5, [r6+32*4+r7]
+    pshufb                  m12, m5, [msk_A]
+    pshufb                  m13, m5, [msk_B]
+    pshufb                  xm5, [msk_C]
+
+    ; top/right projection
+    pmulld                   m0, m1, m12            ; mv.x/y * div_mult[den] * num
+    pmulld                   m3, m2, m13
+    mova           [r6+32*4+r7], xm5                ; rp_proj_ptr->ref[pos] = ..
+    psrad                    m1, 31
+    psrad                    m2, 31
+    paddd                    m1, m0
+    paddd                    m2, m3
+    REPX          {psrad x, 10}, m1, m2
+    packssdw                 m1, m2
+    paddsw                   m1, m7
+    psraw                    m1, 4
+    pmaxsw                   m1, m10                ; tmv2_projection(top/right)
+
+    ; average top/left & top/right projection into top/right output
+    ; if left_mv == invalid: center_mv = invalid
+    ; else if right_mv == invalid: center_mv = left_mv
+    ; else: center_mv = signed_average(left_mv, right_mv)
+    vpblendvb                m0, m1, m4, m6
+    vpblendvb                m0, m9, m14
+    paddw                    m0, m4
+    psraw                    m2, m0, 15
+    pavgw                    m0, m2
+
+    ; write out interleaved version of top/left & top/right
+    pslldq                  m14, m0, 4
+    psrldq                  m15, m4, 4
+    vpblendd                m14, m4, m14, 10101010b
+    vpblendd                m15, m0, 10101010b
+    mova         [r6+32*0+r7*4], m14
+    mova         [r6+32*1+r7*4], m15
+
+    add                      yd, 2
+    cmp                      yd, h8d
+    jg .ybreak
+    lea                     r10, [r6+strideq]
+    mova          [r10+32*4+r7], xm5                ; rp_proj_ptr->ref[pos] = ..
+    je .skip_bottom
+
+    ; bottom & bottom/right pixels
+    lea                      r6, [r6+strideq*2]
+    mova         [rsp+3*mmsize], m4
+    pandn                    m1, m6, m1             ; zero invalid mvs
+    paddw                    m5, m1, m4             ; sum_x/y = center + right
+    call m(tip_projection).load_row_ss2
+    pmaddwd                  m0, m2
+    pmaddwd                  m1, m3
+    pmovzxbd                 m2, [pb_23456717]
+    pcmpeqd                  m3, m4, m9             ; is mv invalid
+    vpermd                   m2, m3
+    por                     m11, m2, m8
+    vpermq                   m2, m0, q0132
+    mova         [rsp+1*mmsize], m1
+    mova         [rsp+2*mmsize], m2
+    test                     yd, 15
+    jz .skip_bottom
+    mova                    m15, [rsp+3*mmsize]
+
+    ; bottom/left projection
+    pmulld                  m14, m0, m12
+    pmulld                   m2, m1, m13
+    psrad                    m0, 31
+    psrad                    m1, 31
+    paddd                    m0, m14
+    paddd                    m1, m2
+    REPX          {psrad x, 10}, m0, m1
+    packssdw                 m0, m1
+    paddsw                   m0, m7
+    psraw                    m0, 4
+    pmaxsw                   m0, m10                ; tmv2_projection(bottom/left)
+
+    ; average top/left & bottom/left projection into bottom/left output
+    mova                    m14, [rsp+0*mmsize]
+    vpblendvb                m1, m0, m15, m3
+    vpblendvb                m1, m9, m14
+    paddw                   m15, m1
+    psraw                    m1, m15, 15
+    pavgw                   m15, m1
+
+    ; add bottom/left projection to bottom/right aggregator
+    pandn                    m0, m3, m0             ; zero invalid mvs
+    paddw                    m5, m0                 ; sum_x/y
+    paddb                    m6, m3
+    vpbroadcastd             m0, [pb_2]
+    paddb                    m6, m0
+
+    ; bottom/right projection
+    mova                     m0, [rsp+1*mmsize]
+    mova                     m1, [rsp+2*mmsize]
+    pmulld                  m12, m0
+    pmulld                  m13, m1
+    psrad                    m0, 31
+    psrad                    m1, 31
+    paddd                    m0, m12
+    paddd                    m1, m13
+    REPX          {psrad x, 10}, m0, m1
+    packssdw                 m0, m1
+    paddsw                   m0, m7
+    psraw                    m0, 4
+    pmaxsw                   m0, m10                ; tmv2_projection(bottom/right)
+
+    ; add bottom/right projection to bottom/right aggregator
+    pandn                    m0, m11, m0            ; zero invalid mvs
+    paddw                    m5, m0                 ; sum_x/y
+    paddb                    m6, m11
+
+    ; generate bottom/right output mv
+    paddw                    m5, m5
+    vpbroadcastd             m0, [pb_2_3]
+    vpbroadcastq             m2, [pw_div]
+    paddb                    m6, m6
+    paddb                    m6, m0, m6
+    pabsw                    m0, m5
+    pshufb                   m6, m2, m6
+    pmulhrsw                 m0, m6
+    psignw                   m0, m5
+
+    ; if top/left mv is invalid: output bottom/right mv = invalid
+    vpblendvb                m0, m9, m14
+
+    ; interleave bottom/left & bottom/right output mv & write-out
+    pslldq                  m14, m0, 4
+    psrldq                   m1, m15, 4
+    vpblendd                m14, m15, m14, 10101010b
+    vpblendd                m15, m1, m0, 10101010b
+.skip_bottom:
+    mova        [r10+32*0+r7*4], m14
+    mova        [r10+32*1+r7*4], m15
+    mova                    m14, m3
+    mova                     m6, m11
+    mova                     m1, [rsp+1*mmsize]
+    mova                     m2, [rsp+2*mmsize]
+    cmp                      yd, h8d
+    jl .yloop
+.ybreak:
+    add                      xd, 16
+    cmp                      xd, col_end8d
+    jl .xloop
     RET
