@@ -2337,11 +2337,11 @@ static int opfl_pred(Dav2dTaskContext *const t,
                            iclip(top[i] + sh4 * 4 + 7, 1, h));
                     update_temporal(f, t_dst, off_x8, t_stride, sw4 >> 1, sh4 >> 1,
                                     b->ref, mv, t_swap);
-                    scaleup_8pel_mv_for_chroma(mv, f->cur.p.p.layout);
                     if (bacp)
                         have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x,
                                               t->by, y, mv, 3, 3, sw4, sh4,
                                               w, h, bw4 * bh4 * 16);
+                    scaleup_8pel_mv_for_chroma(mv, f->cur.p.p.layout);
                 }
                 for (int n = 0; n < 2; n++)
                     left[n] += 16;
