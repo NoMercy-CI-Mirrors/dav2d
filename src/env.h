@@ -161,7 +161,7 @@ static inline int get_comp_ctx(const BlockContext *nx[2],
         const int ref2 = nx[0]->ref[1][xoff[0]];
         if (ref2 == -1) {
             const int ref1 = nx[0]->ref[0][xoff[0]];
-            return !nx[0]->intrabc[xoff[0]] && refdir[ref1];
+            return !nx[0]->intrabc[xoff[0]] && refdir[ref1] == 1;
         } else return 3;
     }
     case 0: return 1;
