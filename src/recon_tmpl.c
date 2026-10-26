@@ -2446,7 +2446,7 @@ static int rmv_uvpred(Dav2dTaskContext *const t,
     if (bacp) *mask = DEFERRED_MASK_MARKER;
     int have_bacp = 0;
 
-    const int w = f->bw * 4 >> ss_hor, h = f->bh * 4 >> ss_hor;
+    const int w = f->bw * 4 >> ss_hor, h = f->bh * 4 >> ss_ver;
     const int rw4 = imin(bw4, r_step), rh4 = imin(bh4, r_step);
     const int ow4 = imin(bw4, o_step), oh4 = imin(bh4, o_step);
     const int hhtaps = 2 + 2 * (rw4 > 1 + ss_hor);
