@@ -3528,6 +3528,204 @@ static int checked_decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 // For chroma, these choices can then be used to infer the partition/direction.
 // sdp/cfl delay restrictions can also be calculated using these values.
 
+static inline int sdp_root_split(const Dav2dFrameContext *const f,
+                                 const enum BlockSize root_bs)
+{
+    return root_bs == BS_64x64 && f->seq_hdr->sdp &&
+           !(f->frame_hdr->frame_type & 1);
+}
+
+static inline int decode_4way(MsacContext *const s, const int ref,
+                              uint16_t *const cdf, int n_bits)
+{
+    assert(n_bits >= 4);
+    const int bin = dav2d_msac_decode_symbol_adapt4(s, cdf, 3);
+    const int rem = dav2d_msac_decode_bools_bypass(s, n_bits + bin + !bin - 4);
+    const int v = (bin ? (1 << (n_bits + bin - 4)) : 0) + rem;
+    const int n = 1 << n_bits;
+    return ref * 2 <= n ? inv_recenter(ref, v) :
+                          n - 1 - inv_recenter(n - 1 - ref, v);
+}
+
+static int read_wiener_ref(Dav2dTileState *const ts, const int bank_size,
+                           const int bank_idx, int *const exact_match)
+{
+    *exact_match = dav2d_msac_decode_bool_bypass(&ts->msac);
+    int r;
+    for (r = 0; r < bank_size - 1; r++) {
+        const int found = dav2d_msac_decode_bool_bypass(&ts->msac);
+        if (found) break;
+    }
+    return (bank_idx - r) & 3;
+}
+
+static void read_wiener_filter(Dav2dTileState *const ts,
+                               int8_t *const filter,
+                               const int8_t *const ref_filter,
+                               const int p)
+{
+    const unsigned *const masks = p ? dav2d_subset_masks_uv : dav2d_subset_masks_y;
+    const int8_t (*const cf_range)[2] = p ? dav2d_ns_wiener_coef_range_uv :
+                                            dav2d_ns_wiener_coef_range_y;
+
+    int s;
+    for (s = 0; s < 3 - !!p; s++) {
+        const int found = dav2d_msac_decode_bool_adapt(&ts->msac,
+                              ts->cdf.m.wiener_ns_len[!!p]);
+        if (!found) break;
+    }
+
+    const unsigned mask = masks[s];
+    const int asym = p && s &&
+        dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.wiener_ns_sym);
+    for (int i = 0, m = mask; i < 16 + !!p * 2; i++, m >>= 1) {
+        if (!(m & 1)) continue;
+        filter[i] = decode_4way(&ts->msac, ref_filter[i] - cf_range[i][1],
+                                ts->cdf.m.wiener_ns_cf, cf_range[i][0]) +
+                    cf_range[i][1];
+        if (asym && i >= 6) {
+            filter[i + 1] = filter[i];
+            i++;
+            m >>= 1;
+        }
+    }
+}
+
+static void read_restoration_info(Dav2dTaskContext *const t,
+                                  Av2RestorationUnit *const lr, const int p,
+                                  const enum Dav2dRestorationType frame_type)
+{
+    const Dav2dFrameContext *const f = t->f;
+    Dav2dTileState *const ts = t->ts;
+
+    if (frame_type == DAV2D_RESTORATION_SWITCHABLE) {
+        assert(!p);
+        if (dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.rst_switchable[0])) {
+            lr->type = DAV2D_RESTORATION_NONE;
+        } else {
+            const int type = dav2d_msac_decode_bool_adapt(&ts->msac,
+                                 ts->cdf.m.rst_switchable[1]);
+            lr->type = type ? DAV2D_RESTORATION_PC_WIENER :
+                              DAV2D_RESTORATION_NS_WIENER;
+        }
+    } else {
+        assert(!p || frame_type == DAV2D_RESTORATION_NS_WIENER);
+        uint16_t *const cdf = frame_type == DAV2D_RESTORATION_NS_WIENER ?
+                              ts->cdf.m.rst_ns_wiener : ts->cdf.m.rst_pc_wiener;
+        const int type = dav2d_msac_decode_bool_adapt(&ts->msac, cdf);
+        lr->type = type ? frame_type : DAV2D_RESTORATION_NONE;
+    }
+
+    const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[p].ns;
+    if (lr->type == DAV2D_RESTORATION_NS_WIENER && !pd->frame_filters_on) {
+        if (p) {
+            int exact_match;
+            struct WienerBankUV *const bank = &ts->wiener_bank_uv[p-1];
+            const int r = read_wiener_ref(ts, bank->size, bank->idx,
+                                          &exact_match);
+
+            int8_t *const filter = lr->ns_filter[0];
+            const int8_t *ref_filter = bank->filter[r];
+            if (exact_match) {
+                memcpy(filter, ref_filter, 18);
+                if (!bank->size)
+                    bank->size = 1;
+            } else {
+                read_wiener_filter(ts, filter, ref_filter, p);
+                const int bidx = bank->idx = (1 + bank->idx) & 3;
+                memcpy(bank->filter[bidx], filter, sizeof(*filter) * 18);
+                bank->size += bank->size < 4;
+            }
+        } else {
+            struct WienerBankY *const bank = &ts->wiener_bank_y;
+            const int n_classes = pd->num_classes;
+            unsigned exact_match_mask = 0;
+            uint8_t bank_refs[16];
+            for (int n = 0, mask = 1; n < n_classes; n++, mask <<= 1) {
+                int exact_match;
+                bank_refs[n] = read_wiener_ref(ts, bank->size[n],
+                                               bank->idx[n],
+                                               &exact_match);
+                exact_match_mask |= mask * exact_match;
+            }
+
+            for (int n = 0; n < n_classes; n++, exact_match_mask >>= 1) {
+                const int r = bank_refs[n];
+                int8_t *const filter = lr->ns_filter[n];
+                const int8_t *ref_filter = bank->filter[r][n];
+                if (exact_match_mask & 1) {
+                    memcpy(filter, ref_filter, 16);
+                    if (!bank->size[n])
+                        bank->size[n] = 1;
+                    continue;
+                }
+                read_wiener_filter(ts, filter, ref_filter, p);
+                const int bidx = bank->idx[n] = (1 + bank->idx[n]) & 3;
+                memcpy(bank->filter[bidx][n], filter, sizeof(*filter) * 16);
+                bank->size[n] += bank->size[n] < 4;
+            }
+        }
+    }
+}
+
+// Read the loop restoration coefficients of planes [p_start, p_end) for
+// the superblock at t->by/t->bx.
+static void read_sb_restoration(Dav2dTaskContext *const t,
+                                const int p_start, const int p_end)
+{
+    const Dav2dFrameContext *const f = t->f;
+    Dav2dTileState *const ts = t->ts;
+    const int sbsz = f->sb_step * 4;
+    for (int p = p_start; p < p_end; p++) {
+        const int ss_ver = p && f->ss_ver, ss_hor = p && f->ss_hor;
+        if (f->frame_hdr->restoration.p[p].type == DAV2D_RESTORATION_NONE)
+            continue;
+
+        const int tx = 4 * (t->bx - ts->tiling.col_start) >> ss_hor;
+        const int ty = 4 * (t->by - ts->tiling.row_start) >> ss_ver;
+        const int unit_sz_log2 = f->frame_hdr->restoration.unit_size[!!p];
+        const int unit_sz = 1 << unit_sz_log2;
+        const unsigned mask = unit_sz - 1;
+        if ((tx | ty) & mask) continue;
+        const int tw = ts->tiling.col_end * 4 >> ss_hor;
+        const int th = ts->tiling.row_end * 4 >> ss_ver;
+        const int half_unit = unit_sz >> 1;
+        // Round half up at frame boundaries, if there's more than one
+        // restoration unit
+        const int fx = 4 * t->bx >> ss_hor, fy = t->by * 4 >> ss_ver;
+        if ((ty && fy + half_unit > th) || (tx && fx + half_unit > tw))
+            continue;
+
+        const enum Dav2dRestorationType frame_type = f->frame_hdr->restoration.p[p].type;
+
+        // FIXME many of these values can be pre-calculated at frame-level
+        const int sbw = sbsz >> ss_hor, sbh = sbsz >> ss_ver;
+        const int lruw = imax(1, imin(tw - fx + half_unit, sbw) >> unit_sz_log2);
+        const int lruh = imax(1, imin(th - fy + half_unit, sbh) >> unit_sz_log2);
+        // 64px units (64x64 superblocks) give a shift of -1; there is then
+        // one unit per superblock (lruw == lruh == 1), so 0 is equivalent
+        const int vsh = imax(0, unit_sz_log2 - 7 + ss_ver);
+        const int hsh = imax(0, unit_sz_log2 - 7 + ss_hor);
+        assert(unit_sz_log2 - 7 + imin(ss_ver, ss_hor) >= 0 ||
+               (lruw == 1 && lruh == 1));
+        int sb_idx = (t->by >> 6) * f->sb256w + (t->bx >> 6);
+        // TODO: store restoration data sequentially instead
+        int start_unit_idx = ((t->by & 0x30) >> 2) + ((t->bx & 0x30) >> 4);
+
+        // FIXME I think lruh is always 1, so this loop may be eliminated
+        for (int y = 0; y < lruh; y++, sb_idx += f->sb256w << vsh) {
+            for (int x = 0; x < lruw; x++) {
+                int unit_idx = start_unit_idx; // TODO: + x * ... + y * ...;
+                Av2RestorationUnit *const lr =
+                    &f->lf.lr_mask[sb_idx + (x << hsh)].lr[p][unit_idx];
+                read_restoration_info(t, lr, p, frame_type);
+                DEBUG_BLOCK_printf("Post-restoration[p=%d,type=%d]: r=%d\n",
+                                   p, lr->type, ts->msac.rng);
+            }
+        }
+    }
+}
+
 static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                      const enum BlockSize lbs, enum BlockSize cbs,
                      int *const dir_ptr)
@@ -3551,6 +3749,11 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     {
         int dir = 0;
         if (decode_sb(t, DB_ONLY(depth) lbs, BS_INVALID, &dir)) return -1;
+        if (sdp_root_split(f, f->root_bs) &&
+            (t->task_thread.pass & PASS_ENTROPY))
+        {
+            read_sb_restoration(t, 1, 3);
+        }
         return decode_sb(t, DB_ONLY(depth) BS_INVALID, cbs, &dir);
     }
 
@@ -4309,139 +4512,6 @@ static void setup_tile(Dav2dTileState *const ts,
     }
 }
 
-static inline int decode_4way(MsacContext *const s, const int ref,
-                              uint16_t *const cdf, int n_bits)
-{
-    assert(n_bits >= 4);
-    const int bin = dav2d_msac_decode_symbol_adapt4(s, cdf, 3);
-    const int rem = dav2d_msac_decode_bools_bypass(s, n_bits + bin + !bin - 4);
-    const int v = (bin ? (1 << (n_bits + bin - 4)) : 0) + rem;
-    const int n = 1 << n_bits;
-    return ref * 2 <= n ? inv_recenter(ref, v) :
-                          n - 1 - inv_recenter(n - 1 - ref, v);
-}
-
-static int read_wiener_ref(Dav2dTileState *const ts, const int bank_size,
-                           const int bank_idx, int *const exact_match)
-{
-    *exact_match = dav2d_msac_decode_bool_bypass(&ts->msac);
-    int r;
-    for (r = 0; r < bank_size - 1; r++) {
-        const int found = dav2d_msac_decode_bool_bypass(&ts->msac);
-        if (found) break;
-    }
-    return (bank_idx - r) & 3;
-}
-
-static void read_wiener_filter(Dav2dTileState *const ts,
-                               int8_t *const filter,
-                               const int8_t *const ref_filter,
-                               const int p)
-{
-    const unsigned *const masks = p ? dav2d_subset_masks_uv : dav2d_subset_masks_y;
-    const int8_t (*const cf_range)[2] = p ? dav2d_ns_wiener_coef_range_uv :
-                                            dav2d_ns_wiener_coef_range_y;
-
-    int s;
-    for (s = 0; s < 3 - !!p; s++) {
-        const int found = dav2d_msac_decode_bool_adapt(&ts->msac,
-                              ts->cdf.m.wiener_ns_len[!!p]);
-        if (!found) break;
-    }
-
-    const unsigned mask = masks[s];
-    const int asym = p && s &&
-        dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.wiener_ns_sym);
-    for (int i = 0, m = mask; i < 16 + !!p * 2; i++, m >>= 1) {
-        if (!(m & 1)) continue;
-        filter[i] = decode_4way(&ts->msac, ref_filter[i] - cf_range[i][1],
-                                ts->cdf.m.wiener_ns_cf, cf_range[i][0]) +
-                    cf_range[i][1];
-        if (asym && i >= 6) {
-            filter[i + 1] = filter[i];
-            i++;
-            m >>= 1;
-        }
-    }
-}
-
-static void read_restoration_info(Dav2dTaskContext *const t,
-                                  Av2RestorationUnit *const lr, const int p,
-                                  const enum Dav2dRestorationType frame_type)
-{
-    const Dav2dFrameContext *const f = t->f;
-    Dav2dTileState *const ts = t->ts;
-
-    if (frame_type == DAV2D_RESTORATION_SWITCHABLE) {
-        assert(!p);
-        if (dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.rst_switchable[0])) {
-            lr->type = DAV2D_RESTORATION_NONE;
-        } else {
-            const int type = dav2d_msac_decode_bool_adapt(&ts->msac,
-                                 ts->cdf.m.rst_switchable[1]);
-            lr->type = type ? DAV2D_RESTORATION_PC_WIENER :
-                              DAV2D_RESTORATION_NS_WIENER;
-        }
-    } else {
-        assert(!p || frame_type == DAV2D_RESTORATION_NS_WIENER);
-        uint16_t *const cdf = frame_type == DAV2D_RESTORATION_NS_WIENER ?
-                              ts->cdf.m.rst_ns_wiener : ts->cdf.m.rst_pc_wiener;
-        const int type = dav2d_msac_decode_bool_adapt(&ts->msac, cdf);
-        lr->type = type ? frame_type : DAV2D_RESTORATION_NONE;
-    }
-
-    const struct Dav2dNSWienerPlane *const pd = &f->frame_hdr->restoration.p[p].ns;
-    if (lr->type == DAV2D_RESTORATION_NS_WIENER && !pd->frame_filters_on) {
-        if (p) {
-            int exact_match;
-            struct WienerBankUV *const bank = &ts->wiener_bank_uv[p-1];
-            const int r = read_wiener_ref(ts, bank->size, bank->idx,
-                                          &exact_match);
-
-            int8_t *const filter = lr->ns_filter[0];
-            const int8_t *ref_filter = bank->filter[r];
-            if (exact_match) {
-                memcpy(filter, ref_filter, 18);
-                if (!bank->size)
-                    bank->size = 1;
-            } else {
-                read_wiener_filter(ts, filter, ref_filter, p);
-                const int bidx = bank->idx = (1 + bank->idx) & 3;
-                memcpy(bank->filter[bidx], filter, sizeof(*filter) * 18);
-                bank->size += bank->size < 4;
-            }
-        } else {
-            struct WienerBankY *const bank = &ts->wiener_bank_y;
-            const int n_classes = pd->num_classes;
-            unsigned exact_match_mask = 0;
-            uint8_t bank_refs[16];
-            for (int n = 0, mask = 1; n < n_classes; n++, mask <<= 1) {
-                int exact_match;
-                bank_refs[n] = read_wiener_ref(ts, bank->size[n],
-                                               bank->idx[n],
-                                               &exact_match);
-                exact_match_mask |= mask * exact_match;
-            }
-
-            for (int n = 0; n < n_classes; n++, exact_match_mask >>= 1) {
-                const int r = bank_refs[n];
-                int8_t *const filter = lr->ns_filter[n];
-                const int8_t *ref_filter = bank->filter[r][n];
-                if (exact_match_mask & 1) {
-                    memcpy(filter, ref_filter, 16);
-                    if (!bank->size[n])
-                        bank->size[n] = 1;
-                    continue;
-                }
-                read_wiener_filter(ts, filter, ref_filter, p);
-                const int bidx = bank->idx[n] = (1 + bank->idx[n]) & 3;
-                memcpy(bank->filter[bidx][n], filter, sizeof(*filter) * 16);
-                bank->size[n] += bank->size[n] < 4;
-            }
-        }
-    }
-}
-
 // modeled after the equivalent function in aomdec:decodeframe.c
 static int check_trailing_bits_after_symbol_coder(const MsacContext *const msac) {
     // check marker bit (single 1), followed by zeroes
@@ -4627,54 +4697,11 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
         {
             dav2d_refmvs_reset_sb(&t->rt, t->by, t->bx);
         }
-        // Restoration filter
-        const int sbsz = f->sb_step * 4;
-        for (int p = 0, ss_ver = 0, ss_hor = 0; p < 3;
-             p++, ss_ver = f->ss_ver, ss_hor = f->ss_hor)
-        {
-            if (f->frame_hdr->restoration.p[p].type == DAV2D_RESTORATION_NONE)
-                continue;
-
-            const int tx = 4 * (t->bx - ts->tiling.col_start) >> ss_hor;
-            const int ty = 4 * (t->by - ts->tiling.row_start) >> ss_ver;
-            const int unit_sz_log2 = f->frame_hdr->restoration.unit_size[!!p];
-            const int unit_sz = 1 << unit_sz_log2;
-            const unsigned mask = unit_sz - 1;
-            if ((tx | ty) & mask) continue;
-            const int tw = ts->tiling.col_end * 4 >> ss_hor;
-            const int th = ts->tiling.row_end * 4 >> ss_ver;
-            const int half_unit = unit_sz >> 1;
-            // Round half up at frame boundaries, if there's more than one
-            // restoration unit
-            const int fx = 4 * t->bx >> ss_hor, fy = t->by * 4 >> ss_ver;
-            if ((ty && fy + half_unit > th) || (tx && fx + half_unit > tw))
-                continue;
-
-            const enum Dav2dRestorationType frame_type = f->frame_hdr->restoration.p[p].type;
-
-            // FIXME many of these values can be pre-calculated at frame-level
-            const int sbw = sbsz >> ss_hor, sbh = sbsz >> ss_ver;
-            const int lruw = imax(1, imin(tw - fx + half_unit, sbw) >> unit_sz_log2);
-            const int lruh = imax(1, imin(th - fy + half_unit, sbh) >> unit_sz_log2);
-            const int vsh = unit_sz_log2 - 7 + ss_ver;
-            const int hsh = unit_sz_log2 - 7 + ss_hor;
-            assert(vsh >= 0 && hsh >= 0); // FIXME: unit_sz_log2 can be 6
-            int sb_idx = (t->by >> 6) * f->sb256w + (t->bx >> 6);
-            // TODO: store restoration data sequentially instead
-            int start_unit_idx = ((t->by & 0x30) >> 2) + ((t->bx & 0x30) >> 4);
-
-            // FIXME I think lruh is always 1, so this loop may be eliminated
-            for (int y = 0; y < lruh; y++, sb_idx += f->sb256w << vsh) {
-                for (int x = 0; x < lruw; x++) {
-                    int unit_idx = start_unit_idx; // TODO: + x * ... + y * ...;
-                    Av2RestorationUnit *const lr =
-                        &f->lf.lr_mask[sb_idx + (x << hsh)].lr[p][unit_idx];
-                    read_restoration_info(t, lr, p, frame_type);
-                    DEBUG_BLOCK_printf("Post-restoration[p=%d,type=%d]: r=%d\n",
-                                       p, lr->type, ts->msac.rng);
-                }
-            }
-        }
+        // Restoration filter. In intra frames with SDP and 64x64
+        // superblocks, the luma and chroma trees split at the superblock
+        // root; the chroma coefficients are then read in decode_sb(),
+        // between the two trees (as AVM does).
+        read_sb_restoration(t, 0, sdp_root_split(f, root_bs) ? 1 : 3);
         int dir = 0;
         t->sdp_cfl_disallowed = 0;
         if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
