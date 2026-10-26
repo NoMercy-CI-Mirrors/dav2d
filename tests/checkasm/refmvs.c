@@ -26,6 +26,7 @@
 
 #include "tests/checkasm/internal.h"
 #include "common/attributes.h"
+#include "src/env.h"
 #include "src/refmvs.h"
 #include "src/wedge.h"
 
@@ -120,191 +121,6 @@ static int check_temporal_mv(const refmvs_temporal_block *a, const ptrdiff_t as,
     }
     return 0;
 }
-
-#if 0
-static inline int get_min_mv_val(const int idx) {
-    if      (idx <= 9)  return idx;
-    else if (idx <= 18) return (idx - 9) * 10;
-    else if (idx <= 27) return (idx - 18) * 100;
-    else if (idx <= 36) return (idx - 27) * 1000;
-    else                return (idx - 36) * 10000;
-}
-
-static inline void gen_tmv(refmvs_temporal_block *const rb, const int8_t *const ref2ref) {
-    rb->ref.ref[1] = -1;
-    rb->ref.ref[0] = rnd() % 7;
-    if (!rb->ref.ref[0]) return;
-    static const int x_prob[] = {
-        26447556, 6800591, 3708783,  2198592, 1635940, 1145901, 1052602, 1261759,
-         1099739,  755108, 6075404,  4355916, 3254908, 2897157, 2273676, 2154432,
-         1937436, 1694818, 1466863, 10203087, 5241546, 3328819, 2187483, 1458997,
-         1030842,  806863,  587219,   525024, 1858953,  422368,  114626,   16992
-    };
-    static const int y_prob[] = {
-        33845001, 7591218,  6425971, 4115838, 4032161, 2515962, 2614601, 2343656,
-         2898897, 1397254, 10125350, 5124449, 3232914, 2185499, 1608775, 1342585,
-          980208,  795714,   649665, 3369250, 1298716,  486002,  279588,  235990,
-          110318,   89372,    66895,   46980,  153322,   32960,    4500,     389
-    };
-    const int prob = rnd() % 100000000;
-    int acc = 0;
-    for (unsigned i = 0; i < ARRAY_SIZE(x_prob); i++) {
-        acc += x_prob[i];
-        if (prob < acc) {
-            const int min = get_min_mv_val(i);
-            const int max = get_min_mv_val(i + 1);
-            const int val = min + rnd() % (max - min);
-            rb->mv.mv[0].x = iclip(val * ref2ref[rb->ref.ref[0]], -(1 << 15), (1 << 15) - 1);
-            break;
-        }
-    }
-    acc = 0;
-    for (unsigned i = 0; i < ARRAY_SIZE(y_prob); i++) {
-        acc += y_prob[i];
-        if (prob < acc) {
-            const int min = get_min_mv_val(i);
-            const int max = get_min_mv_val(i + 1);
-            const int val = min + rnd() % (max - min);
-            rb->mv.mv[0].y = iclip(val * ref2ref[rb->ref.ref[0]], -(1 << 15), (1 << 15) - 1);
-            break;
-        }
-    }
-}
-
-static inline int get_ref2cur(void) {
-    const int prob = rnd() % 100;
-    static const uint8_t ref2cur[11] = { 35, 55, 67, 73, 78, 83, 84, 87, 90, 93, 100 };
-    for (int i = 0; i < 11; i++)
-        if (prob < ref2cur[i])
-            return rnd() & 1 ? -(i + 1) : i + 1;
-    return 0;
-}
-
-static inline int get_seqlen(void) {
-    int len = 0, max_len;
-    const int prob = rnd() % 100000;
-    // =1 =2 =3 =4  <8  =8 <16 =16 <32 =32 <48 =48 <64 =64 >64 eq240
-    //  5 17 1.5 16  5  10  5   7   4   3  1.5  2   1    2   20   15   chimera blocks
-    // 25 38 2.5 19 3.5 5.5 2 1.87 .86 .4  .18 .2 .067 .165 .478 .28   chimera sequences
-
-    if      (prob < 25000) len = 1;       // =1   5%
-    else if (prob < 63000) len = 2;       // =2   17%
-    else if (prob < 65500) len = 3;       // =3   1.5%
-    else if (prob < 84500) len = 4;       // =4   16%
-    else if (prob < 88000) max_len = 7;   // <8   5% (43.5% tot <8)
-    else if (prob < 93500) len = 8;       // =8   10%
-    else if (prob < 95500) max_len = 15;  // <16  5%
-    else if (prob < 97370) len = 16;      // =16  7%
-    else if (prob < 98230) max_len = 31;  // <32  4%
-    else if (prob < 98630) len = 32;      // =32  3%
-    else if (prob < 98810) max_len = 47;  // <48  1.5%
-    else if (prob < 99010) len = 48;      // =48  2%
-    else if (prob < 99077) max_len = 63;  // <64  1%
-    else if (prob < 99242) len = 64;      // =64  2%
-    else if (prob < 99720) max_len = 239; // <240 5%
-    else                   len = 240;     // =240 15%
-
-    if (!len) len = 1 + rnd() % max_len;
-    return len;
-}
-
-static inline void init_rp_ref(refmvs_frame const *const rf,
-                               const int col_start8, const int col_end8,
-                               const int row_start8, const int row_end8)
-{
-    const int col_start8i = imax(col_start8 - 8, 0);
-    const int col_end8i = imin(col_end8 + 8, rf->iw8);
-    for (int n = 0; n < rf->n_mfmvs; n++) {
-        refmvs_temporal_block *rp_ref = rf->rp_ref[rf->mfmv[n].ref];
-        for (int i = row_start8; i < imin(row_end8, rf->ih8); i++) {
-            for (int j = col_start8i; j < col_end8i;) {
-                refmvs_temporal_block rb;
-                gen_tmv(&rb, rf->mfmv_ref2ref[n]);
-                for (int k = get_seqlen(); k && j < col_end8i; k--, j++)
-                    rp_ref[i * rf->iw8 + j] = rb;
-            }
-        }
-    }
-}
-
-static void check_load_tmvs(const Dav2dRefmvsDSPContext *const c) {
-    refmvs_temporal_block *rp_ref[7] = {0};
-    refmvs_temporal_block c_rp_proj[240 * 63];
-    refmvs_temporal_block a_rp_proj[240 * 63];
-    refmvs_frame rf = {
-        .rp_ref = rp_ref,
-        .rp_stride = 240, .iw8 = 240, .ih8 = 63,
-        .n_mfmvs = 3
-    };
-    const size_t rp_ref_sz = rf.ih8 * rf.rp_stride * sizeof(refmvs_temporal_block);
-
-    declare_func(void, const refmvs_frame *rf, int tile_row_idx,
-                 int col_start8, int col_end8, int row_start8, int row_end8);
-
-    if (check_func(c->load_tmvs, "load_tmvs")) {
-        const int row_start8 = (rnd() & 3) << 4;
-        const int row_end8 = row_start8 + 16;
-        const int col_start8 = rnd() & 31;
-        const int col_end8 = rf.iw8 - (rnd() & 31);
-
-        for (int n = 0; n < rf.n_mfmvs; n++) {
-            rf.mfmv_ref[n] = rnd() % 7;
-            rf.mfmv_ref2cur[n] = get_ref2cur();
-            for (int r = 0; r < 7; r++)
-                rf.mfmv_ref2ref[n][r] = rnd() & 31;
-        }
-        for (int n = 0; n < rf.n_mfmvs; n++) {
-            refmvs_temporal_block **p_rp_ref = &rp_ref[rf.mfmv_ref[n]];
-            if (!*p_rp_ref)
-                *p_rp_ref = malloc(rp_ref_sz);
-        }
-        init_rp_ref(&rf, 0, rf.iw8, row_start8, row_end8);
-        for (int i = 0; i < rf.iw8 * rf.ih8; i++) {
-            c_rp_proj[i].mv.n = a_rp_proj[i].mv.n = 0xdeadbeef;
-            c_rp_proj[i].ref = a_rp_proj[i].ref = 0xdd;
-        }
-
-        rf.n_tile_threads = 1;
-
-        rf.rp_proj = c_rp_proj;
-        call_ref(&rf, 0, col_start8, col_end8, row_start8, row_end8);
-        rf.rp_proj = a_rp_proj;
-        call_new(&rf, 0, col_start8, col_end8, row_start8, row_end8);
-
-        for (int i = 0; i < rf.ih8; i++)
-            for (int j = 0; j < rf.iw8; j++)
-                if (c_rp_proj[i * rf.iw8 + j].mv.n != a_rp_proj[i * rf.iw8 + j].mv.n ||
-                    (c_rp_proj[i * rf.iw8 + j].ref != a_rp_proj[i * rf.iw8 + j].ref &&
-                     c_rp_proj[i * rf.iw8 + j].mv.n != INVALID_MV))
-                {
-                    if (fail()) {
-                        fprintf(stderr, "[%d][%d] c_rp.mv.x = 0x%x a_rp.mv.x = 0x%x\n",
-                                i, j, c_rp_proj[i * rf.iw8 + j].mv.x, a_rp_proj[i * rf.iw8 + j].mv.x);
-                        fprintf(stderr, "[%d][%d] c_rp.mv.y = 0x%x a_rp.mv.y = 0x%x\n",
-                                i, j, c_rp_proj[i * rf.iw8 + j].mv.y, a_rp_proj[i * rf.iw8 + j].mv.y);
-                        fprintf(stderr, "[%d][%d] c_rp.ref = %u a_rp.ref = %u\n",
-                                i, j, c_rp_proj[i * rf.iw8 + j].ref, a_rp_proj[i * rf.iw8 + j].ref);
-                    }
-                }
-
-        if (checkasm_bench_func()) {
-            for (int n = 0; n < rf.n_mfmvs; n++) {
-                rf.mfmv_ref2cur[n] = 1;
-                for (int r = 0; r < 7; r++)
-                    rf.mfmv_ref2ref[n][r] = 1;
-            }
-            bench_new(&rf, 0, 0, rf.iw8, row_start8, row_end8);
-        }
-
-        for (int n = 0; n < rf.n_mfmvs; n++) {
-            free(rp_ref[rf.mfmv_ref[n]]);
-            rp_ref[rf.mfmv_ref[n]] = NULL;
-        }
-    }
-
-    report("load_tmvs");
-}
-#endif
 
 static void check_splat_mv(const Dav2dRefmvsDSPContext *const c) {
     refmvs_block s_dst[64 * 128], s_src;
@@ -886,6 +702,262 @@ static void check_fill_gap_traj_fn(const Dav2dRefmvsDSPContext *const c) {
     report("fill_gap_traj");
 }
 
+static void dump_tip_traj_map(const char *const tag,
+                              const refmvs_traj_map *const a)
+{
+    if (a->n == INVALID_TRAJ) {
+        fprintf(stderr, "%s: map=n:%d[invalid]\n", tag, a->n);
+    } else {
+        fprintf(stderr, "%s: map=y:%d,x:%d\n", tag, a->y, a->x);
+    }
+}
+
+static int check_tip_traj_map(const refmvs_traj_map *const a, const ptrdiff_t as,
+                              const refmvs_traj_map *const b, const ptrdiff_t bs,
+                              const int col_start8, const int col_end8,
+                              const int h8, const int sample_step)
+{
+    for (int y = 0; y < h8; y += sample_step) {
+        for (int x = col_start8; x < col_end8; x += sample_step) {
+            const ptrdiff_t a_pos = y * as + x;
+            const ptrdiff_t b_pos = y * bs + x;
+            if (a[a_pos].n != b[b_pos].n) {
+                if (fail()) {
+                    fprintf(stderr, "tip_traj_map y8=%d,x8=%d\n", y, x);
+                    dump_tip_traj_map("c", &a[a_pos]);
+                    dump_tip_traj_map("s", &b[b_pos]);
+                }
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static const uint16_t div_mult[32] = {
+       0, 16384, 8192, 5461, 4096, 3276, 2730, 2340,
+    2048,  1820, 1638, 1489, 1365, 1260, 1170, 1092,
+    1024,   963,  910,  862,  819,  780,  744,  712,
+     682,   655,  630,  606,  585,  564,  546,  528
+};
+
+static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
+    ALIGN_STK_64(union tmv, c_dst_traj_mem, 7, [32 * 256]);
+    ALIGN_STK_64(union tmv, a_dst_traj_mem, 7, [32 * 256]);
+    ALIGN_STK_64(refmvs_traj_map, c_dst_map_mem, 3, [7][32 * 256]);
+    ALIGN_STK_64(refmvs_traj_map, a_dst_map_mem, 3, [7][32 * 256]);
+    refmvs_sngl_mv_block c_dst_proj[256], a_dst_proj[256];
+    refmvs_traj_map *c_dst_map[3][7], *a_dst_map[3][7];
+    union tmv *c_dst_traj[7], *a_dst_traj[7];
+    refmvs_frame rf;
+    Dav2dSequenceHeader seq_hdr;
+    Dav2dFrameHeader frm_hdr;
+
+    declare_func(void, const refmvs_frame *rf, refmvs_sngl_mv_block *rp_proj,
+                 ptrdiff_t stride, union tmv *rp_traj[7], refmvs_traj_map *rp_map[3][7],
+                 int col_start8, int col_end8, int row_start8, int row_end8,
+                 int sample_step);
+
+    for (int traj = 0; traj <= 1; traj++)
+        for (int mfmv = 0; mfmv < 5; mfmv++)
+            for (int sample_step = 1; sample_step <= 2; sample_step++)
+                if (check_func(c->load_tmvs_refs,
+                               "load_tmvs_refs_traj%d_mfmv%d_ss%d",
+                               traj, mfmv, sample_step))
+                {
+                    const int sb128 = sample_step == 1 ? rnd() % 3 : 1 + (rnd() & 1);
+                    const int sbsz8 = 8 << sb128;
+                    frm_hdr.tmvp_sample_step = sample_step;
+                    const int mfmv_sb128 = sb128 && sample_step > 1;
+                    const int mfmv_sbsz8 = rf.mfmv_sbsz8 = 8 << mfmv_sb128;
+                    const ptrdiff_t stride = rf.rp_stride = 256;
+
+                    for (int n = 0; n < 7; n++) {
+                        c_dst_traj[n] = c_dst_traj_mem[n];
+                        a_dst_traj[n] = a_dst_traj_mem[n];
+                        for (int k = 0; k < 3; k++) {
+                            c_dst_map[k][n] = c_dst_map_mem[k][n];
+                            a_dst_map[k][n] = a_dst_map_mem[k][n];
+                        }
+                    }
+                    rf.seq_hdr = &seq_hdr;
+                    rf.frm_hdr = &frm_hdr;
+                    seq_hdr.mv_traj = traj;
+                    rf.mfmv_edge = mfmv_sbsz8 >> (sample_step == 1);
+                    rf.sbsz = sbsz8 << 1;
+                    rf.mfmv_k_shift = 3 + mfmv_sb128;
+                    refmvs_temporal_block *rp_ref[7];
+                    rf.rp_ref = rp_ref;
+
+                    rf.iw8 = 1 + (rnd() & 0xff);
+                    rf.ih8 = 1 + (rnd() & 0xff);
+                    refmvs_temporal_block *rp_ref_mem =
+                        malloc(stride * 256 * 4 * sizeof(refmvs_temporal_block));
+                    if (!rp_ref_mem) goto end;
+
+                    rf.n_mfmvs = mfmv;
+                    const int order_hint_n_bits = 1 + (rnd() & 15);
+                    const unsigned mask = (1 << order_hint_n_bits) - 1;
+                    int ref_poc[7], ref_ref_poc[7][7];
+                    const int poc = rnd() & mask; // current frame
+                    for (int n = 0; n < 7; n++) {
+                        const int rpoc = (poc - 32 + (rnd() % 65)) & mask;
+                        ref_poc[n] = rpoc;
+                    }
+                    for (int n = 0; n < 7; n++) {
+                        memcpy(ref_ref_poc[n], ref_poc, sizeof(**ref_ref_poc) * 7);
+                        const int rpoc = (poc - 32 + (rnd() % 65)) & mask;
+                        ref_poc[n] = rpoc; // update reference list
+                    }
+
+                    int i = 0;
+                    uint8_t done[7][2] = {{ 0 }};
+                    if (rf.n_mfmvs && rnd() & 1) {
+                        const int r0 = rf.mfmv[0].ref = rnd() % 7;
+                        int r1;
+                        do {
+                            r1 = rf.mfmv[0].tgt = rnd() % 7;
+                        } while (r1 == r0);
+                        const int dir = rf.mfmv[0].dir =
+                            get_poc_diff(order_hint_n_bits, ref_poc[r0],
+                                         ref_poc[r1]) < 0;
+                        done[r0][dir] = 1;
+                        i = 1;
+                    }
+                    for (; i < rf.n_mfmvs; i++) {
+                        rf.mfmv[i].tgt = -1;
+                        int r0, dir;
+                        do {
+                            r0 = rf.mfmv[i].ref = rnd() % 7;
+                            dir = rf.mfmv[i].dir = rnd() & 1;
+                        } while (done[r0][dir]);
+                        done[r0][dir] = 1;
+                    }
+                    for (int n = 0; n < rf.n_mfmvs; n++) {
+                        const int rpoc = ref_poc[rf.mfmv[n].ref];
+                        const int diff1 = get_poc_diff(order_hint_n_bits, rpoc, poc);
+                        if (abs(diff1) > 31) {
+                            rf.mfmv_ref2cur[n] = INVALID_REF2CUR;
+                        } else {
+                            rf.mfmv_ref2cur[n] = diff1;
+                            for (int m = 0; m < 7; m++) {
+                                const int rrpoc = ref_ref_poc[rf.mfmv[n].ref][m];
+                                const int diff2 = get_poc_diff(order_hint_n_bits,
+                                                               rpoc, rrpoc);
+                                rf.mfmv_ref2ref[n][m] = diff2 + 31U < 63U ? diff2 : 0;
+                                int l;
+                                for (l = 0; l < 7; l++)
+                                    if (rrpoc == ref_poc[l])
+                                        break;
+                                rf.mfmv_ref2idx[n][m] = l == 7 ? -1 : l;
+                                const int d1 = rf.mfmv_ref2cur[n];
+                                const int d2 = rf.mfmv_ref2ref[n][m];
+                                const int dv = div_mult[imin(abs(d2), 31)];
+                                rf.mfmv_ref2sf[n][m][0] = imin(abs(d1), 31) * dv;
+                                if ((d1 < 0) ^ (d2 < 0)) rf.mfmv_ref2sf[n][m][0] *= -1;
+                                const int d3 = d1 - d2;
+                                rf.mfmv_ref2sf[n][m][1] = imin(abs(d3), 31) * dv;
+                                if ((d3 < 0) ^ (d2 > 0)) rf.mfmv_ref2sf[n][m][1] *= -1;
+                            }
+                        }
+                    }
+
+                    const int col_start8 = (rnd() % rf.iw8) & ~(sbsz8 - 1);
+                    const int have_right = rf.iw8 - col_start8 > 2 * sbsz8 ?
+                                           rnd() & 1 : 0;
+                    const int w8 = have_right ?
+                        (sbsz8 + (rnd() % (rf.iw8 + 1 - sbsz8 - col_start8))) & ~(sbsz8 - 1) :
+                        1 + (rnd() % (rf.iw8 - col_start8));
+                    assert(w8 > 0);
+                    const int col_end8 = col_start8 + w8;
+                    assert(col_start8 >= 0 && col_end8 <= rf.iw8 &&
+                           col_start8 < col_end8);
+                    const int row_start8 = (rnd() % rf.ih8) & ~(sbsz8 - 1);
+                    const int row_start8_align32 = row_start8 & ~31;
+                    const int row_end8 = imin(row_start8 + sbsz8, rf.ih8);
+                    assert(row_start8 < row_end8 && row_end8 <= rf.ih8);
+
+                    for (int n = 0; n < rf.n_mfmvs; n++) {
+                        refmvs_temporal_block *r = rp_ref[rf.mfmv[n].ref] =
+                            &rp_ref_mem[n * stride * 256];
+                        for (int y = row_start8_align32; y < row_start8_align32 + 32;
+                             y += sample_step)
+                        {
+                            // initialize full rows for bench
+                            for (int x = 0; x < 256; x += sample_step) {
+                                const ptrdiff_t pos = y * stride + x;
+                                for (int n = 0; n < 2; n++) {
+                                    union mv mv;
+                                    if (rnd() & 1) {
+                                        mv.n = INVALID_MV;
+                                    } else {
+                                        mv.y = gen_mv(11, 3);
+                                        mv.x = gen_mv(11, 3);
+                                    }
+                                    const union qmv tmv =
+                                    r[pos >> 5].mv[pos & 31].mv[n] = quantize_mv(mv);
+                                    r[pos >> 5].ref[pos & 31].ref[n] =
+                                        tmv.n == INVALID_TRAJ ? -1 : rnd() % 7;
+                                }
+                            }
+                        }
+                    }
+                    // write default data (that should be unclobbered)
+                    memset(c_dst_proj, 0, sizeof(*c_dst_proj) * 256);
+                    memset(a_dst_proj, 0, sizeof(*a_dst_proj) * 256);
+                    memset(c_dst_map_mem, 0, sizeof(*c_dst_map_mem) * 3);
+                    memset(a_dst_map_mem, 0, sizeof(*a_dst_map_mem) * 3);
+                    memset(c_dst_traj_mem, 0, sizeof(*c_dst_traj_mem) * 7);
+                    memset(a_dst_traj_mem, 0, sizeof(*a_dst_traj_mem) * 7);
+
+                    call_ref(&rf, c_dst_proj, stride, c_dst_traj, c_dst_map,
+                             col_start8, col_end8, row_start8, row_end8,
+                             sample_step);
+                    call_new(&rf, a_dst_proj, stride, a_dst_traj, a_dst_map,
+                             col_start8, col_end8, row_start8, row_end8,
+                             sample_step);
+
+                    // check one block before/after each, not just the parts
+                    // written to by the code, to ensure the area around it
+                    // was left unclobbered
+                    const int h8 = row_end8 - row_start8;
+                    const int col_end8_check = have_right ?
+                        imin(256, col_end8 + sample_step) : col_end8;
+                    int res = check_tip_proj(c_dst_proj, stride, a_dst_proj, stride,
+                                             imax(0, col_start8 - sample_step),
+                                             col_end8_check, h8, sample_step, 0);
+                    for (int n = 0; n < 7 && !res; n++) {
+                        res |= check_tip_traj(c_dst_traj[n], stride, a_dst_traj[n], stride,
+                                              imax(0, col_start8 - sample_step),
+                                              col_end8_check, h8, sample_step);
+                        const int mask = mfmv_sbsz8 - 1;
+                        for (int k = -1; k <= +1 && !res; k++) {
+                            const int x_start =
+                                imax(0, col_start8 - k * mfmv_sbsz8 - sample_step);
+                            const int x_end =
+                                imin(rf.iw8, ((col_end8 + mask) & ~mask) -
+                                             k * mfmv_sbsz8 +
+                                             have_right * sample_step);
+                            res |= check_tip_traj_map(c_dst_map[k + 1][n], stride,
+                                                      a_dst_map[k + 1][n], stride,
+                                                      x_start, x_end, h8,
+                                                      sample_step);
+                        }
+                    }
+                    rf.iw8 = rf.ih8 = 256;
+                    bench_new(&rf, alternate(c_dst_proj, a_dst_proj), stride,
+                              alternate(c_dst_traj, a_dst_traj),
+                              alternate(c_dst_map, a_dst_map), 0, 256,
+                              row_start8_align32, row_start8_align32 + 32, sample_step);
+
+                    free(rp_ref_mem);
+                }
+
+end:
+    report("load_tmvs_refs");
+}
+
 void checkasm_check_refmvs(void) {
     Dav2dRefmvsDSPContext c;
     dav2d_refmvs_dsp_init(&c);
@@ -902,4 +974,5 @@ void checkasm_check_refmvs(void) {
     check_tip_fn(c.tip_smoothen, "tip_smoothen");
     check_fill_gap_proj_fn(&c);
     check_fill_gap_traj_fn(&c);
+    check_load_tmvs_refs_fn(&c);
 }
