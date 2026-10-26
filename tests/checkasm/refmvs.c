@@ -804,6 +804,88 @@ static void check_fill_gap_proj_fn(const Dav2dRefmvsDSPContext *const c) {
     report("fill_gap_proj");
 }
 
+static void dump_tip_traj(const char *const tag, const union tmv *const a) {
+    if (a->n == INVALID_TMV) {
+        fprintf(stderr, "%s: mv=y:0x%x[invalid]\n", tag, a->n);
+    } else {
+        fprintf(stderr, "%s: mv=y:%d,x:%d\n", tag, a->y, a->x);
+    }
+}
+
+static int check_tip_traj(const union tmv *const a, const ptrdiff_t as,
+                          const union tmv *const b, const ptrdiff_t bs,
+                          const int col_start8, const int col_end8,
+                          const int h8, const int sample_step)
+{
+    for (int y = 0; y < h8; y += sample_step) {
+        for (int x = col_start8; x < col_end8; x += sample_step) {
+            const ptrdiff_t a_pos = y * as + x;
+            const ptrdiff_t b_pos = y * bs + x;
+            if (a[a_pos].n != b[b_pos].n) {
+                if (fail()) {
+                    fprintf(stderr, "tip_traj y8=%d,x8=%d\n", y, x);
+                    dump_tip_traj("c", &a[a_pos]);
+                    dump_tip_traj("s", &b[b_pos]);
+                }
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+static void check_fill_gap_traj_fn(const Dav2dRefmvsDSPContext *const c) {
+    ALIGN_STK_64(union tmv, c_dst, 32 * 256,);
+    ALIGN_STK_64(union tmv, a_dst, 32 * 256,);
+
+    declare_func(void, union tmv *rp_traj, ptrdiff_t stride,
+                 int col_start8, int col_end8, int h8);
+
+    if (check_func(c->fill_gap_traj, "fill_gap_traj")) {
+        const int sb128 = 1 + (rnd() & 1);
+        const int sbsz8 = 8 << sb128;
+        const int sample_step = 2;
+        const ptrdiff_t stride = 256;
+
+        const int have_right = rnd() & 1;
+        const int col_start8 = (rnd() & 255) & ~(sbsz8 - 1);
+        const int w8 = have_right ?
+            (sbsz8 + (rnd() % (257 - sbsz8 - col_start8))) & ~(sbsz8 - 1) :
+            1 + (rnd() % (256 - col_start8));
+        assert(w8 > 0);
+        const int col_end8 = col_start8 + w8;
+        assert(col_start8 >= 0 && col_end8 <= 256 && col_start8 < col_end8);
+        const int h8 = 1 + (rnd() & (sbsz8 - 1));
+
+        for (int y = 0; y < 32; y += sample_step) {
+            // initialize full rows for bench
+            for (int x = 0; x < 256; x += sample_step) {
+                const ptrdiff_t pos = y * stride + x;
+                if (rnd() & 1) {
+                    a_dst[pos].n = INVALID_TMV;
+                } else {
+                    a_dst[pos].y = gen_mv(11, 3);
+                    a_dst[pos].x = gen_mv(11, 3);
+                }
+            }
+        }
+        memcpy(c_dst, a_dst, sizeof(*a_dst) * 32 * stride);
+
+        call_ref(c_dst, stride, col_start8, col_end8, h8);
+        call_new(a_dst, stride, col_start8, col_end8, h8);
+        // check one block before/after each, not just the parts
+        // written to by the code, to ensure the area around it
+        // was left unclobbered
+        check_tip_traj(c_dst, stride, a_dst, stride,
+                       imax(0, col_start8 - sample_step), have_right ?
+                       imin(col_end8 + sample_step, 256) : col_end8, h8, 1);
+        bench_new(alternate(c_dst, a_dst), stride, 0, 256, 32);
+    }
+
+    report("fill_gap_traj");
+}
+
 void checkasm_check_refmvs(void) {
     Dav2dRefmvsDSPContext c;
     dav2d_refmvs_dsp_init(&c);
@@ -819,4 +901,5 @@ void checkasm_check_refmvs(void) {
     check_tip_fn(c.tip_fill_holes, "tip_fill_holes");
     check_tip_fn(c.tip_smoothen, "tip_smoothen");
     check_fill_gap_proj_fn(&c);
+    check_fill_gap_traj_fn(&c);
 }
