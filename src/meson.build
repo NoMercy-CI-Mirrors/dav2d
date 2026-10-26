@@ -170,6 +170,7 @@ if is_asm_enabled
             'x86/msac.asm',
             'x86/pal.asm',
             'x86/refmvs.asm',
+            'x86/refmvs_temporal.asm',
             'x86/cdef_avx2.asm',
             'x86/cfl_avx2.asm',
             'x86/cdef_sse.asm',
