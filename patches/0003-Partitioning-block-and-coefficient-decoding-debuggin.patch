@@ -1824,7 +1824,7 @@ index 8ad0064ce..f37b10870 100644
                index);
 +#if DEBUG_BLOCK_INFO
 +  const char *const names[] = {
-+    [SHARED_PART] = "yuv",
++    [SHARED_PART] = cm->seq_params.monochrome ? "y" : "yuv",
 +    [LUMA_PART] = "y",
 +    [CHROMA_PART] = "uv",
 +  };

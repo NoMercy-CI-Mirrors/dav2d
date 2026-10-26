@@ -1560,12 +1560,15 @@ static void splat2d(uint8_t *ptr, const ptrdiff_t stride,
 }
 
 static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
-                    const enum BlockSize lbs, const enum BlockSize cbs)
+                    const enum BlockSize lbs, const enum BlockSize cbs_tree)
 {
-    const enum BlockSize bs = lbs == BS_INVALID ? cbs : lbs;
+    const enum BlockSize bs = lbs == BS_INVALID ? cbs_tree : lbs;
     assert(bs != BS_INVALID);
     Dav2dTileState *const ts = t->ts;
     const Dav2dFrameContext *const f = t->f;
+    const int is_mono = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I400;
+    assert(!is_mono || lbs != BS_INVALID);
+    const enum BlockSize cbs = is_mono ? BS_INVALID : cbs_tree;
     Av2Block *const b = f->c->task_thread.n_passes > 1 ?
         &f->frame_thread.b[t->by * f->b4_stride + t->bx] :
         &f->frame_thread.b[(t->by & 15) * 16 + (t->bx & 15)];
@@ -1698,7 +1701,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     if (b->skip_mode) {
         b->intra = 0;
     } else if (IS_INTER_OR_SWITCH(f->frame_hdr) && !t->intra_region) {
-        if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400 && lbs != cbs) {
+        if (lbs != cbs_tree) {
             // mixed-intra/inter regions in inter frames with chroma planes
             // of different sizes (in AVM language: with offsets) are inter
             b->intra = 0;
@@ -2467,7 +2470,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         int is_comp, has_subpel_filter, is_tip = 0;
 
         if (!b->skip_mode && f->frame_hdr->tip.frame_mode &&
-            cbs == lbs && imax(bw4, bh4) >= 2)
+            lbs == cbs_tree && imax(bw4, bh4) >= 2)
         {
             const int ctx = (idx < 1 ? 0 : nx[0]->ref[0][xoff[0]] == TIP_FRAME) +
                             (idx < 2 ? 0 : nx[1]->ref[0][xoff[1]] == TIP_FRAME);
@@ -3540,6 +3543,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     const int have_h_split = f->bw > t->bx + hw4;
     const int have_v_split = f->bh > t->by + hh4;
     const enum BlockSize cbs_orig = cbs;
+    const int ss_hor = f->seq_hdr->ss_hor, ss_ver = f->seq_hdr->ss_ver;
 
     // key/intraonly frames always apply SDP at the 64x64 boundary
     if (lbs == BS_64x64 && cbs == BS_64x64 &&
@@ -3696,8 +3700,8 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         bx4 = t->bx & 63;
         by4 = t->by & 63;
         // FIXME some of the code below needs to be tested for 4:2:2 w/ SDP=1
-        const int eff_ss_ver = f->ss_ver & (lbs == BS_INVALID);
-        const int eff_ss_hor = f->ss_hor & (lbs == BS_INVALID);
+        const int eff_ss_ver = ss_ver & (lbs == BS_INVALID);
+        const int eff_ss_hor = ss_hor & (lbs == BS_INVALID);
         const int bwh4ss[2] = { bw4 >> eff_ss_hor, bh4 >> eff_ss_ver };
         assert(bwh4ss[0] >= 1 && bwh4ss[1] >= 1);
         int dir = -1;
@@ -3939,7 +3943,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         break;
     case PARTITION_V: {
         assert(hw4 > 0);
-        const int sub4 = bs == cbs && (hw4 >> f->ss_hor) > 0;
+        const int sub4 = bs == cbs && (hw4 >> ss_hor) > 0;
         assert(sub4 || !pl);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][0],
@@ -3960,7 +3964,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
     case PARTITION_H: {
         assert(hh4 > 0);
-        const int sub4 = bs == cbs && (hh4 >> f->ss_ver) > 0;
+        const int sub4 = bs == cbs && (hh4 >> ss_ver) > 0;
         assert(sub4 || !pl);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][0],
@@ -3996,8 +4000,8 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
     case PARTITION_V3: {
         assert(qw4 > 0 && hh4 > 0);
-        const int sub4 = bs == cbs && (qw4 >> f->ss_hor) > 0 &&
-                                      (hh4 >> f->ss_ver) > 0;
+        const int sub4 = bs == cbs && (qw4 >> ss_hor) > 0 &&
+                                      (hh4 >> ss_ver) > 0;
         assert(sub4 || !pl);
         const int i_3only = cbs == BS_INVALID || (!sub4 && bs != BS_32x8);
         if (decode_sb(t, DB_ONLY(depth + 1)
@@ -4038,8 +4042,8 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
     case PARTITION_H3: {
         assert(qh4 > 0 && hw4 > 0);
-        const int sub4 = bs == cbs && (qh4 >> f->ss_ver) > 0 &&
-                                      (hw4 >> f->ss_hor) > 0;
+        const int sub4 = bs == cbs && (qh4 >> ss_ver) > 0 &&
+                                      (hw4 >> ss_hor) > 0;
         assert(sub4 || !pl);
         const int i_3only = cbs == BS_INVALID || (!sub4 && bs != BS_8x32);
         if (decode_sb(t, DB_ONLY(depth + 1)
@@ -4082,7 +4086,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     case PARTITION_V4B: {
         const int ew4 = qw4 >> 1;
         assert(ew4 > 0);
-        const int sub4 = bs == cbs && (ew4 >> f->ss_hor) > 0;
+        const int sub4 = bs == cbs && (ew4 >> ss_hor) > 0;
         assert(sub4 || !pl);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[1][2],
@@ -4123,7 +4127,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     case PARTITION_H4B: {
         const int eh4 = qh4 >> 1;
         assert(eh4 > 0);
-        const int sub4 = bs == cbs && (eh4 >> f->ss_ver) > 0;
+        const int sub4 = bs == cbs && (eh4 >> ss_ver) > 0;
         assert(sub4 || !pl);
         if (decode_sb(t, DB_ONLY(depth + 1)
                       pl ? BS_INVALID : pcc->part[0][2],
@@ -4577,7 +4581,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             if (f->frame_hdr->tip.frame_mode == 2) {
                 tip_frame_recon_sb(t, root_bs, c_root_bs);
             } else {
-                if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
+                if (decode_sb(t, DB_ONLY(1) root_bs, root_bs, &dir))
                     return 1;
             }
             if (t->task_thread.pass & PASS_MVRES &&
@@ -4687,7 +4691,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             if (t->by > ts->tiling.row_start)
                 memcpy(t->a_sb_cache.motion_mode, t->a->motion_mode, 64);
         }
-        if (decode_sb(t, DB_ONLY(1) root_bs, c_root_bs, &dir))
+        if (decode_sb(t, DB_ONLY(1) root_bs, root_bs, &dir))
             return 1;
         if (t->task_thread.pass & PASS_MVRES &&
             (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc))

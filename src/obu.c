@@ -1701,7 +1701,8 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 
     // restoration
     if (!hdr->all_lossless && seqhdr->restoration) {
-        for (int p = 0; p < 3; p++) {
+        const int n_planes = seqhdr->layout == DAV2D_PIXEL_LAYOUT_I400 ? 1 : 3;
+        for (int p = 0; p < n_planes; p++) {
             const unsigned disable_mask = seqhdr->rst_disable_mask[!!p];
             if (disable_mask == 0) {
                 hdr->restoration.p[p].type = dav2d_get_bits(gb, 2);
@@ -1773,7 +1774,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                        imax(seqhdr->ss_hor, seqhdr->ss_ver));
         }
 
-        for (int p = 0; p < 3; p++) {
+        for (int p = 0; p < n_planes; p++) {
             int8_t ref_filters[48][18];
             struct Dav2dNSWienerPlane *const pd = &hdr->restoration.p[p].ns;
             if (!pd->frame_filters_on) continue;
