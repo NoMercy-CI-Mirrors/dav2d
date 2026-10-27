@@ -2745,7 +2745,7 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     return 0;
 }
 
-static void bawp(Dav2dTaskContext *const t,
+static void bawp(Dav2dTaskContext *const t, const int ll,
                  const int bawp_idx, const union mv mv,
                  pixel *const dst, const ptrdiff_t stride,
                  const Dav2dThreadPicture *const refp, const int refidx,
@@ -2759,8 +2759,8 @@ static void bawp(Dav2dTaskContext *const t,
     const Dav2dDSPContext *const dsp = f->dsp;
     const uint8_t *const sb_dim = dav2d_block_dimensions[sb_bs];
     const int bx = chroma ? t->cbx : t->bx, by = chroma ? t->cby : t->by;
-    if ((sb_dim[0] > (16 << ss_hor) && bx & (sb_dim[0] - 1)) ||
-        (sb_dim[1] > (16 << ss_ver) && by & (sb_dim[1] - 1)))
+    if ((sb_dim[0] > (16 << (ss_hor && !ll)) && bx & (sb_dim[0] - 1)) ||
+        (sb_dim[1] > (16 << (ss_ver && !ll)) && by & (sb_dim[1] - 1)))
     {
         const int alpha = t->pb.bawp[plane].alpha, beta = t->pb.bawp[plane].beta;
         if (alpha != 256 || beta)
@@ -3246,7 +3246,8 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
            b->mv[0], &f->cur, 0 /* unused */, DAV2D_FILTER_BILINEAR,
            0, f->bw * 4, 0, f->bh * 4);
         if (b->morph_pred)
-            bawp(t, 1, b->mv[0], dst, f->cur.p.stride[0],
+            bawp(t, f->frame_hdr->segmentation.lossless[b->seg_id],
+                 1, b->mv[0], dst, f->cur.p.stride[0],
                  &f->cur, 0 /* unused */, bw4, bh4, w4, h4, 0, b->bs);
         if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
             hex_dump(dst, f->cur.p.stride[0], imin(f->bw - t->bx, bw4) * 4,
@@ -3274,7 +3275,8 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                    0, f->bw * 4, 0, f->bh * 4);
             }
             if (b->bawp[0]) {
-                bawp(t, b->bawp[0], b->mv[0], dst, f->cur.p.stride[0],
+                bawp(t, f->frame_hdr->segmentation.lossless[b->seg_id],
+                     b->bawp[0], b->mv[0], dst, f->cur.p.stride[0],
                      refp, b->ref.ref[0], bw4, bh4, w4, h4, 0, b->bs);
             } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
                 iiblend(t, b, dst, f->cur.p.stride[0], 0, bw4, bh4, t->by, t->bx, bs);
@@ -3758,7 +3760,8 @@ chroma: {}
                    b->filter, 0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
             }
             if (b->bawp[1]) {
-                bawp(t, 1, b->mv[0], dst, f->cur.p.stride[1],
+                bawp(t, f->frame_hdr->segmentation.lossless[b->seg_id],
+                     1, b->mv[0], dst, f->cur.p.stride[1],
                      refp, b->ref.ref[0], cbw4, cbh4, cw4, ch4, pl + 1, b->bs);
             } else if (b->motion_mode == MM_INTERINTRA || b->warp_ii) {
                 iiblend(t, b, dst, stride, 1 + pl, cbw4, cbh4, t->cby, t->cbx,
