@@ -395,8 +395,10 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     hdr->intra_edge_filter = dav2d_get_bit(gb);
     hdr->mrls = dav2d_get_bit(gb);
     hdr->cfl = dav2d_get_bit(gb);
-    if (hdr->layout != DAV2D_PIXEL_LAYOUT_I400)
+    if (hdr->layout != DAV2D_PIXEL_LAYOUT_I400) {
         hdr->cfl_ds_filter_index = dav2d_get_bits(gb, 2);
+        if (hdr->cfl_ds_filter_index == 3) hdr->cfl_ds_filter_index = 0;
+    }
     hdr->mhccp = dav2d_get_bit(gb);
     hdr->ibp = dav2d_get_bit(gb);
 #if DEBUG_SEQ_HDR
