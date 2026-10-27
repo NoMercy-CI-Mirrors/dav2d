@@ -1997,7 +1997,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         if (seqhdr->bawp)
             hdr->bawp = dav2d_get_bit(gb);
 
-        if (seqhdr->motion_modes & (1 << MM_WARP_DELTA))
+        if (hdr->motion_modes & (1 << MM_WARP_DELTA))
             hdr->warp_motion = dav2d_get_bit(gb);
     }
 
