@@ -3875,7 +3875,11 @@ chroma: {}
     }
 
     // x/y recon loop
-    for (int y = 0; y < ch4ss; y += uv_t_dim->h) {
+    if (skip_txfm) {
+        const uint64_t mask = ((1ULL << cw4ss) - 1) << cbx4;
+        for (int yy = 0; yy < ch4ss; yy++)
+            t->is_coded[1][cby4 + yy] |= mask;
+    } else for (int y = 0; y < ch4ss; y += uv_t_dim->h) {
         for (int x = 0; x < cw4ss; x += uv_t_dim->w) {
             const ptrdiff_t i = y * cbw4ss + x;
             for (int pl = 0; pl < 2; pl++) {
