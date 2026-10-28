@@ -53,11 +53,11 @@ static ALWAYS_INLINE void deblock_dsp_init_x86(Dav2dDeblockDSPContext *const c) 
     c->deblock_sb[1][0] = BF(dav2d_deblock_h_sb_uv, avx2);
     c->deblock_sb[1][1] = BF(dav2d_deblock_v_sb_uv, avx2);
 
-    c->setup_thr_sb_seg[0] = BF(dav2d_setup_thr_cols_sb64_seg, avx2);
-    c->setup_thr_sb_seg[1] = BF(dav2d_setup_thr_rows_sb64_seg, avx2);
-    c->setup_thr_sb_dq[0] = BF(dav2d_setup_thr_cols_sb64_dq, avx2);
-    c->setup_thr_sb_dq[1] = BF(dav2d_setup_thr_rows_sb64_dq, avx2);
-    c->setup_thr_sb_simple = BF(dav2d_setup_thr_sb64_simple, avx2);
+    // c->setup_thr_sb_seg[0] = BF(dav2d_setup_thr_cols_sb64_seg, avx2);
+    // c->setup_thr_sb_seg[1] = BF(dav2d_setup_thr_rows_sb64_seg, avx2);
+    // c->setup_thr_sb_dq[0] = BF(dav2d_setup_thr_cols_sb64_dq, avx2);
+    // c->setup_thr_sb_dq[1] = BF(dav2d_setup_thr_rows_sb64_dq, avx2);
+    // c->setup_thr_sb_simple = BF(dav2d_setup_thr_sb64_simple, avx2);
 #endif
 #endif
 }

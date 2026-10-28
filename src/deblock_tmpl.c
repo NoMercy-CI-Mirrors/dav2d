@@ -249,23 +249,8 @@ static void apply_sub_pu(int *q_thr, int *side_thr, int subpu) {
     *q_thr >>= subpu;
     *side_thr >>= subpu;
 
-    // Zero q_thr if side_thr is 0.
-    //
-    // We skip this for low bit-depth since side_thr is already large before
-    // q_thr is bigger than it. See the table below of qidx thresholds.
-    // ------------------------
-    // qidx | q_thr | side_thr
-    // ------------------------
-    // ...
-    // 194  |    20 | 21
-    // 195  |    21 | 21
-    // 196  |    22 | 22
-    // 197  |    22 | 22
-    // 198  |    23 | 22
-    // ...
-    if (BITDEPTH > 8)
-        *q_thr = *side_thr ? *q_thr : 0;
-    assert(*side_thr != 0 || *q_thr == 0);
+    // Disable filtering by zeroing q_thr, if side_thr is zero.
+    *q_thr = *side_thr ? *q_thr : 0;
 }
 
 static void setup_thr_cols_sb64_seg_c(pixel (*thr_dst)[16 * 16],
