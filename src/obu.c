@@ -2590,33 +2590,38 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
     case DAV2D_OBU_BRIDGE:
     case DAV2D_OBU_RAS: {
         if (!c->seq_hdr) goto error;
-        if (!c->frame_hdr_ref) {
-            c->frame_hdr_ref = dav2d_ref_create_using_pool(c->frame_hdr_pool,
-                                                           sizeof(Dav2dFrameHeader));
-            if (!c->frame_hdr_ref) return DAV2D_ERR(ENOMEM);
-        }
-#ifndef NDEBUG
-        // ensure that the reference is writable
-        assert(dav2d_ref_is_writable(c->frame_hdr_ref));
-#endif
-        c->frame_hdr = c->frame_hdr_ref->data;
-        memset(c->frame_hdr, 0, sizeof(*c->frame_hdr));
-        c->frame_hdr->tlayer_id = tlayer_id;
-        c->frame_hdr->mlayer_id = mlayer_id;
-        c->frame_hdr->xlayer_id = xlayer_id;
         const int first_tile = type == DAV2D_OBU_SEF || type == DAV2D_OBU_TIP ||
                                type == DAV2D_OBU_BRIDGE || dav2d_get_bit(&gb);
-        const int has_hdr = first_tile || dav2d_get_bit(&gb);
-        // FIXME if not first tile, we can skip re-parsing the header and
-        // instead skip the header data and move on to block data directly
-        if (has_hdr && (res = parse_frame_hdr(c, &gb, type)) < 0) {
-            c->frame_hdr = NULL;
-            goto error;
+        if (first_tile) {
+            if (!c->frame_hdr_ref) {
+                c->frame_hdr_ref = dav2d_ref_create_using_pool(c->frame_hdr_pool,
+                                                               sizeof(Dav2dFrameHeader));
+                if (!c->frame_hdr_ref) return DAV2D_ERR(ENOMEM);
+            }
+#ifndef NDEBUG
+            // ensure that the reference is writable
+            assert(dav2d_ref_is_writable(c->frame_hdr_ref));
+#endif
+            c->frame_hdr = c->frame_hdr_ref->data;
+            memset(c->frame_hdr, 0, sizeof(*c->frame_hdr));
+            c->frame_hdr->tlayer_id = tlayer_id;
+            c->frame_hdr->mlayer_id = mlayer_id;
+            c->frame_hdr->xlayer_id = xlayer_id;
+            const unsigned hdr_start = dav2d_get_bits_pos(&gb);
+            if ((res = parse_frame_hdr(c, &gb, type)) < 0) {
+                c->frame_hdr = NULL;
+                goto error;
+            }
+            c->n_frame_hdr_bits = dav2d_get_bits_pos(&gb) - hdr_start;
+            for (int n = 0; n < c->n_tile_data; n++)
+                dav2d_data_unref_internal(&c->tile[n].data);
+            c->n_tile_data = 0;
+            c->n_tiles = 0;
+        } else {
+            if (!c->frame_hdr || !c->n_tiles) goto error;
+            if (dav2d_get_bit(&gb))
+                dav2d_skip_bits(&gb, c->n_frame_hdr_bits);
         }
-        for (int n = 0; n < c->n_tile_data; n++)
-            dav2d_data_unref_internal(&c->tile[n].data);
-        c->n_tile_data = 0;
-        c->n_tiles = 0;
 
         if (type == DAV2D_OBU_SEF || type == DAV2D_OBU_TIP ||
             type == DAV2D_OBU_BRIDGE /* || bru frame inactive */)

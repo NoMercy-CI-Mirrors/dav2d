@@ -92,6 +92,28 @@ type name(GetBits *const c, const int n) {      \
 GET_BITS(dav2d_get_bits,  unsigned, uint64_t)
 GET_BITS(dav2d_get_sbits, int,      int64_t)
 
+void dav2d_skip_bits(GetBits *const c, int n_bits) {
+    assert(n_bits > 0);
+    if (c->bits_left > 0) {
+        const int n_bits_align = imin(n_bits, c->bits_left);
+        c->state <<= n_bits_align;
+        c->bits_left -= n_bits_align;
+        n_bits -= n_bits_align;
+        if (!n_bits) return;
+    }
+    const int n_bytes = n_bits >> 3;
+    if (n_bytes) {
+        if (n_bytes > c->ptr_end - c->ptr) {
+            c->error = 1;
+            return;
+        }
+        c->ptr += n_bytes;
+        n_bits -= n_bytes * 8;
+        if (!n_bits) return;
+    }
+    dav2d_get_bits(c, n_bits);
+}
+
 unsigned dav2d_get_uleb128(GetBits *const c) {
     uint64_t val = 0;
     unsigned i = 0, more;

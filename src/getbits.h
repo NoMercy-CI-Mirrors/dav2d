@@ -41,6 +41,7 @@ void dav2d_init_get_bits(GetBits *c, const uint8_t *data, size_t sz);
 unsigned dav2d_get_bit(GetBits *c);
 unsigned dav2d_get_bits(GetBits *c, int n);
 int dav2d_get_sbits(GetBits *c, int n);
+void dav2d_skip_bits(GetBits *c, int n_bits);
 unsigned dav2d_get_uleb128(GetBits *c);
 
 // Output in range 0..max-1

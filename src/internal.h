@@ -114,6 +114,7 @@ struct Dav2dContext {
     Dav2dMemPool *frame_hdr_pool;
     Dav2dRef *frame_hdr_ref;
     Dav2dFrameHeader *frame_hdr;
+    int n_frame_hdr_bits;
 
     Dav2dRef *content_light_ref;
     Dav2dContentLightLevel *content_light;
