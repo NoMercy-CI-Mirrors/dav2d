@@ -255,6 +255,8 @@ static void check_deblock_sb(deblock_sb_fn fn, const char *const name,
                 {
                     fprintf(stderr, "edge = %d\n", edge);
                 }
+
+                memset(ll_mask, 0, sizeof(ll_mask));
                 bench_new(alternate(c_dst, a_dst), stride, vmask, ll_mask,
                           q_thr, side_thr, edge, n_blks HIGHBD_TAIL_SUFFIX);
             }
