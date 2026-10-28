@@ -1804,6 +1804,8 @@ cglobal setup_thr_rows_sb64_seg_8bpc, 6, 7, 14, dst, segmap, segstride, \
     pcmpeqb          m8, m12
     vpblendvb        m0, m6, m8
     vpblendvb        m1, m7, m8
+    pcmpeqb          m7, m1, m10
+    pandn            m0, m7, m0
     mova   [dstq+0*256], m0
     mova   [dstq+1*256], m1
     mova             m0, m4                     ; prev_q_thr = cur_q_thr
@@ -1848,6 +1850,9 @@ cglobal setup_thr_cols_sb64_dq_8bpc, 4, 5, 0, dst, mask, lut, w, h, plut
     pand             m2, m0, m8
     pand             m3, m1, m8
     REPX   {psrlw x, 3}, m2, m3
+    pxor            xm7, xm7
+    pcmpeqb          m7, m3
+    pandn            m2, m7, m2
     vbroadcasti128   m4, [pb_8x2_8x3]
     vpbroadcastq     m5, [pb_mask]
 
@@ -1877,6 +1882,10 @@ cglobal setup_thr_sb64_simple_8bpc, 4, 5, 9, dst, mask, lut, w, h
     pand             m2, m0, m4
     pand             m3, m1, m4
     REPX   {psrlw x, 3}, m2, m3
+    ; If we had to average q_thr and side_thr, we would need to check if
+    ; side_thr == 0 and set q_thr to 0 if so. For 8-bpc, we can avoid that
+    ; because side_thr is already quite large before q_thr is larger.
+
     vbroadcasti128   m4, [pb_8x2_8x3]
     vpbroadcastq     m5, [pb_mask]
 .loop:
