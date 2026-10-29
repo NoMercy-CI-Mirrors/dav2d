@@ -2836,8 +2836,8 @@ static void bawp(Dav2dTaskContext *const t, const int ll,
         assert(step > 0);
         const int start = step >> 1;
         const pixel *const top = by & (f->sb_step - 1) ? &dst[-PXSTRIDE(stride)] :
-            &f->prefilter_data[plane][((f->prefilter_data_full_frame ?
-                                        by * 4 - 1 : ts->tiling.row) >> ss_ver) *
+            &f->prefilter_data[plane][(f->prefilter_data_full_frame ?
+                                       (by * 4 >> ss_ver) - 1 : ts->tiling.row) *
                                       PXSTRIDE(stride) + (bx * 4 >> ss_hor)];
         for (int i = start; i < bw; i += step) {
             const int x = ref[i - PXSTRIDE(refp->p.stride[chroma])];
