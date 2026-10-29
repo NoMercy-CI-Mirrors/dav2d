@@ -119,8 +119,12 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     test                flagsb, 0x10            ; is_top_sb_edge
     jnz .tse
     lea                   srcq, [srcq+t0*4]
-    lzcnt                  t0d, needed_topd
-    tzcnt                  t1d, needed_topd
+    test                flagsb, 0x8             ; has_l
+    setnz                  t0b
+    mov                    t1d, needed_topd
+    sub                    t1d, t0d
+    lzcnt                  t0d, t1d
+    tzcnt                  t1d, t1d
     xor                    t0d, 31
     cmp                    t0d, t1d
     setne                  t1b
