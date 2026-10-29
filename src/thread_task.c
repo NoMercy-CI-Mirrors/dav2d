@@ -772,8 +772,9 @@ void *dav2d_worker_task(void *data) {
                     res = 0;
                 }
             }
-            if (!f->frame_hdr->disable_cdf_update && !f->task_thread.update_set &&
-                !f->seq_hdr->avg_cdf_type)
+            if (f->frame_hdr->tip.frame_mode != 2 &&
+                (f->frame_hdr->disable_cdf_update ||
+                 (!f->task_thread.update_set && !f->seq_hdr->avg_cdf_type)))
             {
                 atomic_store(f->out_cdf.progress, res < 0 ? TILE_ERROR : 1);
             }
@@ -865,22 +866,8 @@ void *dav2d_worker_task(void *data) {
                      (f->seq_hdr->avg_cdf_type &&
                       atomic_fetch_add(&f->task_thread.entropy_task_counter, -1) == 1)))
                 {
-                    if (!error) {
-                        const int shift = f->frame_hdr->tiling.t.log2_cols +
-                                          f->frame_hdr->tiling.t.log2_rows;
-                        if (shift && f->seq_hdr->avg_cdf_type) {
-                            const int n_tiles = 1 << shift;
-                            dav2d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);
-                            for (int n = 1; n < n_tiles; n++)
-                                dav2d_cdf_shift_accumulate(f->out_cdf.data.cdf,
-                                                           &f->ts[n].cdf, shift);
-                        } else {
-                            memcpy(f->out_cdf.data.cdf,
-                                   &f->ts[f->frame_hdr->tiling.update].cdf,
-                                   sizeof(CdfContext));
-                        }
-                        dav2d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf);
-                    }
+                    if (!error)
+                        dav2d_decode_frame_update_cdf(f);
                     if (c->n_fc > 1)
                         atomic_store(f->out_cdf.progress, error ? TILE_ERROR : 1);
                 }

@@ -5143,6 +5143,29 @@ error:
     return retval;
 }
 
+// Derive the CDFs stored for use by subsequent frames from the tile CDFs.
+// This is also done if disable_cdf_update is set: the tile CDFs are then
+// unadapted copies of in_cdf, but averaging and count reset still apply.
+void dav2d_decode_frame_update_cdf(Dav2dFrameContext *const f) {
+    const int n_tiles = f->frame_hdr->tiling.t.cols *
+                        f->frame_hdr->tiling.t.rows;
+    if (n_tiles > 1 && f->seq_hdr->avg_cdf_type) {
+        const int shift = imin(ulog2(n_tiles), 3);
+        const int n_tiles_sh = 1 << shift;
+        assert(n_tiles_sh <= n_tiles);
+        dav2d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);
+        for (int n = 1; n < n_tiles_sh; n++) {
+            dav2d_cdf_shift_accumulate(f->out_cdf.data.cdf,
+                                       &f->ts[n].cdf, shift);
+        }
+    } else {
+        memcpy(f->out_cdf.data.cdf,
+               &f->ts[f->frame_hdr->tiling.update].cdf,
+               sizeof(CdfContext));
+    }
+    dav2d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf);
+}
+
 int dav2d_decode_frame_init_cdf(Dav2dFrameContext *const f) {
     const Dav2dContext *const c = f->c;
     int retval = DAV2D_ERR(EINVAL);
@@ -5193,6 +5216,9 @@ int dav2d_decode_frame_init_cdf(Dav2dFrameContext *const f) {
             size -= tile_sz;
         }
     }
+    // tile CDFs won't adapt, so the output CDFs can be derived right away
+    if (f->frame_hdr->disable_cdf_update)
+        dav2d_decode_frame_update_cdf(f);
     atomic_store(&f->task_thread.entropy_task_counter,
                  f->frame_hdr->tiling.t.cols * f->frame_hdr->tiling.t.rows);
 
@@ -5301,7 +5327,7 @@ void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
         dav2d_cdf_thread_unref(&f->src_cdf[0]);
         dav2d_cdf_thread_unref(&f->src_cdf[1]);
     }
-    if (f->frame_hdr && !f->frame_hdr->disable_cdf_update) {
+    if (f->frame_hdr && f->frame_hdr->tip.frame_mode != 2) {
         if (f->out_cdf.progress)
             atomic_store(f->out_cdf.progress, retval == 0 ? 1 : TILE_ERROR);
         dav2d_cdf_thread_unref(&f->out_cdf);
@@ -5358,23 +5384,7 @@ int dav2d_decode_frame(Dav2dFrameContext *const f) {
             if (!res && !f->frame_hdr->disable_cdf_update &&
                 (f->task_thread.update_set || f->seq_hdr->avg_cdf_type))
             {
-                const int n_tiles = f->frame_hdr->tiling.t.cols *
-                                    f->frame_hdr->tiling.t.rows;
-                if (n_tiles > 1 && f->seq_hdr->avg_cdf_type) {
-                    const int shift = imin(ulog2(n_tiles), 3);
-                    const int n_tiles_sh = 1 << shift;
-                    assert(n_tiles_sh <= n_tiles);
-                    dav2d_cdf_shift(f->out_cdf.data.cdf, &f->ts[0].cdf, shift);
-                    for (int n = 1; n < n_tiles_sh; n++) {
-                        dav2d_cdf_shift_accumulate(f->out_cdf.data.cdf,
-                                                   &f->ts[n].cdf, shift);
-                    }
-                } else {
-                    memcpy(f->out_cdf.data.cdf,
-                           &f->ts[f->frame_hdr->tiling.update].cdf,
-                           sizeof(CdfContext));
-                }
-                dav2d_cdf_reset_count(f->frame_hdr, f->out_cdf.data.cdf);
+                dav2d_decode_frame_update_cdf(f);
             }
         }
     }
@@ -5561,7 +5571,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             dav2d_cdf_thread_ref(&f->src_cdf[1], &c->cdf[sec_ref]);
         }
     }
-    if (!f->frame_hdr->disable_cdf_update) {
+    if (f->frame_hdr->tip.frame_mode != 2) {
         res = dav2d_cdf_thread_alloc(c, &f->out_cdf, c->n_fc > 1);
         if (res < 0) goto error;
     }
@@ -5804,7 +5814,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             dav2d_thread_picture_ref(&c->refs[i].p, &f->cur);
 
             dav2d_cdf_thread_unref(&c->cdf[i]);
-            if (!f->frame_hdr->disable_cdf_update) {
+            if (f->frame_hdr->tip.frame_mode != 2) {
                 dav2d_cdf_thread_ref(&c->cdf[i], &f->out_cdf);
             } else {
                 dav2d_cdf_thread_ref(&c->cdf[i], &f->in_cdf);
@@ -5857,7 +5867,7 @@ error:
         dav2d_cdf_thread_unref(&f->src_cdf[0]);
         dav2d_cdf_thread_unref(&f->src_cdf[1]);
     }
-    if (!f->frame_hdr->disable_cdf_update)
+    if (f->frame_hdr->tip.frame_mode != 2)
         dav2d_cdf_thread_unref(&f->out_cdf);
     for (int i = 0; i < 7; i++) {
         if (f->refp[i].p.frame_hdr)
