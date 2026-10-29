@@ -126,8 +126,7 @@ static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
         // ds_flt does nothing for 422/444
         int max_ds_flt = layout == DAV2D_PIXEL_LAYOUT_I420 ? 2 : 0;
         for (int ds_flt = 0; ds_flt <= max_ds_flt; ds_flt++) {
-            // test up to 64 pixels regardless of subsampling
-            const int base_w = (8 >> ss_hor) * (1 + (rnd() & (15 >> (1 - ss_hor))));
+            const int base_w = (8 >> ss_hor) * (1 + (rnd() & 7));
             const int base_h = (8 >> ss_ver) * (1 + (rnd() & 7));
             const int bpc = BITDEPTH == 8 ? 8 : 10 + (rnd() & 2);
             const int bitdepth_max = (1 << bpc) - 1;
@@ -143,7 +142,7 @@ static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
                 if (!is_edge_combination_valid(edges))
                     continue;
 
-                const int w = edges & LR_HAVE_RIGHT ? 64 : base_w;
+                const int w = edges & LR_HAVE_RIGHT ? 64 >> ss_hor : base_w;
                 const int h =
                     (edges & (LR_HAVE_BOTTOM | LR_HAVE_BOTTOM_INTEGRATED)) ?
                         64 >> ss_ver : base_h;
@@ -164,7 +163,7 @@ static void check_wiener_uv_luma(Dav2dLoopRestorationDSPContext *const c,
             }
 
             bench_new(alternate(c_dst, a_dst), luma, luma_stride, left, top,
-                      bottom, filter, 64, 64 >> ss_ver, 0, 0xf);
+                      bottom, filter, 64 >> ss_hor, 64 >> ss_ver, 0, 0xf);
         }
     }
 }
@@ -208,10 +207,10 @@ static void check_wiener_uv_chroma(Dav2dLoopRestorationDSPContext *const c) {
             for (int i = 0; i < 64; i++)
                 ll_mask[i][0] = rnd() & 0xffff;
 
-            const int w = edges & LR_HAVE_RIGHT ? 64 : base_w;
+            const int w = edges & LR_HAVE_RIGHT ? 64 >> (rnd() & 1) : base_w;
             const int h =
                 (edges & (LR_HAVE_BOTTOM | LR_HAVE_BOTTOM_INTEGRATED)) ?
-                    64 : base_h;
+                    64 >> (rnd() & 1) : base_h;
 
             assert(c_dst_stride == a_dst_stride);
             assert(c_dst_buf_h == a_dst_buf_h);
@@ -234,7 +233,7 @@ static void check_wiener_uv_chroma(Dav2dLoopRestorationDSPContext *const c) {
 
         memset(ll_mask, 0, sizeof(ll_mask));
         bench_new(alternate(c_dst, a_dst), a_dst_stride, left, top, bottom, luma, filter, ll_mask,
-                  64, 32, 0xf HIGHBD_TAIL_SUFFIX);
+                  32, 32, 0xf HIGHBD_TAIL_SUFFIX);
     }
 }
 

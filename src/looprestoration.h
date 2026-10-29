@@ -207,6 +207,8 @@ typedef decl_wiener_filter_fn(*wienerfilter_fn);
 
 // sum the luma component of the chroma filter
 // dst has a constant stride of 64 coefs
+// w is constrained by the smallest gdf block size (w <= 64)
+// h is constrained by the stripe height (h <= 64)
 #define decl_wiener_filter_uv_luma_fn(name) \
 void (name)(coef *dst, const pixel *luma, const ptrdiff_t stride, \
             const_left_pixel_row left, const pixel *top, const pixel *bottom, \
@@ -216,6 +218,10 @@ typedef decl_wiener_filter_uv_luma_fn(*wienerfilter_uv_luma_fn);
 
 // Compute and add the chroma component of the chroma filter to the luma filter
 // luma has a constant stride of 64 coefs
+// w is constrained by the subsampling and smallest gdf block size
+//      (w <= 64 >> horizontal sub sampling)
+// h is constrained by the subsampling and stripe height
+//      (h <= 64 >> vertical sub sampling)
 // If LR_HAVE_TOP_INTEGRATED is set in edges, then top is 6 pixels tall;
 // otherwise, top is 4 pixels tall.
 #define decl_wiener_filter_uv_chroma_fn(name) \
