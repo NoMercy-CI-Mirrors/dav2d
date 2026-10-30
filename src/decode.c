@@ -2886,6 +2886,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 const int has_mask = dav2d_msac_decode_bool_adapt(&ts->msac,
                                          ts->cdf.m.comp_type_masked[ctx]);
                 if (has_mask) {
+                    b->inter_mode = coded_mode;
                     if (imax(bw4, bh4) <= 16 &&
                         !dav2d_msac_decode_bool_adapt(&ts->msac,
                              ts->cdf.m.comp_type_weighted))
