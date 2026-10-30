@@ -769,10 +769,32 @@ static void mc_lowest_px(int *const dst, const int by4, const int bh4,
 static ALWAYS_INLINE void affine_lowest_px(int *const dst, const uint8_t *const b_dim,
                                            const int by, const int bx,
                                            const Dav2dWarpedMotionParams *const wmp,
-                                           const int ss_ver, const int ss_hor)
+                                           const int ss_ver, const int ss_hor,
+                                           const struct ScalableMotionParams *const smp)
 {
     const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
     const int32_t *const mat = wmp->matrix;
+
+    if (smp->scale) {
+        // see ext_warp_scaled(): each 8x8 block is limited to the (scaled)
+        // reference area of its center motion vector
+        const int sh = imin(b_dim[1] * v_mul, 8), sw = imin(b_dim[0] * h_mul, 8);
+        const int y = b_dim[1] * v_mul - sh; // lowest y
+        const int py = (by * 4) >> ss_ver;
+        const int cy = ((py + y) << ss_ver) + ((sh << ss_ver) >> 1);
+        for (int x = 0; x < b_dim[0] * h_mul; x += imax(sw, b_dim[0] * h_mul - sw)) {
+            const int cx = bx * 4 + (x << ss_hor) + ((sw << ss_hor) >> 1);
+            const int mvy = iclip64to32((int64_t) mat[4] * cx +
+                                        (int64_t) (mat[5] - 0x10000) * cy + mat[1],
+                                        INT32_MIN, INT32_MAX) >> 13;
+            const int64_t tmp = (int64_t) (((py + y) << 4) + mvy * (1 << !ss_ver)) *
+                                smp->scale + (smp->scale - 0x4000) * 8;
+            const int pos_y = apply_sign64((llabs(tmp) + 128) >> 8, tmp) + 32;
+            *dst = imax(*dst, ((pos_y + (sh - 1) * smp->step) >> 10) + 1 + 4);
+        }
+        return;
+    }
+
     const int y = b_dim[1] * v_mul - 8; // lowest y
 
     const int src_y = by * 4 + ((y + 4) << ss_ver);
@@ -790,17 +812,20 @@ static ALWAYS_INLINE void affine_lowest_px(int *const dst, const uint8_t *const 
 
 static inline void affine_lowest_px_luma(Dav2dTaskContext *const t, int *const dst,
                                          const uint8_t *const b_dim,
-                                         const Dav2dWarpedMotionParams *const wmp)
+                                         const Dav2dWarpedMotionParams *const wmp,
+                                         const int refidx)
 {
-    affine_lowest_px(dst, b_dim, t->by, t->bx, wmp, 0, 0);
+    affine_lowest_px(dst, b_dim, t->by, t->bx, wmp, 0, 0, &t->f->svc[refidx][1]);
 }
 
 static inline void affine_lowest_px_chroma(Dav2dTaskContext *const t, int *const dst,
                                            const uint8_t *const b_dim,
-                                           const Dav2dWarpedMotionParams *const wmp)
+                                           const Dav2dWarpedMotionParams *const wmp,
+                                           const int refidx)
 {
     const Dav2dFrameContext *const f = t->f;
-    affine_lowest_px(dst, b_dim, t->cby, t->cbx, wmp, f->ss_ver, f->ss_hor);
+    affine_lowest_px(dst, b_dim, t->cby, t->cbx, wmp, f->ss_ver, f->ss_hor,
+                     &f->svc[refidx][1]);
 }
 
 static void derive_lowest_px(Dav2dTaskContext *const t,
@@ -838,11 +863,13 @@ static void derive_lowest_px(Dav2dTaskContext *const t,
         {
             affine_lowest_px_luma(t, &lowest_px[b->ref.ref[0]][0], b_dim,
                                   b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
-                                  &f->frame_hdr->gmv.m[b->ref.ref[0]]);
+                                  &f->frame_hdr->gmv.m[b->ref.ref[0]],
+                                  b->ref.ref[0]);
             if (has_regular_chroma)
                 affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[0]][1], c_b_dim,
                                         b->motion_mode >= MM_WARP_CAUSAL ? &t->warpmv[0] :
-                                        &f->frame_hdr->gmv.m[b->ref.ref[0]]);
+                                        &f->frame_hdr->gmv.m[b->ref.ref[0]],
+                                        b->ref.ref[0]);
         } else {
             mc_lowest_px(&lowest_px[b->ref.ref[0]][0], t->by, bh4, b->mv[0].y,
                          0, &f->svc[b->ref.ref[0]][1]);
@@ -913,12 +940,14 @@ static void derive_lowest_px(Dav2dTaskContext *const t,
             {
                 affine_lowest_px_luma(t, &lowest_px[b->ref.ref[i]][0], b_dim,
                                       b->motion_mode == MM_WARP_CAUSAL ? &t->warpmv[i] :
-                                      &f->frame_hdr->gmv.m[b->ref.ref[i]]);
+                                      &f->frame_hdr->gmv.m[b->ref.ref[i]],
+                                      b->ref.ref[i]);
                 if (has_regular_chroma)
                     affine_lowest_px_chroma(t, &lowest_px[b->ref.ref[i]][1], c_b_dim,
                                             b->motion_mode == MM_WARP_CAUSAL ?
                                                 &t->warpmv[i] :
-                                                &f->frame_hdr->gmv.m[b->ref.ref[i]]);
+                                                &f->frame_hdr->gmv.m[b->ref.ref[i]],
+                                            b->ref.ref[i]);
             } else {
                 mc_lowest_px(&lowest_px[b->ref.ref[i]][0], t->by, bh4,
                              b->mv[i].y, 0, &f->svc[b->ref.ref[i]][1]);
