@@ -2294,12 +2294,16 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
             const int dir = get_poc_diff(seq_hdr->order_hint_n_bits,
                                          ref_poc[rf->tip.ref.ref[!o]],
                                          ref_poc[rf->tip.ref.ref[o]]) < 0;
-            rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
-                .ref = rf->tip.ref.ref[!o],
-                .tgt = rf->tip.ref.ref[o],
-                .dir = dir,
-            };
-            ref_done[rf->tip.ref.ref[!o]][dir] = 1;
+            // refs without (usable) motion field, e.g. intra frames or refs
+            // of a different size, are not projected
+            if (rp_ref[rf->tip.ref.ref[!o]]) {
+                rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
+                    .ref = rf->tip.ref.ref[!o],
+                    .tgt = rf->tip.ref.ref[o],
+                    .dir = dir,
+                };
+                ref_done[rf->tip.ref.ref[!o]][dir] = 1;
+            }
         }
         int mfmv_lim = rf->seq_hdr->reduced_ref_frame_mvs_mode ? 1 : 3;
         // adjacent refs
@@ -2317,8 +2321,10 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
             }
             int order = 0;
             if (ref1 >= 0 && ref2 >= 0) {
-                uint8_t acr1 = abs_closest_ref(ref2ref[ref1], ref2cur[ref1], 0);
-                uint8_t acr2 = abs_closest_ref(ref2ref[ref2], ref2cur[ref2], 1);
+                const unsigned acr1 = rp_ref[ref1] ?
+                    abs_closest_ref(ref2ref[ref1], ref2cur[ref1], 0) : 0xff;
+                const unsigned acr2 = rp_ref[ref2] ?
+                    abs_closest_ref(ref2ref[ref2], ref2cur[ref2], 1) : 0xff;
                 order = acr1 < acr2;
             }
             if (order && !ref_done[ref1][1]) {
