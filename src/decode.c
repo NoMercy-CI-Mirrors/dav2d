@@ -2626,7 +2626,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             enum CompInterPredMode coded_mode = b->inter_mode;
             if (f->no_switch_opfl_refine_type &&
                 b->inter_mode != GLOBALMV_GLOBALMV && imin(bw4, bh4) >= 2 &&
-                f->refdir[b->ref.ref[0]] != f->refdir[b->ref.ref[1]])
+                f->refdir[b->ref.ref[0]] != f->refdir[b->ref.ref[1]] &&
+                !f->svc[b->ref.ref[0]][0].scale && !f->svc[b->ref.ref[1]][0].scale)
             {
                 const int ctx = b->inter_mode > NEARMV_NEARMV;
                 if (f->frame_hdr->opfl_refine_type == 2 /* always */ ||
