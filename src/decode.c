@@ -2846,6 +2846,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (f->seq_hdr->refine_mv && imin(bw4, bh4) >= 2 && bw4 * bh4 > 4 &&
                 b->inter_mode != GLOBALMV_GLOBALMV &&
                 f->refdist[b->ref.ref[0]] == -f->refdist[b->ref.ref[1]] &&
+                f->refdist[b->ref.ref[0]] &&
                 !f->svc[b->ref.ref[0]][0].scale && !f->svc[b->ref.ref[1]][0].scale &&
                 (f->frame_hdr->opfl_refine_type != 1 /* switchable */ ||
                  !((1 << b->inter_mode) & ((1 << NEARMV_NEWMV) |
