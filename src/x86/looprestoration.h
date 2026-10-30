@@ -77,8 +77,8 @@ static ALWAYS_INLINE void loop_restoration_dsp_init_x86(Dav2dLoopRestorationDSPC
     c->pc_wiener = BF(dav2d_wiener_pretrained, avx2);
     c->ns_wiener_multi = BF(dav2d_wiener_multi, avx2);
     c->ns_wiener_single = BF(wiener_single, avx2);
-    //c->wiener_uv_chroma = BF(dav2d_wiener_uv_chroma, avx2);
-    //c->wiener_uv_luma[2] = BF(dav2d_wiener_uv_luma_420, avx2);
+    c->wiener_uv_chroma = BF(dav2d_wiener_uv_chroma, avx2);
+    c->wiener_uv_luma[2] = BF(dav2d_wiener_uv_luma_420, avx2);
 #endif
 
 }
