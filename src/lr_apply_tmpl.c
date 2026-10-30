@@ -59,7 +59,8 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
     const ptrdiff_t *const strides = f->cur.p.stride;
     const int by64 = (y + (y ? 8 : 0)) >> 6;
     const int uv_idx = DAV2D_PIXEL_LAYOUT_I444 - layout;
-    const wienerfilter_uv_luma_fn wiener_uv_l_fn = dsp->lr.wiener_uv_luma[uv_idx];
+    const wienerfilter_uv_luma_fn wiener_uv_l_fn =
+        layout == DAV2D_PIXEL_LAYOUT_I400 ? NULL : dsp->lr.wiener_uv_luma[uv_idx];
 
     const pixel *lpf[3], *lpfb[3], *top[3];
 
@@ -198,31 +199,33 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
         const uint16_t (*ll_mask_y)[4] = (const uint16_t(*)[4])
                 &f->lf.mask[sb256_idx].lossless_mask_y[y4][sb64x_idx];
 
-        const uint16_t (*ll_mask_uv)[4];
-        uint16_t ll_uv_mask_mem[16][4];
-        if (!ss_hor) {
-            ll_mask_uv = (const uint16_t(*)[4])
-                &f->lf.mask[sb256_idx].lossless_mask_uv[y4][sb64x_idx];
-        } else {
-            ll_mask_uv = (const uint16_t(*)[4])
-                &f->lf.mask[sb256_idx].lossless_mask_uv[y4 >> ss_ver][sb64x_idx];
-            const int end_y = stripe_h >> 2 >> ss_ver;
-            for (int yy = 0; yy < end_y; yy++, ll_mask_uv++)
-                ll_uv_mask_mem[yy][0] = ll_mask_uv[0][0] | (ll_mask_uv[0][1] << 8);
-            ll_mask_uv = ll_uv_mask_mem;
-        }
-        for (int pl = 1; pl <= 2; pl++) {
-            if (uv_filter[pl - 1]) {
-                const pixel *top_ptr = top[0] ? top[0] : lpf[0];
-                const pixel *top_uv_ptr = top[pl] ? top[pl] : lpf[pl];
-                wiener_uv_l_fn(scratch.uv_luma, ptrs[0], strides[0], left,
-                               top_ptr, lpfb[0], uv_filter[pl - 1],
-                               w >> ss_hor, stripe_h >> ss_ver, ds_flt, edges);
-                dsp->lr.wiener_uv_chroma(ptrs[pl], strides[1], left_uv_ptrs[pl - 1],
-                                         top_uv_ptr, lpfb[pl], scratch.uv_luma,
-                                         uv_filter[pl - 1], ll_mask_uv,
-                                         w >> ss_hor, stripe_h >> ss_ver, edges
-                                         HIGHBD_CALL_SUFFIX);
+        if (layout != DAV2D_PIXEL_LAYOUT_I400) {
+            const uint16_t (*ll_mask_uv)[4];
+            uint16_t ll_uv_mask_mem[16][4];
+            if (!ss_hor) {
+                ll_mask_uv = (const uint16_t(*)[4])
+                    &f->lf.mask[sb256_idx].lossless_mask_uv[y4][sb64x_idx];
+            } else {
+                ll_mask_uv = (const uint16_t(*)[4])
+                    &f->lf.mask[sb256_idx].lossless_mask_uv[y4 >> ss_ver][sb64x_idx];
+                const int end_y = stripe_h >> 2 >> ss_ver;
+                for (int yy = 0; yy < end_y; yy++, ll_mask_uv++)
+                    ll_uv_mask_mem[yy][0] = ll_mask_uv[0][0] | (ll_mask_uv[0][1] << 8);
+                ll_mask_uv = ll_uv_mask_mem;
+            }
+            for (int pl = 1; pl <= 2; pl++) {
+                if (uv_filter[pl - 1]) {
+                    const pixel *top_ptr = top[0] ? top[0] : lpf[0];
+                    const pixel *top_uv_ptr = top[pl] ? top[pl] : lpf[pl];
+                    wiener_uv_l_fn(scratch.uv_luma, ptrs[0], strides[0], left,
+                                   top_ptr, lpfb[0], uv_filter[pl - 1],
+                                   w >> ss_hor, stripe_h >> ss_ver, ds_flt, edges);
+                    dsp->lr.wiener_uv_chroma(ptrs[pl], strides[1], left_uv_ptrs[pl - 1],
+                                             top_uv_ptr, lpfb[pl], scratch.uv_luma,
+                                             uv_filter[pl - 1], ll_mask_uv,
+                                             w >> ss_hor, stripe_h >> ss_ver, edges
+                                             HIGHBD_CALL_SUFFIX);
+                }
             }
         }
         if (gdf) {
