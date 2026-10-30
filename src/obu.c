@@ -1601,7 +1601,8 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     hdr->any_lossless = 0;
     for (int i = 0; i < DAV2D_MAX_SEGMENTS; i++) {
         hdr->segmentation.qidx[i] = hdr->segmentation.enabled ?
-            iclip_u8(hdr->quant.yac + hdr->segmentation.d.delta_q[i]) :
+            iclip(hdr->quant.yac + hdr->segmentation.d.delta_q[i], 0,
+                  255 + 48 * seqhdr->hbd) :
             hdr->quant.yac;
         hdr->segmentation.lossless[i] =
             !hdr->segmentation.qidx[i] && delta_lossless;

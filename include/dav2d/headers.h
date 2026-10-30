@@ -520,7 +520,8 @@ typedef struct Dav2dFrameHeader {
         Dav2dSegmentationDataSet d;
         uint8_t preskip;
         int8_t last_active_segid;
-        uint8_t lossless[DAV2D_MAX_SEGMENTS], qidx[DAV2D_MAX_SEGMENTS];
+        uint8_t lossless[DAV2D_MAX_SEGMENTS];
+        uint16_t qidx[DAV2D_MAX_SEGMENTS];
     } segmentation;
     struct {
         struct {
