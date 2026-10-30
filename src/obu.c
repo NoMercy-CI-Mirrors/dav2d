@@ -97,6 +97,34 @@ static inline int tile_log2(const int sz, const int tgt) {
     return k;
 }
 
+// The (uniform) tile distribution is done based on "full" SBs only, which
+// can be less than the rounded-up frame size in SBs. Also, this is done based
+// on the sequence header's sb128 (not the frame's), which can be different
+// for keyframes. "sz" is the frame width or height in pixels.
+static uint8_t calc_uniform_tiles(uint16_t *const start_sb, uint8_t *const log2_n,
+                                  const int sbmul, const int seq_sb128,
+                                  const int sz)
+{
+    const int seq_sbsz_log2 = 6 + seq_sb128;
+    // size in full SBs, aka rounded down (but +7 so it's in luma bw/bh units,
+    // not pixel units)
+    const int fsb = imax(1, (sz + 7) >> seq_sbsz_log2);
+    // size in extended SBs, aka rounded up
+    const int ssb = 1 + ((sz - 1) >> seq_sbsz_log2);
+    const int tile_sz = fsb >> *log2_n;
+    int extra = imax(0, fsb - (tile_sz << *log2_n));
+    if (tile_sz == 0) extra += ssb - fsb;
+    const int max_n = 1 << *log2_n;
+    int n = 0;
+    for (int sb = 0; sb < ssb && n < max_n;
+         sb += tile_sz + (extra > 0), n++, extra--)
+    {
+        start_sb[n] = sb * sbmul;
+    }
+    *log2_n = tile_log2(1, n);
+    return n;
+}
+
 static NOINLINE void parse_tile_info(Dav2dTileInfo *const thdr,
                                      GetBits *const gb, const int sbmul,
                                      const int sb128, const int seq_sb128,
@@ -122,48 +150,19 @@ static NOINLINE void parse_tile_info(Dav2dTileInfo *const thdr,
                                     thdr->min_log2_cols);
 
     if (thdr->uniform) {
-        // but the (uniform) tile distribution is done based on "full" SBs only,
-        // which can be less than the rounded-up versions above. Also, this is
-        // done based on the sequence header's sb128 (not the frame's), which
-        // can be different for keyframes
-        const int seq_sbsz_log2 = 6 + seq_sb128;
-        // width/height in full SBs, aka rounded down (but +7 so it's in luma
-        // bw/bh units, not pixel units)
-        const int fsbw = imax(1, (w + 7) >> seq_sbsz_log2);
-        const int fsbh = imax(1, (h + 7) >> seq_sbsz_log2);
-        // width height in extended SBs, aka rounded up
-        const int ssbw = 1 + ((w - 1) >> seq_sbsz_log2);
-        const int ssbh = 1 + ((h - 1) >> seq_sbsz_log2);
-
         for (thdr->log2_cols = thdr->min_log2_cols;
              thdr->log2_cols < thdr->max_log2_cols && dav2d_get_bit(gb);
              thdr->log2_cols++) ;
-        const int tile_w = fsbw >> thdr->log2_cols;
-        int extra = imax(0, fsbw - (tile_w << thdr->log2_cols));
-        if (tile_w == 0) extra += ssbw - fsbw;
-        thdr->cols = 0;
-        const int max_cols = 1 << thdr->log2_cols;
-        for (int sbx = 0; sbx < ssbw && thdr->cols < max_cols;
-             sbx += tile_w + (extra > 0), thdr->cols++, extra--)
-        {
-            thdr->col_start_sb[thdr->cols] = sbx * sbmul;
-        }
+        thdr->cols = calc_uniform_tiles(thdr->col_start_sb, &thdr->log2_cols,
+                                        sbmul, seq_sb128, w);
         thdr->min_log2_rows =
             imax(min_log2_tiles - thdr->log2_cols, 0);
 
         for (thdr->log2_rows = thdr->min_log2_rows;
              thdr->log2_rows < thdr->max_log2_rows && dav2d_get_bit(gb);
              thdr->log2_rows++) ;
-        const int tile_h = fsbh >> thdr->log2_rows;
-        extra = imax(0, fsbh - (tile_h << thdr->log2_rows));
-        if (tile_h == 0) extra += ssbh - fsbh;
-        thdr->rows = 0;
-        const int max_rows = 1 << thdr->log2_rows;
-        for (int sby = 0; sby < ssbh && thdr->rows < max_rows;
-             sby += tile_h + (extra > 0), thdr->rows++, extra--)
-        {
-            thdr->row_start_sb[thdr->rows] = sby * sbmul;
-        }
+        thdr->rows = calc_uniform_tiles(thdr->row_start_sb, &thdr->log2_rows,
+                                        sbmul, seq_sb128, h);
     } else {
         thdr->cols = 0;
         int widest_tile = 0, max_tile_area_sb = sbw * sbh;
@@ -979,11 +978,11 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
     // tile data
     hdr->sb128 = IS_INTER_OR_SWITCH(hdr) ? seqhdr->sb128 : !!seqhdr->sb128;
     int sbmul, reuse_allowed = 0;
+    const int sbsz_min1 = (64 << hdr->sb128) - 1;
+    const int sbsz_log2 = 6 + hdr->sb128;
+    const int sbw = (hdr->width + sbsz_min1) >> sbsz_log2;
+    const int sbh = (hdr->height + sbsz_min1) >> sbsz_log2;
     if (seqhdr->tiling.present) {
-        const int sbsz_min1 = (64 << hdr->sb128) - 1;
-        const int sbsz_log2 = 6 + hdr->sb128;
-        const int sbw = (hdr->width + sbsz_min1) >> sbsz_log2;
-        const int sbh = (hdr->height + sbsz_min1) >> sbsz_log2;
         if (!seqhdr->tiling.t.uniform) {
             const int seq_sbsz_min1 = (64 << seqhdr->sb128) - 1;
             const int seq_sbsz_log2 = 6 + seqhdr->sb128;
@@ -1004,15 +1003,25 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
                            dav2d_get_bit(gb))))
     {
         hdr->tiling.t = seqhdr->tiling.t;
-        if (hdr->sb128 != seqhdr->sb128) {
-            assert(hdr->sb128 == 1 && seqhdr->sb128 == 2 &&
-                   IS_KEY_OR_INTRA(hdr));
-            sbmul = 2;
+        sbmul = 1 + (hdr->sb128 != seqhdr->sb128);
+        assert(sbmul == 1 || (hdr->sb128 == 1 && seqhdr->sb128 == 2 &&
+                              IS_KEY_OR_INTRA(hdr)));
+        if (hdr->tiling.t.uniform) {
+            // only the number of tiles is reused; the tile distribution is
+            // recalculated based on the (possibly scaled) frame size
+            Dav2dTileInfo *const t = &hdr->tiling.t;
+            t->cols = calc_uniform_tiles(t->col_start_sb, &t->log2_cols,
+                                         sbmul, seqhdr->sb128, hdr->width);
+            t->rows = calc_uniform_tiles(t->row_start_sb, &t->log2_rows,
+                                         sbmul, seqhdr->sb128, hdr->height);
+            t->col_start_sb[t->cols] = sbw;
+            t->row_start_sb[t->rows] = sbh;
+        } else if (sbmul == 2) {
             for (int n = 0; n < hdr->tiling.t.rows; n++)
                 hdr->tiling.t.row_start_sb[n] *= 2;
             for (int n = 0; n < hdr->tiling.t.cols; n++)
                 hdr->tiling.t.col_start_sb[n] *= 2;
-        } else sbmul = 1;
+        }
     } else {
         sbmul = seqhdr->sb128 == 2 && IS_KEY_OR_INTRA(hdr) ? 2 : 1;
         parse_tile_info(&hdr->tiling.t, gb, sbmul, hdr->sb128, seqhdr->sb128,
