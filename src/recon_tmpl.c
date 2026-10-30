@@ -1688,8 +1688,8 @@ static void mc(Dav2dTaskContext *const t,
                    right-left, bottom-top,
                    f->svc[refidx][0].step, f->svc[refidx][1].step);
 
-        const int w = (refp->p.p.w + ss_hor) >> ss_hor;
-        const int h = (refp->p.p.h + ss_ver) >> ss_ver;
+        const int w = ((refp->p.p.w + 7) & ~7) >> ss_hor;
+        const int h = ((refp->p.p.h + 7) & ~7) >> ss_ver;
         if (left < 3 || top < 3 || right + 4 > w || bottom + 4 > h) {
             pixel *const emu_edge_buf = bitfn(t->scratch.emu_edge);
             f->dsp->mc.emu_edge(right - left + 7, bottom - top + 7,
