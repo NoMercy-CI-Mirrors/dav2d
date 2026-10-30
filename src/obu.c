@@ -1946,14 +1946,12 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                         }
                         const Dav2dFrameHeader *const refhdr =
                             c->refs[hdr->refidx[ref]].p.p.frame_hdr;
-                        if (!refhdr) goto error;
-                        if (hdr->ccso.p[p].reuse) {
-                            const int w4 = (hdr->width + 3) >> 2;
-                            const int h4 = (hdr->height + 3) >> 2;
-                            const int rw4 = (refhdr->width + 3) >> 2;
-                            const int rh4 = (refhdr->height + 3) >> 2;
-                            if (w4 != rw4 || h4 != rh4 || !refhdr->ccso.p[p].enabled)
-                                goto error;
+                        if (!refhdr || !refhdr->ccso.p[p].enabled) goto error;
+                        if (hdr->ccso.p[p].sb_reuse &&
+                            ((hdr->width + 7) >> 3 != (refhdr->width + 7) >> 3 ||
+                             (hdr->height + 7) >> 3 != (refhdr->height + 7) >> 3))
+                        {
+                            goto error;
                         }
                     }
                 }
