@@ -314,8 +314,11 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
         hdr->max_encoder_buffer_delay = 20000;
         if (hdr->decoder_model_info_present) {
             hdr->num_units_in_decoding_tick = dav2d_get_bits(gb, 32);
-            hdr->max_decoder_buffer_delay = dav2d_get_vlc(gb);
-            hdr->max_encoder_buffer_delay = dav2d_get_vlc(gb);
+            hdr->max_decoder_model_present = dav2d_get_bit(gb);
+            if (hdr->max_decoder_model_present) {
+                hdr->max_decoder_buffer_delay = dav2d_get_vlc(gb);
+                hdr->max_encoder_buffer_delay = dav2d_get_vlc(gb);
+            }
         } else
             hdr->num_units_in_decoding_tick = 1;
 #if DEBUG_SEQ_HDR
