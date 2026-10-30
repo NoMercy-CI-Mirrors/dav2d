@@ -221,7 +221,7 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     memset(hdr, 0, sizeof(*hdr));
     hdr->id = dav2d_get_vlc(gb);
     hdr->profile = dav2d_get_bits(gb, 5);
-    if (hdr->profile > 2) goto error;
+    if (hdr->profile > 4) goto error;
     hdr->reduced_still_picture_header = dav2d_get_bit(gb);
     hdr->level = dav2d_get_bits(gb, 5);
     if (hdr->level >= 4 && !hdr->reduced_still_picture_header)
