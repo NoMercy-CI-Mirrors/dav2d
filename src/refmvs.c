@@ -2012,7 +2012,7 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
             x += w;
         }
         const int w = (col_end8 & ~31) - x;
-        if (w) {
+        if (w > 0) {
             memcpy(&rp_proj[(x - 2 * stride) >> 5],
                    &rp_proj[(x + (sbsz8 - 2) * stride) >> 5],
                    w * sizeof(*rp_proj) >> 5);
