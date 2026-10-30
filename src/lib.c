@@ -668,12 +668,13 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
                 pthread_join(pf->task_thread.td.thread, NULL);
                 pthread_cond_destroy(&pf->task_thread.td.cond);
                 pthread_mutex_destroy(&pf->task_thread.td.lock);
-                dav2d_free_aligned(pf->lf.cdef_line_buf);
             }
             pthread_cond_destroy(&ttd->delayed_fg.cond);
             pthread_cond_destroy(&ttd->cond);
             pthread_mutex_destroy(&ttd->lock);
         }
+        for (unsigned n = 0; n < c->n_tc; n++)
+            dav2d_free_aligned(c->tc[n].lf.cdef_line_buf);
         dav2d_free_aligned(c->tc);
     }
 
