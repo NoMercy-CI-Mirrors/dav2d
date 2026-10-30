@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 64
 
 %macro SMOOTH_WEIGHT_TABLE 1-*
@@ -2879,5 +2877,3 @@ cglobal ipred_z3_8bpc, 3, 8, 16, dst, stride, tl, w, h, angle, dy
     jg .w64_loop
     RET
 %endif
-
-%endif ; ARCH_X86_64

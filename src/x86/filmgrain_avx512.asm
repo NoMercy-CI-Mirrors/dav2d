@@ -27,8 +27,6 @@
 %include "ext/x86/x86inc.asm"
 %include "x86/filmgrain_common.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 64
 
 pb_even:       db  0,  2,  4,  6,  8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30
@@ -809,5 +807,3 @@ ALIGN function_align
 FGUV_FN 420, 1, 1
 FGUV_FN 422, 1, 0
 FGUV_FN 444, 0, 0
-
-%endif ; ARCH_X86_64

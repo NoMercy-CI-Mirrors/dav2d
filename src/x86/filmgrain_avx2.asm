@@ -27,8 +27,6 @@
 %include "ext/x86/x86inc.asm"
 %include "x86/filmgrain_common.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 32
 pb_mask:       db  0,128,128,  0,128,  0,  0,128,128,  0,  0,128,  0,128,128,  0
 gen_shufE:     db  0,  1,  8,  9,  2,  3, 10, 11,  4,  5, 12, 13,  6,  7, 14, 15
@@ -2096,5 +2094,3 @@ GEN_GRAIN_UV_FN 422, 1, 0
 ;FGUV_FN         422, 1, 0
 GEN_GRAIN_UV_FN 444, 0, 0
 ;FGUV_FN         444, 0, 0
-
-%endif ; ARCH_X86_64

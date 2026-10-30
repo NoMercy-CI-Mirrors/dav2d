@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 64
 
 spel_h_shufA:  db  0,  1,  2,  3,  2,  3,  4,  5,  4,  5,  6,  7,  6,  7,  8,  9
@@ -5732,5 +5730,3 @@ cglobal blend_16bpc, 3, 7, 7, dst, ds, tmp, w, h, mask
     sub                  hd, 2
     jg .w32
     RET
-
-%endif ; ARCH_X86_64

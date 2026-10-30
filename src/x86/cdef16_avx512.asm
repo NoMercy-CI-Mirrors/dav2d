@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 64
 
 cdef_perm:     db  2, 18, 16, 18, 24, 19,  0, 19, 25, 20,  1, 20, 26, 21,  2, 21
@@ -618,5 +616,3 @@ ALIGN function_align
     paddw           m8, m10
     paddw           m9, m11
     ret
-
-%endif ; ARCH_X86_64

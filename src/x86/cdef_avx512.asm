@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 %macro DUP4 1-*
     %rep %0
         times 4 db %1
@@ -856,5 +854,3 @@ ALIGN function_align
     CDEF_FILTER_8x8_SEC m16, m17, m18, m19, 1
     CDEF_FILTER_8x8_SEC m12, m13, m14, m15
     ret
-
-%endif ; ARCH_X86_64

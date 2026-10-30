@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA
 
 %macro DIR_TABLE 1 ; stride
@@ -873,5 +871,3 @@ cglobal cdef_dir_16bpc, 4, 7, 6, src, stride, var, bdmax
     vinserti128     m3, [srcq+strideq*0], 1
     REPX {pmulhuw x, m4}, m0, m1, m2, m3
     jmp mangle(private_prefix %+ _cdef_dir_8bpc %+ SUFFIX).main
-
-%endif ; ARCH_X86_64

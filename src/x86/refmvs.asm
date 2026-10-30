@@ -89,7 +89,6 @@ JMP_TABLE splat_comp_wedgemv_avx2, t1, t2, t4, t8
 
 SECTION .text
 
-%if ARCH_X86_64
 INIT_YMM avx2
 cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tmv, tref
     test         tdstq, tdstq
@@ -2141,4 +2140,3 @@ cglobal splat_comp_wedgemv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, 
     jg .t8_loop
     WIN64_RESTORE_XMM
     jmp mangle(private_prefix %+ _splat_mv_avx2).spatial
-%endif ; ARCH_X86_64

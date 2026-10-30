@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 64
 
 warp_8x8_permA: db  4,  5,  6,  7, 16, 17, 18, 19,  5,  6,  7,  8, 17, 18, 19, 20
@@ -5144,5 +5142,3 @@ cglobal blend_8bpc, 3, 7, 8, dst, ds, tmp, w, h, mask
     sub                  hd, 2
     jg .w32
     RET
-
-%endif ; ARCH_X86_64

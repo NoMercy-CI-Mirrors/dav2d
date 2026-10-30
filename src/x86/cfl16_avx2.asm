@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 16
 
 pw_flt0: dw 2, 2
@@ -1176,5 +1174,3 @@ cglobal cfl_mh_pred_l_16bpc, 4, 13, 16, dst, ds, src, w, h, a, flags, bd, a2, _,
     dec                     hd
     jg .no_left.w16.yloop
     jmp mangle(private_prefix %+ _cfl_mh_pred_c_16bpc_avx2).ret
-
-%endif ; ARCH_X86_64

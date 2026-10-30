@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 32
 
 pb_mask: times 32 db -1
@@ -1636,5 +1634,3 @@ DECLARE_REG_TMP 4
     POP                  r9
 %endif
     RET
-
-%endif ; ARCH_X86_64

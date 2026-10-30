@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 %macro JMP_TABLE 2-*
  %xdefine %1_jmptable %%table
  %xdefine %%base mangle(private_prefix %+ _%1_avx2)
@@ -1767,5 +1765,3 @@ cglobal_label .main
     psrld          xm2, 10
     movd        [varq], xm2
     RET
-
-%endif ; ARCH_X86_64

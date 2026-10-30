@@ -26,8 +26,6 @@
 %include "config.asm"
 %include "ext/x86/x86inc.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 64
 
 ipred_shuf:    db 14, 15, 14, 15,  0,  1,  2,  3,  6,  7,  6,  7,  0,  1,  2,  3
@@ -2498,5 +2496,3 @@ cglobal pal_pred_16bpc, 4, 7, 7, dst, stride, pal, idx, w, h, stride3
     sub                  hd, 2
     jg .w64
     RET
-
-%endif

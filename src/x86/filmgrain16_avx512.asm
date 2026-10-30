@@ -27,8 +27,6 @@
 %include "ext/x86/x86inc.asm"
 %include "x86/filmgrain_common.asm"
 
-%if ARCH_X86_64
-
 SECTION_RODATA 16
 scale_mask:    db -1, -1,  0, -1, -1, -1,  4, -1, -1, -1,  8, -1, -1, -1, 12, -1
 scale_shift:           dw   7,   7,   6,   6,   5,   5,   4,   4
@@ -926,5 +924,3 @@ ALIGN function_align
 FGUV_FN 420, 1, 1
 FGUV_FN 422, 1, 0
 FGUV_FN 444, 0, 0
-
-%endif

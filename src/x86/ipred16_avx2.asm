@@ -58,8 +58,6 @@ SMOOTH_WEIGHTS   0,   0, 255, 128, 255, 149,  85,  64, \
                 18,  16,  15,  13,  12,  10,   9,   8, \
                  7,   6,   6,   5,   5,   4,   4,   4
 
-%if ARCH_X86_64
-
 pw_8x1_8x2:         times 8 dw 1
                     times 8 dw 2
 pw_8x2_8x1:         times 8 dw 2
@@ -5355,5 +5353,3 @@ DEFINE_ARGS dst, stride, stride3, idx, w, h
     dec                   hd
     jg .w64
     RET
-
-%endif
