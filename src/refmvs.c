@@ -2002,12 +2002,12 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
             const int bx8 = x & 31;
             memcpy(&rp_proj[(x - 2 * stride) >> 5].mv[bx8],
                    &rp_proj[(x + (sbsz8 - 2) * stride) >> 5].mv[bx8],
-                   w * sizeof(mv));
+                   w * sizeof(*rp_proj->mv));
             memcpy(&rp_proj[(x - 2 * stride) >> 5].refdist[bx8],
                    &rp_proj[(x + (sbsz8 - 2) * stride) >> 5].refdist[bx8], w);
             memcpy(&rp_proj[(x - 1 * stride) >> 5].mv[bx8],
                    &rp_proj[(x + (sbsz8 - 1) * stride) >> 5].mv[bx8],
-                   w * sizeof(mv));
+                   w * sizeof(*rp_proj->mv));
             memcpy(&rp_proj[(x - 1 * stride) >> 5].refdist[bx8],
                    &rp_proj[(x + (sbsz8 - 1) * stride) >> 5].refdist[bx8], w);
             x += w;
@@ -2027,12 +2027,12 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
             int w = col_end8 - x;
             memcpy(rp_proj[(x - 2 * stride) >> 5].mv,
                    rp_proj[(x + (sbsz8 - 2) * stride) >> 5].mv,
-                   w * sizeof(mv));
+                   w * sizeof(*rp_proj->mv));
             memcpy(rp_proj[(x - 2 * stride) >> 5].refdist,
                    rp_proj[(x + (sbsz8 - 2) * stride) >> 5].refdist, w);
             memcpy(rp_proj[(x - 1 * stride) >> 5].mv,
                    rp_proj[(x + (sbsz8 - 1) * stride) >> 5].mv,
-                   w * sizeof(mv));
+                   w * sizeof(*rp_proj->mv));
             memcpy(rp_proj[(x - 1 * stride) >> 5].refdist,
                    rp_proj[(x + (sbsz8 - 1) * stride) >> 5].refdist, w);
         }
