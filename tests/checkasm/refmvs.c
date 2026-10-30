@@ -846,10 +846,11 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
                                 const int diff2 = get_poc_diff(order_hint_n_bits,
                                                                rpoc, rrpoc);
                                 rf.mfmv_ref2ref[n][m] = diff2 + 31U < 63U ? diff2 : 0;
-                                int l;
-                                for (l = 0; l < 7; l++)
-                                    if (rrpoc == ref_poc[l])
-                                        break;
+                                int l = 7;
+                                if (diff2)
+                                    for (l = 0; l < 7; l++)
+                                        if (rrpoc == ref_poc[l])
+                                            break;
                                 rf.mfmv_ref2idx[n][m] = l == 7 ? -1 : l;
                                 const int d1 = rf.mfmv_ref2cur[n];
                                 const int d2 = rf.mfmv_ref2ref[n][m];

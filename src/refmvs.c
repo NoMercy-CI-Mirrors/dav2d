@@ -1749,6 +1749,7 @@ static void check_traj_intersect(const refmvs_frame *const rf,
                                  const int col_end8_shifted)
 {
     assert(ref2 != -1);
+    assert(ref1 != ref2);
     const unsigned sbsz8 = rf->sbsz >> 1;
     const int mfmv_sbsz8 = rf->mfmv_sbsz8;
     const int mfmv_edge = rf->mfmv_edge;
@@ -2412,11 +2413,14 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                     const int diff2 = get_poc_diff(seq_hdr->order_hint_n_bits,
                                                    rpoc, rrpoc);
                     rf->mfmv_ref2ref[n][m] = diff2 + 31U < 63U ? diff2 : 0;
-                    int l;
-                    for (l = 0; l < 7; l++)
-                        if (rrpoc == ref_poc[l])
-                            break;
-                    rf->mfmv_ref2idx[n][m] = l == 7 ? -1 : l;
+                    // refs at the same POC as the projected ref don't have
+                    // a trajectory endpoint (overlays, inter-layer refs)
+                    int l = frm_hdr->n_ref_frames;
+                    if (diff2)
+                        for (l = 0; l < frm_hdr->n_ref_frames; l++)
+                            if (rrpoc == ref_poc[l])
+                                break;
+                    rf->mfmv_ref2idx[n][m] = l == frm_hdr->n_ref_frames ? -1 : l;
                     const int d1 = rf->mfmv_ref2cur[n];
                     const int d2 = rf->mfmv_ref2ref[n][m];
                     const int dv = div_mult[imin(abs(d2), 31)];
