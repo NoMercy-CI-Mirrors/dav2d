@@ -4330,8 +4330,8 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     paddw                   m2, m1
     paddw                   m0, m2
     psrlw                   m0, 3
-    packuswb                m0, m0
-    vpermq                  m0, m0, q3220
+    vextracti128           xm1, m0, 1
+    packuswb               xm0, xm1
     mova             [dstq+ 0], xm0
     movd             [dstq+16], xm4
     lea                   topq, [srcq+ssq*1]
@@ -4423,12 +4423,11 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     REPX  {vpermq x, x, q3120}, m0, m2
     mova             [dstq+ 0], m0
     mova             [dstq+32], m2
-    movd             [dstq+64], xm8
-    lea                   topq, [srcq+ssq*1]
     lea                   srcq, [srcq+ssq*2]
     add                   dstq, 64
     dec                  ntopd
     jg .top.63.loop
+    lea                   topq, [srcq+tsq]
 
  DEFINE_ARGS dst, src, srcl, ss, ss3, needed_left, w, h, top, nleft, dstl, tbl, ystart
 .left:
@@ -4502,8 +4501,8 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     test                    hb, 0x13            ; flags
     setz                   t0b
     neg                     t0                  ; restore ptrs post top
-    lea                   srcq, [srcq+t0*2]     ; src -= (!has_l && dir_c) * 2
-    lea                   topq, [topq+t0*2]     ; top -= (!has_l && dir_c) * 2
+    lea                   srcq, [srcq+t0*2]     ; src -= (!itse && dir_c) * 2
+    lea                   topq, [topq+t0*2]     ; top -= (!itse && dir_c) * 2
     xor                    t0d, t0d
     jmp .blk
 .left.no_top:
