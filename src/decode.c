@@ -3910,9 +3910,14 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         const int bwh4ss[2] = { bw4 >> eff_ss_hor, bh4 >> eff_ss_ver };
         assert(bwh4ss[0] >= 1 && bwh4ss[1] >= 1);
         int dir = -1;
+        const int mix_inter = IS_INTER_OR_SWITCH(f->frame_hdr) &&
+                              !t->intra_region;
         if (imax(bwh4ss[0], bwh4ss[1]) == 1 ||
             // 1:8/1:16 partitions don't recursive (normatively)
-            (pcc->part[0][0] & pcc->part[1][0]) == -1)
+            (pcc->part[0][0] & pcc->part[1][0]) == -1 ||
+            // cannot split 4x8/8x4 blocks in mixed-intra/inter regions of
+            // inter frames, since 4x4 block sizes in such regions are invalid
+            (mix_inter && b_dim[2] + b_dim[3] == 1))
         {
             bp = PARTITION_NONE;
         } else if (!have_h_split || !have_v_split) {
@@ -3954,13 +3959,9 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 const int aspect = 1 << f->seq_hdr->max_pb_aspect_ratio_log2;
                 const int max_bwh4 = imax(bw4, bh4), min_bwh4 = imin(bw4, bh4);
                 const int aspect_req_split = max_bwh4 > aspect * min_bwh4;
-                const int mix_inter = IS_INTER_OR_SWITCH(f->frame_hdr) &&
-                                      !t->intra_region;
                 const int ctx1 = get_partition_ctx(t->a, &t->l, b_dim, pl, by4, bx4);
                 const int ctx2 = ctx1 + pcc->ctx[0] * 4;
-                // cannot split 4x8/8x4 blocks in mixed-intra/inter regions of
-                // inter frames, since 4x4 block sizes in such regions are invalid
-                const int is_split = mix_inter && b_dim[2] + b_dim[3] == 1 ? 0 :
+                const int is_split =
                     !have_h_split || !have_v_split || aspect_req_split ||
                     dav2d_msac_decode_bool_adapt(&ts->msac,
                                                  ts->cdf.m.part_split[pl][ctx2]);
