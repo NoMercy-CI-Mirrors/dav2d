@@ -324,17 +324,6 @@ build-debian-armv7-clang-5:
         - ninja -C build
         - meson test -v -C build
 
-build-debian-ppc64le:
-    extends: .debian-ppc64le-common
-    variables:
-        CC: gcc-13
-    script:
-        - meson setup build --buildtype release
-                            -Dtrim_dsp=false
-                            --werror
-        - ninja -C build
-        - meson test -v -C build
-
 build-debian-wasm:
     extends: .debian-wasm-emscripten-common
     script:
@@ -363,18 +352,6 @@ build-debian-riscv64:
     parallel:
       matrix:
         - CROSSFILE: [riscv64-linux, riscv64-linux-clang]
-
-build-debian-loongarch64:
-    extends: .debian-amd64-common
-    variables:
-        QEMU_CPU: max
-    script:
-        - meson setup build --buildtype release
-                            --werror
-                            -Dtrim_dsp=false
-                            --cross-file package/crossfiles/loongarch64-linux.meson
-        - ninja -C build
-        - meson test -v -C build
 
 
 .test-common:
@@ -630,12 +607,13 @@ test-debian-ppc64le:
         - .test-common
     variables:
         CC: gcc-13
-    needs: ["build-debian-ppc64le"]
+    needs: []
     script:
         - meson setup build --buildtype release
                             -Dtestdata_tests=true
                             -Dlogging=false
                             -Dtrim_dsp=false
+                            --werror
         - ninja -C build
         - cd build && time meson test -v
 
@@ -704,7 +682,7 @@ test-debian-loongarch64:
     extends:
         - .debian-amd64-common
         - .test-common
-    needs: ["build-debian-loongarch64"]
+    needs: []
     variables:
         QEMU_CPU: max
     script:
@@ -712,6 +690,7 @@ test-debian-loongarch64:
                             -Dtestdata_tests=true
                             -Dlogging=false
                             -Dtrim_dsp=false
+                            --werror
                             --cross-file package/crossfiles/loongarch64-linux.meson
         - ninja -C build
         - cd build && time meson test -v --timeout-multiplier 10
