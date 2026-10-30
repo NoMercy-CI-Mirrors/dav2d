@@ -202,6 +202,80 @@ ext_warp4x4_c(pixel *dst, const ptrdiff_t dst_stride,
     put_8tap_c(dst, dst_stride, src, src_stride, 4, 4, mx, my, -1 HIGHBD_TAIL_SUFFIX);
 }
 
+// 4x4 block of the extended warp filter, but with a per-pixel position
+// (for scaled references). mx/my are the q16 subpel position of the top/left
+// pixel relative to src, and dx/dy are the q16 step sizes between pixels.
+static NOINLINE void
+ext_warp4x4_scaled_c_internal(pixel *dst, int16_t *tmp, const ptrdiff_t dst_stride,
+                              const pixel *src, ptrdiff_t src_stride,
+                              const int mx, const int my, const int dx, const int dy
+                              HIGHBD_DECL_SUFFIX)
+{
+    const int intermediate_bits = get_intermediate_bits(bitdepth_max);
+    const int h_rnd = (1 << (7 - intermediate_bits)) >> 1;
+    const int mid_h = ((my + 3 * dy) >> 16) + 8;
+    int16_t mid[(3 * 2 + 1 + 8) * 4];
+    src_stride = PXSTRIDE(src_stride);
+
+    assert(mid_h * 4 <= (int) ARRAY_SIZE(mid));
+    src -= src_stride * 3;
+    for (int y = 0; y < mid_h; y++) {
+        for (int x = 0, pos = mx; x < 4; x++, pos += dx) {
+            // phase 64 is equivalent to phase 0 at the next integer position
+            const int ph = ((pos & 0xffff) + 512) >> 10;
+            const int ix = (pos >> 16) + (ph >> 6);
+            if (ph & 63) {
+                const int8_t *const fh = dav2d_ext_warp_filter[(ph & 63) - 1];
+                mid[y * 4 + x] = (FILTER_8TAP(src, ix, fh, 1) + h_rnd) >>
+                                 (7 - intermediate_bits);
+            } else {
+                mid[y * 4 + x] = src[ix] << intermediate_bits;
+            }
+        }
+        src += src_stride;
+    }
+
+    for (int y = 0, pos = my; y < 4; y++, pos += dy) {
+        const int ph = ((pos & 0xffff) + 512) >> 10;
+        const int16_t *const mid_ptr = &mid[((pos >> 16) + (ph >> 6) + 3) * 4];
+        const int8_t *const fv = ph & 63 ? dav2d_ext_warp_filter[(ph & 63) - 1] : NULL;
+        for (int x = 0; x < 4; x++) {
+            if (dst) {
+                dst[x] = fv ? DAV2D_FILTER_8TAP_CLIP(mid_ptr, x, fv, 4,
+                                                     7 + intermediate_bits) :
+                              iclip_pixel((mid_ptr[x] +
+                                           ((1 << intermediate_bits) >> 1)) >>
+                                          intermediate_bits);
+            } else {
+                tmp[x] = (fv ? DAV2D_FILTER_8TAP_RND(mid_ptr, x, fv, 4, 7) :
+                               mid_ptr[x]) - PREP_BIAS;
+            }
+        }
+        if (dst) dst += PXSTRIDE(dst_stride);
+        else tmp += dst_stride;
+    }
+}
+
+static void
+ext_warp4x4_scaled_c(pixel *dst, const ptrdiff_t dst_stride,
+                     const pixel *const src, const ptrdiff_t src_stride,
+                     const int mx, const int my, const int dx, const int dy
+                     HIGHBD_DECL_SUFFIX)
+{
+    ext_warp4x4_scaled_c_internal(dst, NULL, dst_stride, src, src_stride,
+                                  mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
+}
+
+static void
+ext_warp4x4t_scaled_c(int16_t *const tmp, const ptrdiff_t tmp_stride,
+                      const pixel *const src, const ptrdiff_t src_stride,
+                      const int mx, const int my, const int dx, const int dy
+                      HIGHBD_DECL_SUFFIX)
+{
+    ext_warp4x4_scaled_c_internal(NULL, tmp, tmp_stride, src, src_stride,
+                                  mx, my, dx, dy HIGHBD_TAIL_SUFFIX);
+}
+
 static NOINLINE void
 put_8tap_scaled_c(pixel *dst, const ptrdiff_t dst_stride,
                   const pixel *src, ptrdiff_t src_stride,
@@ -1163,6 +1237,8 @@ COLD void bitfn(dav2d_mc_dsp_init)(Dav2dMCDSPContext *const c) {
     c->warp8x8t = warp_affine_8x8t_c;
     c->ext_warp4x4 = ext_warp4x4_c;
     c->ext_warp4x4t = ext_warp4x4t_c;
+    c->ext_warp4x4_scaled = ext_warp4x4_scaled_c;
+    c->ext_warp4x4t_scaled = ext_warp4x4t_scaled_c;
     c->emu_edge = emu_edge_c;
     c->morph    = morph_c;
     c->opfl_refine_mv = opfl_refine_mv_c;

@@ -1853,6 +1853,112 @@ static void ext_warp(Dav2dTaskContext *const t,
     }
 }
 
+// like ext_warp(), but for scaled references: each 4x4 block is positioned
+// using the (scaled) warp model, and then filtered using per-pixel positions
+// based on the reference scaling step size
+static void ext_warp_scaled(Dav2dTaskContext *const t,
+                            pixel *dst8, int16_t *dst16, const ptrdiff_t dstride,
+                            const uint8_t *const b_dim, const int pl,
+                            const Dav2dThreadPicture *const refp, const int refidx,
+                            const Dav2dWarpedMotionParams *const wmp)
+{
+    assert((dst8 != NULL) ^ (dst16 != NULL));
+    const Dav2dFrameContext *const f = t->f;
+    const Dav2dDSPContext *const dsp = f->dsp;
+    const int ss_ver = !!pl && f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
+    const int ss_hor = !!pl && f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
+    const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
+    assert(!((b_dim[0] * h_mul) & 3) && !((b_dim[1] * v_mul) & 3));
+    const int32_t *const mat = wmp->matrix;
+    const int w = ((refp->p.p.w + 7) & ~7) >> ss_hor;
+    const int h = ((refp->p.p.h + 7) & ~7) >> ss_ver;
+    const int sw = imin(b_dim[0] * h_mul, 8);
+    const int sh = imin(b_dim[1] * v_mul, 8);
+    const int bx = pl ? t->cbx : t->bx, by = pl ? t->cby : t->by;
+    const int px = (bx * 4) >> ss_hor, py = (by * 4) >> ss_ver;
+    const int scale_x = f->svc[refidx][0].scale, step_x = f->svc[refidx][0].step;
+    const int scale_y = f->svc[refidx][1].scale, step_y = f->svc[refidx][1].step;
+    const int dx = step_x << 6, dy = step_y << 6;
+#define scale_pos(res, val, scale) do { \
+        const int64_t tmp = (int64_t)(val) * scale + (scale - 0x4000) * 8; \
+        res = apply_sign64((llabs(tmp) + 128) >> 8, tmp) + 32; \
+    } while (0)
+#define scale_warp_pos(val, scale) \
+    apply_sign64((llabs((int64_t)(val) * scale) + 0x2000) >> 14, (val))
+
+    for (int y = 0; y < b_dim[1] * v_mul; y += sh) {
+        for (int x = 0; x < b_dim[0] * h_mul; x += sw) {
+            // reference window, based on the (1/8th pel) motion vector at the
+            // center of the 8x8 block, in luma pixel units
+            const int cx = ((px + x) << ss_hor) + ((sw << ss_hor) >> 1);
+            const int cy = ((py + y) << ss_ver) + ((sh << ss_ver) >> 1);
+            const int mvx = iclip64to32((int64_t) (mat[2] - 0x10000) * cx +
+                                        (int64_t) mat[3] * cy + mat[0],
+                                        INT32_MIN, INT32_MAX) >> 13;
+            const int mvy = iclip64to32((int64_t) mat[4] * cx +
+                                        (int64_t) (mat[5] - 0x10000) * cy + mat[1],
+                                        INT32_MIN, INT32_MAX) >> 13;
+            int pos_x, pos_y;
+            scale_pos(pos_x, ((px + x) << 4) + mvx * (1 << !ss_hor), scale_x);
+            scale_pos(pos_y, ((py + y) << 4) + mvy * (1 << !ss_ver), scale_y);
+            const int left = iclip((pos_x >> 10) - 3, 0, w - 1);
+            const int right = iclip(((pos_x + (sw - 1) * step_x) >> 10) + 1 + 4, 1, w);
+            const int top = iclip((pos_y >> 10) - 3, 0, h - 1);
+            const int bottom = iclip(((pos_y + (sh - 1) * step_y) >> 10) + 1 + 4, 1, h);
+
+            for (int yy = y; yy < y + sh; yy += 4) {
+                const int src_y = (py + yy + 2) << ss_ver;
+                const int64_t mat3_y = (int64_t) mat[3] * src_y + mat[0];
+                const int64_t mat5_y = (int64_t) mat[5] * src_y + mat[1];
+                for (int xx = x; xx < x + sw; xx += 4) {
+                    const int src_x = (px + xx + 2) << ss_hor;
+                    // top/left position of this 4x4 block in the reference
+                    const int64_t pos4_x =
+                        scale_warp_pos((((int64_t) mat[2] * src_x + mat3_y) >> ss_hor) -
+                                       0x20000, scale_x);
+                    const int64_t pos4_y =
+                        scale_warp_pos((((int64_t) mat[4] * src_x + mat5_y) >> ss_ver) -
+                                       0x20000, scale_y);
+                    const int ix = (int) (pos4_x >> 16), mx = (int) (pos4_x & 0xffff);
+                    const int iy = (int) (pos4_y >> 16), my = (int) (pos4_y & 0xffff);
+                    // 8-tap filter support area (incl. rounding to next pixel)
+                    const int src_w = ((mx + 3 * dx) >> 16) + 9;
+                    const int src_h = ((my + 3 * dy) >> 16) + 9;
+
+                    const pixel *ref_ptr = refp->p.data[pl];
+                    ptrdiff_t ref_stride = refp->p.stride[!!pl];
+
+                    if (ix - 3 < left || ix - 3 + src_w > right ||
+                        iy - 3 < top || iy - 3 + src_h > bottom)
+                    {
+                        pixel *const emu_edge_buf = bitfn(t->scratch.emu_edge);
+                        f->dsp->mc.emu_edge(src_w, src_h, right - left, bottom - top,
+                                            ix - 3 - left, iy - 3 - top,
+                                            emu_edge_buf, 32 * sizeof(pixel),
+                                            &ref_ptr[left + top * PXSTRIDE(ref_stride)],
+                                            ref_stride);
+                        ref_ptr = &emu_edge_buf[32 * 3 + 3];
+                        ref_stride = 32 * sizeof(pixel);
+                    } else {
+                        ref_ptr = &ref_ptr[PXSTRIDE(ref_stride) * iy + ix];
+                    }
+
+                    if (dst16 != NULL)
+                        dsp->mc.ext_warp4x4t_scaled(&dst16[yy * dstride + xx], dstride,
+                                                    ref_ptr, ref_stride,
+                                                    mx, my, dx, dy HIGHBD_CALL_SUFFIX);
+                    else
+                        dsp->mc.ext_warp4x4_scaled(&dst8[yy * PXSTRIDE(dstride) + xx],
+                                                   dstride, ref_ptr, ref_stride,
+                                                   mx, my, dx, dy HIGHBD_CALL_SUFFIX);
+                }
+            }
+        }
+    }
+#undef scale_pos
+#undef scale_warp_pos
+}
+
 static void warp_affine(Dav2dTaskContext *const t,
                         pixel *dst8, int16_t *dst16, const ptrdiff_t dstride,
                         const uint8_t *const b_dim, const int pl,
@@ -1864,7 +1970,12 @@ static void warp_affine(Dav2dTaskContext *const t,
     const int ss_ver = !!pl && f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     const int ss_hor = !!pl && f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
     const int h_mul = 4 >> ss_hor, v_mul = 4 >> ss_ver;
+    const int refidx = (int) (refp - f->refp);
 
+    if (f->svc[refidx][0].scale) {
+        ext_warp_scaled(t, dst8, dst16, dstride, b_dim, pl, refp, refidx, wmp);
+        return;
+    }
     if (!wmp->affine || imin(b_dim[0] * h_mul, b_dim[1] * v_mul) < 8) {
         ext_warp(t, dst8, dst16, dstride, b_dim, pl, refp, wmp);
         return;

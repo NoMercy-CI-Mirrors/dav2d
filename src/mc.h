@@ -65,6 +65,12 @@ void (name)(pixel *dst, ptrdiff_t dst_stride, \
             int mx, int my HIGHBD_DECL_SUFFIX)
 typedef decl_ext_warp4x4_fn(*ext_warp4x4_fn);
 
+#define decl_ext_warp4x4_scaled_fn(name) \
+void (name)(pixel *dst, ptrdiff_t dst_stride, \
+            const pixel *src, ptrdiff_t src_stride, \
+            int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX)
+typedef decl_ext_warp4x4_scaled_fn(*ext_warp4x4_scaled_fn);
+
 #define decl_mct_scaled_fn(name) \
 void (name)(int16_t *tmp, ptrdiff_t dst_stride, \
             const pixel *src, ptrdiff_t src_stride, \
@@ -82,6 +88,12 @@ void (name)(int16_t *tmp, const ptrdiff_t tmp_stride, \
             const pixel *src, ptrdiff_t src_stride, \
             int mx, int my HIGHBD_DECL_SUFFIX)
 typedef decl_ext_warp4x4t_fn(*ext_warp4x4t_fn);
+
+#define decl_ext_warp4x4t_scaled_fn(name) \
+void (name)(int16_t *tmp, const ptrdiff_t tmp_stride, \
+            const pixel *src, ptrdiff_t src_stride, \
+            int mx, int my, int dx, int dy HIGHBD_DECL_SUFFIX)
+typedef decl_ext_warp4x4t_scaled_fn(*ext_warp4x4t_scaled_fn);
 
 #define decl_avg_fn(name) \
 void (name)(pixel *dst, ptrdiff_t dst_stride, \
@@ -180,6 +192,8 @@ typedef struct Dav2dMCDSPContext {
     warp8x8t_fn warp8x8t;
     ext_warp4x4_fn ext_warp4x4;
     ext_warp4x4t_fn ext_warp4x4t;
+    ext_warp4x4_scaled_fn ext_warp4x4_scaled;
+    ext_warp4x4t_scaled_fn ext_warp4x4t_scaled;
     emu_edge_fn emu_edge;
     morph_fn morph;
     opfl_refine_mv_fn opfl_refine_mv;
