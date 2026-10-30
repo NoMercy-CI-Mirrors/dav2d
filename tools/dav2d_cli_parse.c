@@ -152,7 +152,9 @@ static void usage(const char *const app, const char *const reason, ...) {
             " --negstride:          use negative picture strides\n"
             "                       this is mostly meant as a developer option\n"
             " --outputinvisible $num: whether to output invisible (alt-ref) frames (default: 0)\n"
-            " --inloopfilters $str: which in-loop filters to enable (none, (no)deblock, (no)cdef, (no)restoration or all; default: all)\n"
+            " --inloopfilters $str: which in-loop filters to enable: plus/min-separated list of none,\n"
+            "                       deblock, cdef, ccso, wiener, gdf or all; a leading +/- changes\n"
+            "                       the default (e.g. -cdef; default: all)\n"
             " --decodeframetype $str: which frame types to decode (reference, intra, key or all; default: all)\n"
             );
     exit(1);
