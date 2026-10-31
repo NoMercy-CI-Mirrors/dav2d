@@ -53,11 +53,7 @@ static int read_extension_bits(GetBits *const gb, ptrdiff_t *extension_bits) {
     const uint8_t *ptr = &gb->ptr_end[-1], *cur = &gb->ptr[-(1 + (gb->bits_left >> 3))];
     while (ptr >= cur && !*ptr) ptr--;
     if (ptr < cur) goto error;
-    int n = 8, m = 0x80, byte = *ptr;
-    for (; n >= 0; n++, m >>= 1) {
-        if (byte & m) break;
-    }
-    assert(n >= 0);
+    const int byte = *ptr, n = ctz(byte) + 1;
     *extension_bits = (&ptr[1] - gb->ptr) * 8 + gb->bits_left - n;
 
     // set up bitreader to skip all extension bits, but not the trailing one
