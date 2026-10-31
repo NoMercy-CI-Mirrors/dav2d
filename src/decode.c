@@ -582,7 +582,8 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
     s_src.by4 = t->by;
     s_src.bx4 = t->bx;
     if (b->motion_mode > MM_INTERINTRA ||
-        (b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
+        (!f->frame_hdr->force_integer_mv &&
+         b->inter_mode == GLOBALMV && imin(bw4, bh4) > 1 &&
          f->frame_hdr->gmv.m[b->ref.ref[0]].type > DAV2D_WM_TYPE_TRANSLATION))
     {
         assert(bw4 > 1 && bh4 > 1);
@@ -591,8 +592,9 @@ static inline void splat_oneref_mv(DB_ONLY(const int depth)
             s_src.lmv[0] = b->mv[0];
             s_src.lmv[1].n = INVALID_MV;
             s_src.mf = 2;
-            mat = t->warpmv[0].matrix;
-            memcpy(s_src.m, mat, sizeof(int32_t) * 6);
+            memcpy(s_src.m, t->warpmv[0].matrix, sizeof(int32_t) * 6);
+            mat = f->frame_hdr->force_integer_mv ?
+                  NULL : t->warpmv[0].matrix;
         } else {
             s_src.mv[0] = b->mv[0];
             s_src.mf = 1;
@@ -668,7 +670,8 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     const uint8_t *const mask = b->comp_type == COMP_INTER_WEDGE ?
         WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx) : NULL;
     if (b->motion_mode > MM_INTERINTRA ||
-        (b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1 &&
+        (!f->frame_hdr->force_integer_mv &&
+         b->inter_mode == GLOBALMV_GLOBALMV && imin(bw4, bh4) > 1 &&
          (f->frame_hdr->gmv.m[b->ref.ref[0]].type > DAV2D_WM_TYPE_TRANSLATION ||
           f->frame_hdr->gmv.m[b->ref.ref[1]].type > DAV2D_WM_TYPE_TRANSLATION)))
     {

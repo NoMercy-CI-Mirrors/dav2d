@@ -2470,8 +2470,9 @@ static void splat_mv_c(refmvs_block *s_dst, refmvs_block *const s_src,
 static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                            refmvs_temporal_block *t_dst, const ptrdiff_t off_x8,
                            const ptrdiff_t t_stride, const int bw4, int bh4,
-                           const union refpair t_ref, const int32_t *const matrix)
+                           const union refpair t_ref, const int32_t *tmatrix)
 {
+    const int32_t *const matrix = tmatrix ? tmatrix : s_src->m;
     const int bx = s_src->bx4, by = s_src->by4;
     assert(!((matrix[0] | matrix[1]) & 3));
     int mvx = (matrix[2] - 0x10000) * (bx + 1) +
@@ -2500,7 +2501,8 @@ static void splat_warpmv_c(refmvs_block *s_dst, refmvs_block *const s_src,
                 s_dst[x + 128] = *s_src;
             if (t_dst) {
                 union qmvpair *const dst_tmv = &t_dst->mv[off_x8 + (x >> 1)];
-                dst_tmv->mv[0] = dst_tmv->mv[1] = quantize_mv(warpmv);
+                dst_tmv->mv[0] = dst_tmv->mv[1] =
+                    quantize_mv(tmatrix ? warpmv : s_src->lmv[0]);
                 t_dst->ref[off_x8 + (x >> 1)].pair =
                     dst_tmv->mv[0].n == INVALID_TRAJ ? -1 : t_ref.pair;
             }

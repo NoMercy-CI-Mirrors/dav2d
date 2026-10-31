@@ -61,6 +61,7 @@ pd_m1_0: dd -1, 0
 
 pb_128: times 4 db 128
 pw_6: times 2 dw 6
+pw_7: times 2 dw 7
 pw_m128: times 2 dw -128
 pd_2: dd 2
 pd_4: dd 4
@@ -89,6 +90,14 @@ JMP_TABLE splat_comp_wedgemv_avx2, t1, t2, t4, t8
 
 SECTION .text
 
+%define m(x) mangle(private_prefix %+ _ %+ x %+ SUFFIX)
+
+%if WIN64
+DECLARE_REG_TMP 5, 8
+%else
+DECLARE_REG_TMP 8, 9
+%endif
+
 INIT_YMM avx2
 cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tmv, tref
     test         tdstq, tdstq
@@ -97,6 +106,8 @@ cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tmv, tref
     ; temporal loop
     vpbroadcastd    m0, tmvm
     vpbroadcastw    m1, trefm
+    lea             t0, [.spatial]
+.temporal:
     lea             r6, [splat_mv_avx2_table]
     tzcnt          r7d, bw4m
     movsxd          r7, [r6+r7*4]
@@ -113,7 +124,7 @@ cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tmv, tref
     lea         tdstq, [tdstq+tstrideq*2]
     dec           bh4d
     jg .t1
-    jmp .spatial
+    jmp            t0
 
 .t2:
     movq [tdstq+32*0+toffq*4], xm0
@@ -121,7 +132,7 @@ cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tmv, tref
     lea         tdstq, [tdstq+tstrideq*2]
     dec           bh4d
     jg .t2
-    jmp .spatial
+    jmp            t0
 
 .t4:
     movu [tdstq+32*0+toffq*4], xm0
@@ -129,7 +140,7 @@ cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tmv, tref
     lea         tdstq, [tdstq+tstrideq*2]
     dec           bh4d
     jg .t4
-    jmp .spatial
+    jmp            t0
 
 .t8:
     mova [tdstq+32*0+toffq*4], m0
@@ -137,7 +148,7 @@ cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tmv, tref
     lea         tdstq, [tdstq+tstrideq*2]
     dec           bh4d
     jg .t8
-    jmp .spatial
+    jmp            t0
 
 .t16:
     mova [tdstq+32*0+toffq*4], m0
@@ -146,7 +157,7 @@ cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tmv, tref
     lea         tdstq, [tdstq+tstrideq*2]
     dec           bh4d
     jg .t16
-    jmp .spatial
+    jmp            t0
 
 .t32:
     mova [tdstq+32*0], m0
@@ -158,7 +169,7 @@ cglobal splat_mv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tmv, tref
     lea         tdstq, [tdstq+tstrideq*2]
     dec           bh4d
     jg .t32
-    ; fall-through
+    jmp            t0
 
 .spatial:
     mova            m0, [ssrcq]
@@ -215,12 +226,6 @@ struc refmvs_block
     .mat: resd 6
 endstruc
 
-%if WIN64
-DECLARE_REG_TMP 5, 8
-%else
-DECLARE_REG_TMP 8, 9
-%endif
-
 INIT_YMM avx2
 cglobal splat_warpmv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tref, mat
     test byte [ssrcq+refmvs_block.mf], 2
@@ -228,6 +233,8 @@ cglobal splat_warpmv, 5, 8, 3, sdst, ssrc, tdst, toff, tstride, bw4, bh4, tref, 
 
     test         tdstq, tdstq
     jz .spatial_only
+    cmp          matmp, 0
+    jz .fullpel
     ; fall-through to spatial+temporal warp matrix code
 
     tzcnt          t0d, bw4m
@@ -736,6 +743,33 @@ INIT_YMM avx2
     %assign stack_offset stack_offset-gprsize
     %assign regs_used regs_used-1
 %endif
+
+.fullpel:
+    ; quantize mv
+    vpbroadcastq    m0, [ssrcq+refmvs_block.lmv]
+    pabsd           m1, m0
+    cvtdq2ps        m2, m1
+    vpbroadcastd    m3, [pd_131]
+    psrld           m2, 23                          ; extract exponent bits
+    psubusw         m2, m3                          ; nbits=imax(log2(absv)-4, 0)
+    vpsrlvd         m1, m2                          ; absv >> nbits [dwords]
+    pslld           m3, m2, 4                       ; 16 * bits
+    paddd           m1, m3                          ; quantize_mv_comp()
+    psignd          m1, m0                          ; apply_sign(quantize_mv_comp())
+    vpbroadcastd    m3, [pw_7]
+    packssdw        m2, m2
+    packssdw        m1, m1
+    pcmpgtw         m3, m2
+    pcmpeqw         m2, m2
+    pcmpeqd         m3, m2, m3                      ; nbits <= 6 for x+y comps
+    vpbroadcastd    m0, [pw_m128]
+    pblendvb        m0, m1, m3
+    vpbroadcastw    m1, trefm
+    packsswb        m3, m3
+    packsswb        m0, m0
+    pblendvb        m1, m2, m1, m3
+    lea             t0, [.spatial_only]
+    jmp m(splat_mv).temporal
 
 .spatial_only:
     mova            m0, [ssrcq+ 0]

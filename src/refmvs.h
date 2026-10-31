@@ -178,7 +178,7 @@ void (name)(refmvs_block *s_dst, refmvs_block *s_src, \
             refmvs_temporal_block *t_dst, ptrdiff_t off_x8, \
             ptrdiff_t t_stride, int bw4, int bh4, union refpair t_ref, \
             const int32_t *const matrix1, const int32_t *const matrix2, \
-intptr_t t_swap, const uint8_t *wedge, intptr_t w_mask)
+            intptr_t t_swap, const uint8_t *wedge, intptr_t w_mask)
 typedef decl_splat_comp_warpmv_fn(*splat_comp_warpmv_fn);
 
 #define decl_splat_comp_wedgemv_fn(name) \
@@ -223,8 +223,24 @@ typedef struct Dav2dRefmvsDSPContext {
     // spatial portions. For s_dst, only the bottom line and right-most 3
     // columns are written out, since the rest is unused.
     splat_mv_fn splat_mv;
+    // in splat_warpmv, 3 possible scenarios:
+    // a) (s_src->flags & 3) == 1: globalmv. In this case, the temporal buffer
+    //    (if present) should be warped, but the spatial should not. In this
+    //    case, matrix is never NULL.
+    // b) (s_src->flags & 3) == 2: warpmv, and matrix != NULL. This is the regular
+    //    motion_mode = warp case, in which case spatial and temporal buffers
+    //    should both be warped.
+    // c) (s_src->flags & 3) == 2: warpmv, and matrix == NULL. This is the fullpel
+    //    motion_mode = warp case, in which case the spatial buffer is warped,
+    //    but the temporal buffer is not.
     splat_warpmv_fn splat_warpmv;
+    // in splat_comp_warpmv, fullpel-warp is not possible, so only scenario
+    // (a) and (b) from above apply. If wedge != NULL, you also may need to
+    // take reference elimination into account for the temporal buffer writes.
     splat_comp_warpmv_fn splat_comp_warpmv;
+    // splat_comp_wedgemv() is a slightly simplified version (non-warp) of
+    // splat_comp_warpmv(). Based on wedges, one reference can be eliminated
+    // per 8x8 block in the temporal buffer. Spatial is same as splat_mv().
     splat_comp_wedgemv_fn splat_comp_wedgemv;
 
     // tip motion field & mv projection
