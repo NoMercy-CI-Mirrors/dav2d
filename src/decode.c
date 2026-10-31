@@ -88,9 +88,9 @@ static inline void init_wiener(Dav2dFrameContext *const f) {
 
     ptrdiff_t class_lut_offset;
     const int bitdepth_min_8 = f->seq_hdr->hbd * 2;
-    const int qmax = 255 + 24 * f->seq_hdr->hbd;
+    const int qmax = 255 + 48 * f->seq_hdr->hbd;
     const int qidx = imin(f->frame_hdr->quant.yac, qmax);
-    const int base_q = dav2d_dq_lookup(f->frame_hdr->quant.yac);
+    const int base_q = dav2d_dq_lookup(qidx);
     const int qstep = (base_q + (1 << bitdepth_min_8 >> 1)) >> bitdepth_min_8;
     setup_wiener_qval_approx_data(&f->lf.wiener_qval_approx_data,
                                   &class_lut_offset,
