@@ -1393,9 +1393,9 @@ static const uint8_t size_group_lookup[] = {
     [BS_64x4] = 2,
 };
 
-static void read_tx_part(Dav2dTaskContext *const t,
-                         DB_ONLY(const int depth) Av2Block *const b,
-                         const enum BlockSize bs)
+static int read_tx_part(Dav2dTaskContext *const t,
+                        DB_ONLY(const int depth) Av2Block *const b,
+                        const enum BlockSize bs)
 {
     Dav2dTileState *const ts = t->ts;
     const Dav2dFrameContext *const f = t->f;
@@ -1490,6 +1490,9 @@ static void read_tx_part(Dav2dTaskContext *const t,
                                b->tx_part, ts->msac.rng);
         }
     }
+
+    // invalid partitions for this block size
+    return dav2d_tx_part_tbl[bs][b->tx_part] == -1 ? -1 : 0;
 }
 
 static int read_wedge_idx(Dav2dTileState *const ts) {
@@ -2327,7 +2330,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 DEBUG_BLOCK_printf("%*sPost-y-pal-indices: r=%d\n",
                                    depth, "", ts->msac.rng);
             }
-            read_tx_part(t, DB_ONLY(depth) b, bs);
+            if (read_tx_part(t, DB_ONLY(depth) b, bs)) return -1;
         }
 
         // reconstruction
@@ -2428,7 +2431,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                            depth, "", b->is_refmv, b->drl_idx[0],
                            b->is_qpel, morphctx, b->morph_pred, ts->msac.rng);
 
-        read_tx_part(t, DB_ONLY(depth) b, bs);
+        if (read_tx_part(t, DB_ONLY(depth) b, bs)) return -1;
 
         // reconstruction
         if (t->task_thread.pass == PASS_ENTROPY) {
@@ -3331,7 +3334,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             b->filter = f->frame_hdr->subpel_filter_mode;
         }
 
-        read_tx_part(t, DB_ONLY(depth) b, bs);
+        if (read_tx_part(t, DB_ONLY(depth) b, bs)) return -1;
 
         // reconstruction
         if (t->task_thread.pass == PASS_ENTROPY) {
