@@ -4605,6 +4605,9 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     const int sb_step = f->sb_step;
     const int tile_row = ts->tiling.row, tile_col = ts->tiling.col;
 
+    // this can be left set if decoding a previous intra region failed
+    t->intra_region = 0;
+
     // FIXME turn into assert by not scheduling tip frame entropy parsing tasks
     if (f->frame_hdr->tip.frame_mode == 2 && t->task_thread.pass == PASS_ENTROPY)
         return 0;
