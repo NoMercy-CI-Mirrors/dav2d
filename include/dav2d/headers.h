@@ -469,6 +469,7 @@ typedef struct Dav2dFrameHeader {
     uint8_t show_existing_frame;
     int8_t existing_frame_idx;
     int8_t ltr_id;
+    uint8_t restricted_prediction_switch;
     uint32_t frame_presentation_delay;
     uint8_t show_immediate;
     uint8_t show_implicit;

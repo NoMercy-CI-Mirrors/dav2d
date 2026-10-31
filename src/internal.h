@@ -271,6 +271,7 @@ struct Dav2dFrameContext {
     int8_t refdist[7];
     union refpair skip_mode_refs;
     uint8_t gmv_warp_allowed[7];
+    uint8_t no_switch_opfl_refine_type, no_switch_refine_mv; // 0 in S-frames
     int use_pri_sec_cdf;
     CdfThreadContext in_cdf, out_cdf, src_cdf[2];
     struct Dav2dTileGroup *tile;

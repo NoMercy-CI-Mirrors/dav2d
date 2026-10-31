@@ -2618,7 +2618,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 }
             }
             enum CompInterPredMode coded_mode = b->inter_mode;
-            if (f->frame_hdr->opfl_refine_type &&
+            if (f->no_switch_opfl_refine_type &&
                 b->inter_mode != GLOBALMV_GLOBALMV && imin(bw4, bh4) >= 2 &&
                 f->refdir[b->ref.ref[0]] != f->refdir[b->ref.ref[1]])
             {
@@ -2848,7 +2848,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 }
             }
 
-            if (f->seq_hdr->refine_mv && imin(bw4, bh4) >= 2 && bw4 * bh4 > 4 &&
+            if (f->no_switch_refine_mv && imin(bw4, bh4) >= 2 && bw4 * bh4 > 4 &&
                 b->inter_mode != GLOBALMV_GLOBALMV &&
                 f->refdist[b->ref.ref[0]] == -f->refdist[b->ref.ref[1]] &&
                 f->refdist[b->ref.ref[0]] &&
@@ -5515,6 +5515,14 @@ int dav2d_submit_frame(Dav2dContext *const c) {
                                      !f->frame_hdr->force_integer_mv &&
                                      !dav2d_get_shear_params(&f->frame_hdr->gmv.m[i]) &&
                                      !f->svc[i][0].scale;
+        }
+        // Combine opfl/smvr header conditions with S-frame check, because
+        // these features are disabled in S-frames, but the header bits exist
+        if (f->frame_hdr->frame_type == DAV2D_FRAME_TYPE_SWITCH) {
+            f->no_switch_opfl_refine_type = f->no_switch_refine_mv = 0;
+        } else {
+            f->no_switch_opfl_refine_type = f->frame_hdr->opfl_refine_type;
+            f->no_switch_refine_mv = f->seq_hdr->refine_mv;
         }
     }
 

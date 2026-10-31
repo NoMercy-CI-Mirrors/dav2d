@@ -764,7 +764,7 @@ int dav2d_parse_sequence_header(Dav2dSequenceHeader *const out,
 static int read_frame_size(Dav2dContext *const c, GetBits *const gb) {
     Dav2dFrameHeader *const hdr = c->frame_hdr;
 
-    if (hdr->frame_size_override && IS_INTER_OR_SWITCH(hdr)) {
+    if (hdr->frame_size_override && hdr->frame_type == DAV2D_FRAME_TYPE_INTER) {
         for (int i = 0; i < hdr->n_ref_frames; i++) {
             if (dav2d_get_bit(gb)) {
                 const Dav2dThreadPicture *const ref = &c->refs[hdr->refidx[i]].p;
@@ -950,7 +950,7 @@ static void derive_pri_sec_ref(const Dav2dContext *const c, int refs[2]) {
     const int nbits = seqhdr->order_hint_n_bits;
     for (int i = 0; i < hdr->n_ref_frames; i++) {
         const Dav2dFrameHeader *const refhdr = c->refs[hdr->refidx[i]].p.p.frame_hdr;
-        if (!refhdr || IS_KEY_OR_INTRA(refhdr)) continue;
+        if (!refhdr || refhdr->frame_type != DAV2D_FRAME_TYPE_INTER) continue;
         const int ref_qidx = refhdr->quant.yac, qdiff = abs(ref_qidx - qidx);
         const int ref_poc = refhdr->frame_offset;
         const int pocdiff = abs(get_poc_diff(nbits, poc, ref_poc));
@@ -1131,6 +1131,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         case DAV2D_OBU_RAS:
         case DAV2D_OBU_SWITCH:
             hdr->frame_type = DAV2D_FRAME_TYPE_SWITCH;
+            hdr->restricted_prediction_switch = dav2d_get_bit(gb);
             break;
         default:
             if (!dav2d_get_bit(gb)) {
@@ -1294,7 +1295,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 
         // FIXME bru
 
-        if (seqhdr->ref_frame_mvs)
+        if (seqhdr->ref_frame_mvs && hdr->frame_type == DAV2D_FRAME_TYPE_INTER)
             hdr->use_ref_frame_mvs = dav2d_get_bit(gb);
         hdr->tmvp_sample_step = 1 +
             (hdr->use_ref_frame_mvs && hdr->n_ref_frames > 1 &&
@@ -1519,7 +1520,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     }
 
     hdr->secondary_ref_frame = DAV2D_PRIMARY_REF_NONE;
-    if (IS_INTER_OR_SWITCH(hdr)) {
+    if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER) {
         int refs[2];
         derive_pri_sec_ref(c, refs);
         if (!hdr->primary_ref_signaled)
@@ -1739,7 +1740,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                 struct Dav2dNSWienerPlane *const pd = &hdr->restoration.p[p].ns;
                 pd->frame_filters_on = dav2d_get_bit(gb);
                 if (pd->frame_filters_on) {
-                    if (IS_INTER_OR_SWITCH(hdr))
+                    if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER)
                         pd->temporal = dav2d_get_bit(gb);
                     if (pd->temporal) {
                         int ref = 0;
@@ -1930,7 +1931,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             for (int p = 0; p < n_planes; p++) {
                 hdr->ccso.p[p].enabled = dav2d_get_bit(gb);
                 if (!hdr->ccso.p[p].enabled) continue;
-                if (IS_INTER_OR_SWITCH(hdr)) {
+                if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER) {
                     hdr->ccso.p[p].reuse = dav2d_get_bit(gb);
                     hdr->ccso.p[p].sb_reuse = dav2d_get_bit(gb);
                     if (hdr->ccso.p[p].reuse || hdr->ccso.p[p].sb_reuse) {
@@ -2015,10 +2016,13 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 
     if (IS_INTER_OR_SWITCH(hdr)) {
         hdr->switchable_comp_refs = dav2d_get_bit(gb);
-        hdr->skip_mode_enabled = dav2d_get_bit(gb);
+        if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER)
+            hdr->skip_mode_enabled = dav2d_get_bit(gb);
 
+        // bawp is signaled, but not allowed, in S-frames
         if (seqhdr->bawp)
-            hdr->bawp = dav2d_get_bit(gb);
+            hdr->bawp = dav2d_get_bit(gb) &&
+                        hdr->frame_type == DAV2D_FRAME_TYPE_INTER;
 
         if (hdr->motion_modes & (1 << MM_WARP_DELTA))
             hdr->warp_motion = dav2d_get_bit(gb);
@@ -2041,7 +2045,9 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 
     if (IS_INTER_OR_SWITCH(hdr)) {
         if (seqhdr->global_motion && dav2d_get_bit(gb)) {
-            hdr->gmv.ref = dav2d_get_uniform(gb, hdr->n_ref_frames + 1);
+            hdr->gmv.ref = hdr->frame_type == DAV2D_FRAME_TYPE_SWITCH ?
+                           hdr->n_ref_frames :
+                           dav2d_get_uniform(gb, hdr->n_ref_frames + 1);
             const int32_t *ref_base_mat;
             int in_dist;
             if (hdr->gmv.ref == hdr->n_ref_frames) {
