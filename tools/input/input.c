@@ -45,11 +45,9 @@ struct DemuxerContext {
 };
 
 extern const Demuxer ivf_demuxer;
-extern const Demuxer annexb_demuxer;
 extern const Demuxer section5_demuxer;
 static const Demuxer *const demuxers[] = {
     &ivf_demuxer,
-    &annexb_demuxer,
     &section5_demuxer,
     NULL
 };

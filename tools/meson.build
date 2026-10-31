@@ -26,7 +26,6 @@
 
 dav2d_input_sources = files(
     'input/input.c',
-    'input/annexb.c',
     'input/ivf.c',
     'input/section5.c',
 )
