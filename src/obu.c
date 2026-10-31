@@ -2720,7 +2720,8 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
         break;
     }
     case DAV2D_OBU_FGM: {
-        parse_fgm_hdr(c, &gb);
+        if (!c->seq_hdr) goto error;
+        if (parse_fgm_hdr(c, &gb) < 0) goto error;
         if (check_trailing_bits(&gb, c->strict_std_compliance) < 0)
             goto error;
         break;
