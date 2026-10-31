@@ -141,9 +141,9 @@ enum Dav2dFrameType {
 
 enum Dav2dColorDescription {
     DAV2D_COLOR_DESC_EXPLICIT = 0,   // Explicitly signaled
-    DAV2D_COLOR_DESC_BT709SDR = 1,   // CP=1, TC=1, MC=5
+    DAV2D_COLOR_DESC_BT709SDR = 1,   // CP=1, TC=1, MC=1
     DAV2D_COLOR_DESC_BT2100PQ = 2,   // CP=9, TC=16, MC=9
-    DAV2D_COLOR_DESC_BT2100HLG = 3,  // CP=9, TC=14, MC=9
+    DAV2D_COLOR_DESC_BT2100HLG = 3,  // CP=9, TC=18, MC=9
     DAV2D_COLOR_DESC_SRGB = 4,       // CP=1, TC=13, MC=0
     DAV2D_COLOR_DESC_SRGBSYCC = 5,   // CP=1, TC=13, MC=5
     DAV2D_COLOR_DESC_RESERVED = 255,

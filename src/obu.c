@@ -2283,7 +2283,7 @@ static int parse_ci_hdr(Dav2dContext *const c, GetBits *const gb,
         case DAV2D_COLOR_DESC_BT709SDR:
             ci->color.pri = DAV2D_COLOR_PRI_BT709;
             ci->color.trc = DAV2D_TRC_BT709;
-            ci->color.mtrx = DAV2D_MC_BT470BG;
+            ci->color.mtrx = DAV2D_MC_BT709;
             break;
         case DAV2D_COLOR_DESC_BT2100PQ:
             ci->color.pri = DAV2D_COLOR_PRI_BT2020;
@@ -2292,7 +2292,7 @@ static int parse_ci_hdr(Dav2dContext *const c, GetBits *const gb,
             break;
         case DAV2D_COLOR_DESC_BT2100HLG:
             ci->color.pri = DAV2D_COLOR_PRI_BT2020;
-            ci->color.trc = DAV2D_TRC_BT2020_10BIT;
+            ci->color.trc = DAV2D_TRC_HLG;
             ci->color.mtrx = DAV2D_MC_BT2020_NCL;
             break;
         case DAV2D_COLOR_DESC_SRGB:
