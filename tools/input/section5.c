@@ -46,7 +46,7 @@
 static int section5_probe(const uint8_t *data) {
     int ret, cnt = 0;
 
-    // start with sequence header
+    // start with temporal delimiter
     size_t obu_size;
     enum Dav2dObuType type;
     ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
@@ -54,10 +54,20 @@ static int section5_probe(const uint8_t *data) {
     if (ret < 0 || type != DAV2D_OBU_TD)
         return 0;
     cnt += ret;
-    ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
-                           &obu_size, &type);
-    if (ret < 0 || type != DAV2D_OBU_SEQ_HDR)
-        return 0;
+    // sequence header is next
+    while (cnt < PROBE_SIZE) {
+        ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
+                               &obu_size, &type);
+        if (ret < 0)
+            return 0;
+        if (type == DAV2D_OBU_SEQ_HDR)
+            break;
+        // skip layer configuration OBUs, which may precede the sequence header
+        if (type != DAV2D_OBU_LAYER_CFG_REC && type != DAV2D_OBU_OP_PT_SET &&
+            type != DAV2D_OBU_ATLAS_SEG && type != DAV2D_OBU_MSDO)
+            return 0;
+        cnt += ret;
+    }
     cnt += ret;
 
     // look for first frame
