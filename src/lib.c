@@ -458,7 +458,11 @@ static int output_image(Dav2dContext *const c, Dav2dPicture *const out) {
     c->dpb_out++;
     if (c->dpb_out == c->dpb_sz) c->dpb_out = 0;
 
-    // FIXME if decoding had an error, report it back to the user here
+    if (q->res || progress == FRAME_ERROR) {
+        const int res = q->res ? q->res : DAV2D_ERR(EINVAL);
+        dav2d_thread_picture_unref(&q->p);
+        return res;
+    }
 
     const int res = dav2d_apply_grain(c, out, &q->p.p);
     dav2d_thread_picture_unref(&q->p);
