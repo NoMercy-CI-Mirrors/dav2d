@@ -318,7 +318,8 @@ static struct OutputQueue *queue_append(Dav2dContext *const c,
     q->res = 0;
     if (c->dpb_in == c->dpb_sz) c->dpb_in = 0;
     assert(c->dpb_in != c->dpb_out);
-    assert(!c->dpb_poc || c->dpb_poc != p->p.frame_hdr->frame_offset);
+    assert(c->output_invisible_frames || !c->dpb_poc ||
+           c->dpb_poc != p->p.frame_hdr->frame_offset);
     c->dpb_poc = p->p.frame_hdr->frame_offset;
     return q;
 }
@@ -362,6 +363,9 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
     const int nb = c->seq_hdr->order_hint_n_bits;
     const int poc = p->p.frame_hdr->frame_offset;
     unsigned mask = 0;
+
+    // output POCs must be unique (AVM errors out), so drop duplicates
+    if (c->dpb_poc && poc == c->dpb_poc) return NULL;
 
     for (;;) {
         int cand_n = -1, cand_poc = poc;
