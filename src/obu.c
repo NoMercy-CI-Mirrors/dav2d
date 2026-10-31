@@ -1785,6 +1785,10 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                         if (!rpd->frame_filters_on) goto error;
                         pd->num_classes_idx = rpd->num_classes_idx;
                         pd->num_classes = rpd->num_classes;
+                    } else if (p) {
+                        // chroma filters don't have multiple classes
+                        pd->num_classes_idx = 0;
+                        pd->num_classes = 1;
                     } else {
                         const int val = dav2d_get_bits(gb, 3);
                         pd->num_classes_idx = val;
@@ -1824,13 +1828,20 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                        imax(seqhdr->ss_hor, seqhdr->ss_ver));
         }
 
+        // the dictionary size depends on whether luma pc-wiener is
+        // disabled, also for chroma; pc-wiener filters (min. 16) are only
+        // added for luma
+        const int no_pc_wiener = seqhdr->rst_disable_mask[0] & 1;
+        const int n_filters = no_pc_wiener ? 16 : 64;
         for (int p = 0; p < n_planes; p++) {
-            int8_t ref_filters[48][18];
+            // at most 64 - 16 (pc-wiener) - 1 (class) for luma, or
+            // 2 (u+v) * 7 (refs) for chroma
+            int8_t ref_filters[47][18];
             struct Dav2dNSWienerPlane *const pd = &hdr->restoration.p[p].ns;
             if (!pd->frame_filters_on) continue;
             const int n_feat = 16 + 2 * !!p;
-            const int n_ref_filters = seqhdr->rst_disable_mask[!!p] & 1 ? 16 :
-                                      48 - pd->num_classes;
+            const int use_pc_wiener = !p && !no_pc_wiener;
+            const int n_ref_filters = n_filters - pd->num_classes - 16 * use_pc_wiener;
 
             if (pd->temporal) {
                 const Dav2dFrameHeader *const ref_hdr =
@@ -1864,15 +1875,17 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                     if (!dir) break;
                 }
             }
-            const int n_filters = seqhdr->rst_disable_mask[!!p] & 1 ? 16 : 64;
+            assert(i <= (p ? 14 : 47));
             const int n_classes = pd->num_classes;
             uint8_t grp_cnt[3], grp_ref_cnt[3] = { 0 };
             assert(n_classes > 0);
             grp_cnt[0] = n_classes;
             grp_cnt[1] = i;
-            grp_cnt[2] = n_filters - (grp_cnt[0] + grp_cnt[1]);
+            grp_cnt[2] = use_pc_wiener * (n_filters - (grp_cnt[0] + grp_cnt[1]));
             uint8_t filter_refs[64];
-            int pred_grp = 2 - (grp_cnt[1] > 2);
+            int pred_grp = grp_cnt[1] > 2 ? 1 :
+                           grp_cnt[1] <= 1 && grp_cnt[2] <= 1 ? 0 :
+                           grp_cnt[1] >= grp_cnt[2] ? 1 : 2;
             const int nnz_grps = 1 + !!grp_cnt[1] + !!grp_cnt[2];
             for (int n = 0; n < n_classes; n++) {
                 int group;
@@ -1926,8 +1939,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                     if (!found) break;
                 }
                 const unsigned mask = masks[s];
-                // FIXME read sym bit (chroma only) if ref filter subset "s" is
-                // assymetric and has space
+                const int asym = p && s && dav2d_get_bit(gb);
                 for (int i = 0, m = mask; i < 16 + !!p * 2; i++, m >>= 1) {
                     if (!(m & 1)) continue;
                     const int nbits = cf_range[i][0];
@@ -1935,8 +1947,11 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                                     ref_filter[i] - cf_range[i][1],
                                     1 << nbits, nbits - 3) +
                                 cf_range[i][1];
-                    // FIXME if sym is set and this coef is assymetric, insert an
-                    // extra coef here
+                    if (asym && i >= 6) {
+                        filter[i + 1] = filter[i];
+                        i++;
+                        m >>= 1;
+                    }
                 }
             }
         }
