@@ -986,6 +986,178 @@ static void derive_lowest_px(Dav2dTaskContext *const t,
     }
 }
 
+static int check_intrabc_mv(const Dav2dTaskContext *const t,
+                            const enum BlockSize lbs, const enum BlockSize cbs,
+                            const Av2Block *const b)
+{
+    const Dav2dFrameContext *const f = t->f;
+    const Dav2dTileState *const ts = t->ts;
+    const uint8_t *const b_dim = dav2d_block_dimensions[lbs];
+
+    // invalid block vectors (e.g. pointing into not yet decoded areas)
+    // are a bitstream error, like in AVM. With morph_pred, the block
+    // vector offset by (-1,-1) pixels has to be valid also, so the area
+    // is extended by one pixel to the top-left.
+    const int intra_only = IS_KEY_OR_INTRA(f->frame_hdr);
+    // for blocks with chroma, the chroma block position (which can be
+    // different for sub-8x8 blocks) is used for the local range check
+    // decode_b() never passes a chroma block size for monochrome
+    assert(cbs == BS_INVALID || f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400);
+    const int use_cb = cbs != BS_INVALID && (!f->seq_hdr->sdp || !intra_only);
+    const uint8_t *const vb_dim = dav2d_block_dimensions[use_cb ? cbs : lbs];
+    const int vx = (use_cb ? t->cbx : t->bx) * 4, vw = vb_dim[0] * 4;
+    const int vy = (use_cb ? t->cby : t->by) * 4, vh = vb_dim[1] * 4;
+    const int bw = b_dim[0] * 4, bh = b_dim[1] * 4;
+    const int sb_log2 = 6 + f->frame_hdr->sbsz;
+#define is_coded(x, y) \
+    ((t->is_coded[0][((y) >> 2) & 63] >> (((x) >> 2) & 63)) & 1)
+    const int m = b->morph_pred;
+    const int dx = b->mv[0].x >> 3, dy = b->mv[0].y >> 3;
+    // interpolation borders are only on the right/bottom side
+    const int rbx = !!(b->mv[0].x & 7), bby = !!(b->mv[0].y & 7);
+
+    const int src_x0 = t->bx * 4 + dx - m, src_x1 = t->bx * 4 + dx + bw + rbx;
+    const int src_y0 = t->by * 4 + dy - m, src_y1 = t->by * 4 + dy + bh + bby;
+    if (src_x0 < ts->tiling.col_start * 4 || src_x1 > ts->tiling.col_end * 4 ||
+        src_y0 < ts->tiling.row_start * 4 || src_y1 > ts->tiling.row_end * 4)
+    {
+        return -1;
+    }
+    if (use_cb && (vx + dx - m < ts->tiling.col_start * 4 ||
+                   vy + dy - m < ts->tiling.row_start * 4))
+    {
+        return -1;
+    }
+
+    // local intrabc: the source must be in the current superblock (or
+    // in the part of the superblock(s) to the left of it that is still
+    // in the 4x64x64 reference buffer), in already coded areas
+    if (!f->frame_hdr->allow_local_intrabc || (bw > 64 && bh > 64))
+        goto global_intrabc;
+    {
+        const int lx0 = vx + dx - m, lx1 = vx + dx + vw - 1 + rbx;
+        const int ly0 = vy + dy - m, ly1 = vy + dy + vh - 1 + bby;
+        const int sbx = vx >> sb_log2, sby = vy >> sb_log2;
+        const int num_left_sb = (4 * 64 * 64 + (1 << 2 * sb_log2) - 1) >> (2 * sb_log2);
+        // the source can't overlap the (uncoded) area to the bottom-right
+        // of the top-left corner of the current block, and must be in
+        // the same superblock row
+        if (!((lx1 < vx || ly1 < vy) &&
+              (ly0 >> sb_log2) == sby && (ly1 >> sb_log2) == sby &&
+              (lx1 >> sb_log2) <= sbx && (lx0 >> sb_log2) >= sbx - num_left_sb))
+        {
+            goto global_intrabc;
+        }
+
+        // whether the top-left/bottom-right of the source block is in
+        // the same reference buffer area as the current block (1), or in
+        // an area being overwritten by the current superblock (0), and
+        // which then has to be checked at the co-located position (-1:
+        // no check)
+        int tl_same_ref, br_same_ref;
+        int cx0 = lx0, cx1 = lx1, cy0 = ly0, cy1 = ly1;
+        if (sb_log2 <= 7) {
+            const int sb_off = sbx - (lx0 >> sb_log2);
+            br_same_ref = (lx1 >> sb_log2) == sbx;
+            if (sb_off == num_left_sb) {
+                tl_same_ref = 0;
+                cx0 += sb_off << sb_log2;
+                cx1 += sb_off << sb_log2;
+            } else {
+                tl_same_ref = sb_off ? -1 : 1;
+            }
+        } else {
+            // 256x256 superblocks consist of 4 128x128 quadrants Q0-3,
+            // and the reference buffer contains one quadrant (R/P) of
+            // the superblock to the left, besides the current one:
+            // |R|Q0|Q1|
+            // |P|Q2|Q3|
+            const int off_l = (vx >> 7) - (lx0 >> 7), off_r = (vx >> 7) - (lx1 >> 7);
+            const int off_t = (vy >> 7) - (ly0 >> 7), off_b = (vy >> 7) - (ly1 >> 7);
+            const int q_right = (vx >> 7) & 1, q_bottom = (vy >> 7) & 1;
+            const int root_v = t->ibc_root_bp == PARTITION_V;
+            const int root_hq = t->ibc_root_bp == PARTITION_H ||
+                                t->ibc_root_bp == PARTITION_SPLIT;
+            cx0 += off_l * 128;
+            cx1 += off_l * 128;
+            cy0 += off_t * 128;
+            cy1 += off_t * 128;
+            tl_same_ref = br_same_ref = 0;
+            if (!off_l && !off_r && !off_t && !off_b) {
+                tl_same_ref = br_same_ref = 1;
+            } else if (!q_right && !q_bottom) {
+                // Q0 can reference P
+                if (!(off_l == 1 && off_r == 1 && off_t == -1 && off_b == -1))
+                    goto global_intrabc;
+            } else if (!q_right) {
+                // Q2 can reference Q0 (vertical root) or Q1 (horizontal/split root)
+                if (root_v && !off_l && !off_r && off_t == 1)
+                    br_same_ref = (ly1 >> 7) == (vy >> 7);
+                else if (!(root_hq && off_l == -1 && off_r == -1 &&
+                           off_t == 1 && off_b == 1))
+                    goto global_intrabc;
+            } else if (!q_bottom) {
+                // Q1 can reference Q0 (horizontal/split root) or Q2 (vertical root)
+                if (root_hq && off_l == 1 && !off_t && !off_b)
+                    br_same_ref = (lx1 >> 7) == (vx >> 7);
+                else if (!(root_v && off_l == 1 && off_r == 1 &&
+                           off_t == -1 && off_b == -1))
+                    goto global_intrabc;
+            } else {
+                // Q3 can reference Q2 (horizontal/split root) or Q1 (vertical root)
+                if (root_hq && off_l == 1 && !off_t && !off_b)
+                    br_same_ref = (lx1 >> 7) == (vx >> 7);
+                else if (root_v && !off_l && !off_r && off_t == 1)
+                    br_same_ref = (ly1 >> 7) == (vy >> 7);
+                else
+                    goto global_intrabc;
+            }
+        }
+        if (tl_same_ref == 1) {
+            if (!is_coded(cx0, cy0))
+                goto global_intrabc;
+        } else if (!tl_same_ref) {
+            // the co-located area in the current superblock must not be
+            // coded yet, and can't overlap with the current block
+            if (is_coded(cx0, cy0) ||
+                (cx0 < vx + vw && cx1 >= vx && cy0 < vy + vh && cy1 >= vy))
+            {
+                goto global_intrabc;
+            }
+        }
+        if (br_same_ref == 1 && !is_coded(lx1, ly1))
+            goto global_intrabc;
+        return 0;
+    }
+
+    // global intrabc: the source must be in an already coded superblock,
+    // with a delay of 256 pixels, and within a wavefront of the current
+    // position
+global_intrabc:
+    if (!intra_only || !f->frame_hdr->allow_global_intrabc) return -1;
+    const int sb_row = (t->by * 4) >> sb_log2, sb64_col = (t->bx * 4) >> 6;
+    const int src_sb_row = (src_y1 - 1) >> sb_log2;
+    const int src_sb64_col = (src_x1 - 1) >> 6;
+    // one 64x64 less for the bottom-left 64x64 of horizontally or
+    // quad split 128x128 superblocks
+    const int delay = 4 - (sb_log2 == 7 &&
+        (t->ibc_root_bp == PARTITION_H || t->ibc_root_bp == PARTITION_SPLIT) &&
+        !(sb64_col & 1) && (((t->by * 4) >> 6) & 1));
+    const int sb64_per_row =
+        ((ts->tiling.col_end - ts->tiling.col_start - 1) >> 4) + 1;
+    const int gradient = 5 + (sb_log2 > 6) + 2 * (sb_log2 > 7);
+    if (src_sb_row * sb64_per_row + src_sb64_col >=
+            sb_row * sb64_per_row + sb64_col - delay ||
+        src_sb_row > sb_row ||
+        src_sb64_col >= sb64_col - delay + gradient * (sb_row - src_sb_row))
+    {
+        return -1;
+    }
+#undef is_coded
+
+    return 0;
+}
+
 static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                    const enum BlockSize lbs, const enum BlockSize cbs,
                    Av2Block *const b)
@@ -993,6 +1165,8 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     const Dav2dFrameContext *const f = t->f;
 
     if (t->task_thread.pass == PASS_RECON) {
+        if (lbs != BS_INVALID && b->intrabc && check_intrabc_mv(t, lbs, cbs, b))
+            return -1;
         if (lbs != BS_INVALID && !b->intra && b->motion_mode > MM_INTERINTRA) {
             // restore warp matrices
             const int comp =  b->ref.ref[1] != -1;
@@ -1050,64 +1224,6 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             b->mv[0].x += diff.x;
             b->mv[0].y += diff.y;
         }
-#if 0
-        // clip intrabc motion vector to decoded parts of current tile
-        int border_left = ts->tiling.col_start * 4;
-        int border_top  = ts->tiling.row_start * 4;
-        if (has_chroma) {
-            if (bw4 < 2 &&  ss_hor)
-                border_left += 4;
-            if (bh4 < 2 &&  ss_ver)
-                border_top  += 4;
-        }
-        int src_left   = t->bx * 4 + (b->mv[0].x >> 3);
-        int src_top    = t->by * 4 + (b->mv[0].y >> 3);
-        int src_right  = src_left + bw4 * 4;
-        int src_bottom = src_top  + bh4 * 4;
-        const int border_right = ((ts->tiling.col_end + (bw4 - 1)) & ~(bw4 - 1)) * 4;
-
-        // check against left or right tile boundary and adjust if necessary
-        if (src_left < border_left) {
-            src_right += border_left - src_left;
-            src_left  += border_left - src_left;
-        } else if (src_right > border_right) {
-            src_left  -= src_right - border_right;
-            src_right -= src_right - border_right;
-        }
-        // check against top tile boundary and adjust if necessary
-        if (src_top < border_top) {
-            src_bottom += border_top - src_top;
-            src_top    += border_top - src_top;
-        }
-
-        const int sbx = (t->bx >> (4 + f->frame_hdr->sbsz)) << (6 + f->frame_hdr->sbsz);
-        const int sby = (t->by >> (4 + f->frame_hdr->sbsz)) << (6 + f->frame_hdr->sbsz);
-        const int sb_size = 1 << (6 + f->frame_hdr->sbsz);
-        // check for overlap with current superblock
-        if (src_bottom > sby && src_right > sbx) {
-            if (src_top - border_top >= src_bottom - sby) {
-                // if possible move src up into the previous suberblock row
-                src_top    -= src_bottom - sby;
-                src_bottom -= src_bottom - sby;
-            } else if (src_left - border_left >= src_right - sbx) {
-                // if possible move src left into the previous suberblock
-                src_left  -= src_right - sbx;
-                src_right -= src_right - sbx;
-            }
-        }
-        // move src up if it is below current superblock row
-        if (src_bottom > sby + sb_size) {
-            src_top    -= src_bottom - (sby + sb_size);
-            src_bottom -= src_bottom - (sby + sb_size);
-        }
-        // error out if mv still overlaps with the current superblock
-        if (src_bottom > sby && src_right > sbx)
-            return -1;
-
-        b->mv[0].x = (src_left - t->bx * 4) * 8;
-        b->mv[0].y = (src_top  - t->by * 4) * 8;
-#endif
-
         DEBUG_BLOCK_printf("%*sfinal 2dmv: y=%d,x=%d\n",
                            depth, "", b->mv[0].y, b->mv[0].x);
         splat_intrabc_mv(DB_ONLY(depth) f, t, bs, b, by4, bx4, bw4, bh4);
@@ -1385,6 +1501,8 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     assert(t->task_thread.pass & PASS_RECON);
+    if (has_luma && b->intrabc && check_intrabc_mv(t, lbs, cbs, b))
+        return -1;
     return f->bd_fn.recon_b(t, DB_ONLY(depth) lbs,
                (const enum BlockSize[2]){ cbs, cbs }, b);
 }
@@ -4184,6 +4302,9 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         }
     }
 
+    if (bs == f->root_bs && lbs != BS_INVALID)
+        t->ibc_root_bp = bp;
+
     if (bs == cbs) {
         t->cbx = t->bx;
         t->cby = t->by;
@@ -4461,6 +4582,15 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         t->cby = t->by;
         if (decode_b(t, DB_ONLY(depth + 1) BS_INVALID, cbs_orig)) return -1;
         t->intra_region = 0;
+    }
+
+    if (lbs != BS_INVALID && f->frame_hdr->allow_intrabc &&
+        t->task_thread.pass & PASS_RECON &&
+        (t->bx + bw4 > f->bw || t->by + bh4 > f->bh))
+    {
+        const uint64_t bits = (~0ULL >> (64 - bw4)) << (t->bx & 63);
+        for (int y = 0; y < bh4; y++)
+            t->is_coded[0][(t->by & 63) + y] |= bits;
     }
 
     return 0;

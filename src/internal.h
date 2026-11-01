@@ -452,6 +452,7 @@ struct Dav2dTaskContext {
     BlockContext l, *a;
     struct SBEdgeCtx a_sb_cache;
     uint64_t is_coded[2 /* luma, chroma */][64];
+    uint8_t /* enum BlockPartition */ ibc_root_bp;
     struct {
         int col_start;
         int row_start;
