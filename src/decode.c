@@ -1113,6 +1113,9 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 }
 #endif
 
+                if (b->motion_mode > MM_INTERINTRA && b->warp_ref_idx >= n_mvs[1])
+                    return -1;
+
                 const union mv diff = b->mv[0];
                 b->mv[0] = b->inter_mode == WARPMV ?
                     get_warpmv_2d(warp[b->warp_ref_idx], t->bx, t->by,
