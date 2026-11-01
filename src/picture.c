@@ -189,7 +189,8 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
     const int res = picture_alloc(c, &p->p, f->frame_hdr->width, f->frame_hdr->height,
                                   f->seq_hdr, f->seq_hdr_ref,
                                   f->frame_hdr, f->frame_hdr_ref,
-                                  bpc, &f->tile[0].data.m, &c->allocator,
+                                  bpc, f->frame_hdr->tip.frame_mode == 2 ? &c->in.m :
+                                       &f->tile[0].data.m, &c->allocator,
                                   (void **) &p->progress);
     if (res) return res;
 
