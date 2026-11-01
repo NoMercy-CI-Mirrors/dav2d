@@ -2781,7 +2781,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     refdist[1] = f->absrefdist[b->ref.ref[1]];
                     start = refdist[0] < refdist[1];
                     if (f->refdir[b->ref.ref[0]] ^ f->refdir[b->ref.ref[1]])
-                        refdist[1] = -refdist[1];
+                        refdist[!start] = -refdist[!start];
                     end = start + 1;
                 }
                 enum InterPredMode m[2];
@@ -2845,7 +2845,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         n &= 1; // "the one not handled above"
                         b->mv_prec = (6 << (n * 4)) |
                                      (b->mv_prec << (!n * 4));
-                        b->mv[n] = dav2d_mv_projection(b->mv[!n], refdist[1], refdist[0],
+                        b->mv[n] = dav2d_mv_projection(b->mv[!n],
+                                                       iclip(refdist[n], -31, +31),
+                                                       imin(refdist[!n], 31),
                                                        -0xffff, 0xffff);
                         jmvd_scale(&b->mv[n], b->amvd, jmvd_scale_mode);
                     } else {

@@ -445,7 +445,7 @@ static const uint16_t div_mult[32] = {
 mv dav2d_mv_projection(const union mv mv, const int num, const int den,
                        const int min, const int max)
 {
-    assert(den > 0 && den < 32);
+    assert(den >= 0 && den < 32);
     assert(num > -32 && num < 32);
     const int frac = num * div_mult[den];
     return scale_mv(mv, frac);
@@ -2239,9 +2239,9 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
         const int d2 = get_poc_diff(seq_hdr->order_hint_n_bits,
                                     bothsiderefs ? tip1poc : tip0poc,
                                     bothsiderefs ? tip0poc : tip1poc);
-        rf->tip.delta = abs(d2);
+        rf->tip.delta = imin(abs(d2), 31);
         const int d1 = rf->pocdiff[rf->tip.ref.ref[0]];
-        const int dv = div_mult[imin(abs(d2), 31)];
+        const int dv = div_mult[rf->tip.delta];
         rf->tip.sf[0] = imin(abs(d1), 31) * dv;
         if ((d1 < 0) ^ (d2 < 0)) rf->tip.sf[0] *= -1;
         const int d3 = rf->pocdiff[rf->tip.ref.ref[1]];
