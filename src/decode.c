@@ -666,7 +666,7 @@ static inline void splat_tworef_mv(DB_ONLY(const int depth)
     s_src.bs = bs;
     s_src.by4 = t->by;
     s_src.bx4 = t->bx;
-    s_src.mf = b->cwp_idx << 2;
+    s_src.mf = b->cwp_idx * 4;
     const uint8_t *const mask = b->comp_type == COMP_INTER_WEDGE ?
         WEDGE_TMVP(bs, bw4, bh4, b->wedge_idx) : NULL;
     if (b->motion_mode > MM_INTERINTRA ||
