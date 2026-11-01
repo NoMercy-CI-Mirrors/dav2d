@@ -944,7 +944,7 @@ static void find_tip_ref_frames(const Dav2dContext *const c,
 static void derive_pri_sec_ref(const Dav2dContext *const c, int refs[2]) {
     const Dav2dSequenceHeader *const seqhdr = c->seq_hdr;
     const Dav2dFrameHeader *const hdr = c->frame_hdr;
-    refs[0] = DAV2D_PRIMARY_REF_NONE;
+    refs[0] = refs[1] = DAV2D_PRIMARY_REF_NONE;
     int best_qdiff[2], best_pocdiff[2], best_poc[2], best = 0;
     const int qidx = hdr->quant.yac, poc = hdr->frame_offset;
     const int nbits = seqhdr->order_hint_n_bits;
