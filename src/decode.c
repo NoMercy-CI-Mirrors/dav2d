@@ -5415,6 +5415,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             if (c->task_thread.cur && c->task_thread.cur < c->n_fc)
                 c->task_thread.cur--;
         }
+        f->frame_thread.scheduled = 1;
         // FIXME forward error code for frame to dpb->res
 #if 0
         const int error = f->task_thread.retval;
@@ -5851,7 +5852,6 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         }
     } else {
         dav2d_task_frame_init(f);
-        f->frame_thread.scheduled = 1;
         pthread_mutex_unlock(&c->task_thread.lock);
     }
 
