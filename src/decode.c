@@ -3717,29 +3717,25 @@ static void read_sb_restoration(Dav2dTaskContext *const t,
         const enum Dav2dRestorationType frame_type = f->frame_hdr->restoration.p[p].type;
 
         // FIXME many of these values can be pre-calculated at frame-level
-        const int sbw = sbsz >> ss_hor, sbh = sbsz >> ss_ver;
-        const int lruw = imax(1, imin(tw - fx + half_unit, sbw) >> unit_sz_log2);
+        const int sbh = sbsz >> ss_ver;
         const int lruh = imax(1, imin(th - fy + half_unit, sbh) >> unit_sz_log2);
-        // 64px units (64x64 superblocks) give a shift of -1; there is then
-        // one unit per superblock (lruw == lruh == 1), so 0 is equivalent
-        const int vsh = imax(0, unit_sz_log2 - 7 + ss_ver);
-        const int hsh = imax(0, unit_sz_log2 - 7 + ss_hor);
-        assert(unit_sz_log2 - 7 + imin(ss_ver, ss_hor) >= 0 ||
-               (lruw == 1 && lruh == 1));
-        int sb_idx = (t->by >> 6) * f->sb256w + (t->bx >> 6);
-        // TODO: store restoration data sequentially instead
-        int start_unit_idx = ((t->by & 0x30) >> 2) + ((t->bx & 0x30) >> 4);
+        // the minimum unit size is such that superblocks are never more than
+        // one unit wide; only 4:2:2 chroma can have two units (vertically),
+        // e.g. 64x64 chroma units in 128x128 superblocks
+        assert(lruh == 1 || (lruh == 2 && ss_hor && !ss_ver));
+        const int ux = t->bx * 4;
 
-        // FIXME I think lruh is always 1, so this loop may be eliminated
-        for (int y = 0; y < lruh; y++, sb_idx += f->sb256w << vsh) {
-            for (int x = 0; x < lruw; x++) {
-                int unit_idx = start_unit_idx; // TODO: + x * ... + y * ...;
-                Av2RestorationUnit *const lr =
-                    &f->lf.lr_mask[sb_idx + (x << hsh)].lr[p][unit_idx];
-                read_restoration_info(t, lr, p, frame_type);
-                DEBUG_BLOCK_printf("Post-restoration[p=%d,type=%d]: r=%d\n",
-                                   p, lr->type, ts->msac.rng);
-            }
+        // units are stored by the luma position of their top-left corner, in
+        // the 256x256 area containing it, as one of its 4x4 64x64 blocks.
+        // TODO: store restoration data sequentially instead
+        for (int y = 0; y < lruh; y++) {
+            const int uy = t->by * 4 + (y << (unit_sz_log2 + ss_ver));
+            Av2RestorationUnit *const lr =
+                &f->lf.lr_mask[(uy >> 8) * f->sb256w + (ux >> 8)]
+                    .lr[p][((uy >> 4) & 0xc) + ((ux >> 6) & 3)];
+            read_restoration_info(t, lr, p, frame_type);
+            DEBUG_BLOCK_printf("Post-restoration[p=%d,type=%d]: r=%d\n",
+                               p, lr->type, ts->msac.rng);
         }
     }
 }
