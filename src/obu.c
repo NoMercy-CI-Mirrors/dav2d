@@ -3063,10 +3063,15 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
     return gb.ptr_end - gb.ptr_start;
 
 skip:
-    // update refs with only the headers in case we skip the frame
-    for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
+    // update refs with only the headers in case we skip the frame (like in
+    // dav2d_submit_frame(), switch frames that refresh multiple slots are
+    // only stored in the first of them, the others are emptied)
+    for (int i = 0, first = 1; i < DAV2D_NUM_REF_FRAMES; i++) {
         if (c->frame_hdr->refresh_frame_flags & (1 << i)) {
             dav2d_thread_picture_unref(&c->refs[i].p);
+            if (!first && c->frame_hdr->frame_type == DAV2D_FRAME_TYPE_SWITCH)
+                continue;
+            first = 0;
             c->refs[i].p.p.frame_hdr = c->frame_hdr;
             c->refs[i].p.p.seq_hdr = c->seq_hdr;
             c->refs[i].p.p.frame_hdr_ref = c->frame_hdr_ref;

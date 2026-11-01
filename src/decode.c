@@ -5848,31 +5848,36 @@ int dav2d_submit_frame(Dav2dContext *const c) {
 
     // update references etc.
     const unsigned refresh_frame_flags = f->frame_hdr->refresh_frame_flags;
-    for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
+    for (int i = 0, first = 1; i < DAV2D_NUM_REF_FRAMES; i++) {
         if (refresh_frame_flags & (1 << i)) {
             if (c->refs[i].p.p.frame_hdr)
                 dav2d_thread_picture_unref(&c->refs[i].p);
-            dav2d_thread_picture_ref(&c->refs[i].p, &f->cur);
-
             dav2d_cdf_thread_unref(&c->cdf[i]);
+            dav2d_ref_dec(&c->refs[i].segmap);
+            dav2d_ref_dec(&c->refs[i].refmvs);
+            dav2d_ref_dec(&c->refs[i].ccsomap);
+
+            if (!first && (f->frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY ||
+                           f->frame_hdr->frame_type == DAV2D_FRAME_TYPE_SWITCH))
+            {
+                continue;
+            }
+            first = 0;
+            dav2d_thread_picture_ref(&c->refs[i].p, &f->cur);
             if (f->frame_hdr->tip.frame_mode != 2) {
                 dav2d_cdf_thread_ref(&c->cdf[i], &f->out_cdf);
             } else {
                 dav2d_cdf_thread_ref(&c->cdf[i], &f->in_cdf);
             }
-
-            dav2d_ref_dec(&c->refs[i].segmap);
             c->refs[i].segmap = f->frame_hdr->segmentation.update_map ?
                                     f->cur_segmap_ref : f->prev_segmap_ref;
             if (c->refs[i].segmap)
                 dav2d_ref_inc(c->refs[i].segmap);
-            dav2d_ref_dec(&c->refs[i].refmvs);
             if (IS_INTER_OR_SWITCH(f->frame_hdr)) {
                 c->refs[i].refmvs = f->mvs_ref;
                 if (f->mvs_ref)
                     dav2d_ref_inc(f->mvs_ref);
             }
-            dav2d_ref_dec(&c->refs[i].ccsomap);
             c->refs[i].ccsomap = f->cur_ccsomap_ref;
             if (f->cur_ccsomap_ref)
                 dav2d_ref_inc(f->cur_ccsomap_ref);
