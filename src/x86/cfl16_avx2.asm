@@ -61,7 +61,7 @@ JMP_TABLE2 cfl_mh_gen_y_420_uniform_16bpc_avx2, 1, \
     blk.w4, blk.w8, blk.w16, blk.w32
 
 JMP_TABLE2 cfl_mh_gen_y_420_vstrip_16bpc_avx2, 1, \
-    top.4, top.4, top.9, top.17, top.33, top.63, \
+    top.4, top.4, top.8, top.17, top.33, top.63, \
     blk.w4, blk.w8, blk.w16, blk.w32
 
 %if 0
@@ -476,8 +476,15 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     test                flagsb, 0x10            ; is_top_sb_edge
     jnz .tse
     lea                   srcq, [srcq+t0*4]
-    lzcnt                  t0d, needed_topd
-    tzcnt                  t1d, needed_topd
+    test                flagsb, 0x8             ; has_l
+    setnz                  t1b
+    cmp            needed_topd, 16
+    setge                  t0b
+    mov                    t2d, needed_topd
+    and                    t0d, t1d             ; if (needed_top >= 16)
+    sub                    t2d, t0d             ;   needed_top -= has_l
+    lzcnt                  t0d, t2d
+    tzcnt                  t1d, t2d
     xor                    t0d, 31
     cmp                    t0d, t1d
     setne                  t1b
@@ -536,26 +543,11 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     dec                  ntopd
     jg .top.4
     jmp .left
-.top.9:
+.top.8:
     movu                    m2, [srcq+ssq*0-2]
     movu                    m3, [srcq+ssq*1-2]
     pmaddwd                 m0, m14, [srcq+ssq*0]
     pmaddwd                 m1, m14, [srcq+ssq*1]
-    cmp            needed_topd, 9
-    jne .top.9.skip_last
-    movq                   xm4, [srcq+ssq*0+30]
-    movq                   xm5, [srcq+ssq*1+30]
-    pcmpeqd                xm8, xm8
-    psrld                  xm8, 16
-    psrlq                  xm6, xm4, 16
-    psrlq                  xm7, xm5, 16
-    REPX     {pmaddwd x, xm14}, xm6, xm7
-    REPX         {pand x, xm8}, xm4, xm5
-    paddd                  xm4, xm5
-    paddd                  xm6, xm7
-    paddd                  xm4, xm6
-    psrld                  xm4, 3
-.top.9.skip_last:
     REPX       {pshufb x, m15}, m2, m3
     paddd                   m0, m1
     paddd                   m2, m3
@@ -563,12 +555,11 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     psrld                   m0, 3
     vextracti128           xm1, m0, 1
     packusdw               xm0, xm1
-    mova             [dstq+ 0], xm0
-    movd             [dstq+16], xm4
+    mova                [dstq], xm0
     lea                   srcq, [srcq+ssq*2]
     add                   dstq, 128
     dec                  ntopd
-    jg .top.9
+    jg .top.8
     jmp .left
 .top.17:
     pcmpeqd                m13, m13
