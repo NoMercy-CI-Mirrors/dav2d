@@ -1084,7 +1084,8 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
-    hdr->show_existing_frame = obu_type == DAV2D_OBU_SEF;
+    hdr->show_existing_frame = obu_type == DAV2D_OBU_SEF ||
+                               obu_type == DAV2D_OBU_LEADING_SEF;
     if (hdr->show_existing_frame) {
         hdr->existing_frame_idx = dav2d_get_bits0(gb, seqhdr->ref_frames_log2);
         if (hdr->existing_frame_idx >= seqhdr->ref_frames ||
@@ -2622,8 +2623,10 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
     case DAV2D_OBU_BRIDGE:
     case DAV2D_OBU_RAS: {
         if (!c->seq_hdr) goto error;
-        const int first_tile = type == DAV2D_OBU_SEF || type == DAV2D_OBU_TIP ||
-                               type == DAV2D_OBU_BRIDGE || dav2d_get_bit(&gb);
+        const int hdr_only = type == DAV2D_OBU_SEF || type == DAV2D_OBU_LEADING_SEF ||
+                             type == DAV2D_OBU_TIP || type == DAV2D_OBU_LEADING_TIP ||
+                             type == DAV2D_OBU_BRIDGE /* || bru frame inactive */;
+        const int first_tile = hdr_only || dav2d_get_bit(&gb);
         if (first_tile) {
             if (!c->frame_hdr_ref) {
                 c->frame_hdr_ref = dav2d_ref_create_using_pool(c->frame_hdr_pool,
@@ -2655,9 +2658,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 dav2d_skip_bits(&gb, c->n_frame_hdr_bits);
         }
 
-        if (type == DAV2D_OBU_SEF || type == DAV2D_OBU_TIP ||
-            type == DAV2D_OBU_BRIDGE /* || bru frame inactive */)
-        {
+        if (hdr_only) {
             // This is actually a frame header OBU so read the
             // trailing bit and check for overrun.
             if (check_trailing_bits(&gb, c->strict_std_compliance) < 0) {
@@ -2675,11 +2676,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             return DAV2D_ERR(ERANGE);
         }
 
-        if (type == DAV2D_OBU_SEF || type == DAV2D_OBU_TIP ||
-            type == DAV2D_OBU_BRIDGE /* || bru frame inactive */)
-        {
-            break;
-        }
+        if (hdr_only) break;
 
         if (c->n_tile_data_alloc < c->n_tile_data + 1) {
             if ((c->n_tile_data + 1) > INT_MAX / (int)sizeof(*c->tile)) goto error;
