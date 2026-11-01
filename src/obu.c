@@ -1036,6 +1036,10 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
 static void rescale_matrix(int32_t *const dm, const int32_t *const sm,
                            int in_dist, int out_dist)
 {
+    if (!in_dist) {
+        memcpy(dm, dav2d_default_wm_params.matrix, sizeof(int32_t) * 6);
+        return;
+    }
     int shift, inv_in_dist = dav2d_resolve_divisor_32(abs(in_dist), &shift);
     if (inv_in_dist >= 512) {
         inv_in_dist >>= 1;
@@ -2086,6 +2090,11 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                 }
             }
             for (int i = 0; i < hdr->n_ref_frames; i++) {
+                const int out_dist =
+                    get_poc_diff(seqhdr->order_hint_n_bits, hdr->frame_offset,
+                                 c->refs[hdr->refidx[i]].p.p.frame_hdr->frame_offset);
+                if (!out_dist) continue;
+
                 hdr->gmv.m[i].type = !dav2d_get_bit(gb) ? DAV2D_WM_TYPE_IDENTITY :
                                       dav2d_get_bit(gb) ? DAV2D_WM_TYPE_ROT_ZOOM :
                                                           DAV2D_WM_TYPE_AFFINE;
@@ -2094,9 +2103,6 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 
                 int32_t *const mat = hdr->gmv.m[i].matrix;
                 int32_t ref_mat[6];
-                const int out_dist =
-                    get_poc_diff(seqhdr->order_hint_n_bits, hdr->frame_offset,
-                                 c->refs[hdr->refidx[i]].p.p.frame_hdr->frame_offset);
                 rescale_matrix(ref_mat, ref_base_mat, in_dist, out_dist);
 
                 if (hdr->gmv.m[i].type >= DAV2D_WM_TYPE_ROT_ZOOM) {
