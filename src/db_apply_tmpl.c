@@ -64,7 +64,8 @@ static void init_deblock_thr_lut_y(const Dav2dFrameHeader *const frame_hdr,
     }
 }
 
-static void init_deblock_thr_lut_uv(const Dav2dFrameHeader *const frame_hdr,
+static void init_deblock_thr_lut_uv(const Dav2dSequenceHeader *const seq_hdr,
+                                    const Dav2dFrameHeader *const frame_hdr,
                                     const int hbd, const int n_seg,
                                     const int qidx, pixel lut[2][2][16])
 {
@@ -72,11 +73,13 @@ static void init_deblock_thr_lut_uv(const Dav2dFrameHeader *const frame_hdr,
     for (int i = 0; i < n_seg; i++) {
         const int yac = frame_hdr->segmentation.enabled ?
             iclip(qidx + frame_hdr->segmentation.d.delta_q[i], 0, qmax) : qidx;
-        const int uac = yac + frame_hdr->quant.uac_delta +
+        const int uac = clip_qidx(yac, frame_hdr->quant.uac_delta +
+                                       seq_hdr->base_uvac_dq, qmax) +
                         8 * frame_hdr->deblock.delta_q_u;
         lut[0][0][i] = deblock_quant_thr(hbd, uac);
         lut[0][1][i] = deblock_side_thr(hbd, uac);
-        const int vac = yac + frame_hdr->quant.vac_delta +
+        const int vac = clip_qidx(yac, frame_hdr->quant.vac_delta +
+                                       seq_hdr->base_uvac_dq, qmax) +
                         8 * frame_hdr->deblock.delta_q_v;
         lut[1][0][i] = deblock_quant_thr(hbd, vac);
         lut[1][1][i] = deblock_side_thr(hbd, vac);
@@ -492,7 +495,8 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
         const int bx64 = x64 & 3;
         const int cur_qidx = col_lflvl->qidx[bx64 + y64idx];
         if (cur_qidx != prev_qidx)
-            init_deblock_thr_lut_uv(f->frame_hdr, hbd, f->n_seg, cur_qidx, lut);
+            init_deblock_thr_lut_uv(f->seq_hdr, f->frame_hdr, hbd, f->n_seg,
+                                    cur_qidx, lut);
 
         const int bx4ss = bx64 * 16 >> ss_hor;
         const int uv_w4 = imin(f->bw - x64 * 16, 16) >> ss_hor;
@@ -631,7 +635,8 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
 
         const int cur_qidx = col_lflvl->qidx[bx64 + y64idx];
         if (cur_qidx != l_qidx) {
-            init_deblock_thr_lut_uv(f->frame_hdr, hbd, f->n_seg, cur_qidx, lut);
+            init_deblock_thr_lut_uv(f->seq_hdr, f->frame_hdr, hbd, f->n_seg,
+                                    cur_qidx, lut);
             l_qidx = cur_qidx;
         }
         int a_qidx;
@@ -641,7 +646,7 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
 
             a_qidx = a_lflvl[x64 >> 2].qidx[bx64 + a_y64idx];
             if (a_qidx != al_qidx) {
-                init_deblock_thr_lut_uv(f->frame_hdr, hbd, f->n_seg,
+                init_deblock_thr_lut_uv(f->seq_hdr, f->frame_hdr, hbd, f->n_seg,
                                         a_qidx, a_lut_ptr);
                 al_qidx = a_qidx;
             }

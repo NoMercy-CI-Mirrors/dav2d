@@ -28,9 +28,15 @@
 #ifndef DAV2D_SRC_QUANTIZER_H
 #define DAV2D_SRC_QUANTIZER_H
 
+#include "common/intops.h"
+
 #include "src/levels.h"
 
 EXTERN const uint8_t *dav2d_qm_tbl[16][2][N_RECT_TX_SIZES];
+
+static ALWAYS_INLINE int clip_qidx(const int qidx, const int delta, const int qmax) {
+    return !qidx && delta <= 0 ? 0 : iclip(qidx + delta, 1, qmax);
+}
 
 void dav2d_init_predefined_qm_tables(void);
 

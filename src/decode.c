@@ -52,10 +52,6 @@
 #include "src/wedge.h"
 #include "src/wiener_tables.h"
 
-static ALWAYS_INLINE int clip_qidx(const int qidx, const int delta, const int qmax) {
-    return !qidx && delta <= 0 ? 0 : iclip(qidx + delta, 1, qmax);
-}
-
 static void init_quant_tables(const Dav2dSequenceHeader *const seq_hdr,
                               const Dav2dFrameHeader *const frame_hdr,
                               const int n_seg,
@@ -67,11 +63,16 @@ static void init_quant_tables(const Dav2dSequenceHeader *const seq_hdr,
         const int yac = iclip(frame_hdr->segmentation.enabled ?
                               qidx + frame_hdr->segmentation.d.delta_q[i] :
                               qidx, 0, qmax);
-        const int ydc = clip_qidx(yac, frame_hdr->quant.ydc_delta, qmax);
-        const int uac = clip_qidx(yac, frame_hdr->quant.uac_delta, qmax);
-        const int udc = clip_qidx(yac, frame_hdr->quant.udc_delta, qmax);
-        const int vac = clip_qidx(yac, frame_hdr->quant.vac_delta, qmax);
-        const int vdc = clip_qidx(yac, frame_hdr->quant.vdc_delta, qmax);
+        const int ydc = clip_qidx(yac, frame_hdr->quant.ydc_delta +
+                                       seq_hdr->base_ydc_dq, qmax);
+        const int uac = clip_qidx(yac, frame_hdr->quant.uac_delta +
+                                       seq_hdr->base_uvac_dq, qmax);
+        const int udc = clip_qidx(yac, frame_hdr->quant.udc_delta +
+                                       seq_hdr->base_uvdc_dq, qmax);
+        const int vac = clip_qidx(yac, frame_hdr->quant.vac_delta +
+                                       seq_hdr->base_uvac_dq, qmax);
+        const int vdc = clip_qidx(yac, frame_hdr->quant.vdc_delta +
+                                       seq_hdr->base_uvdc_dq, qmax);
 
         dq[i][0][0] = dav2d_dq_lookup(ydc);
         dq[i][0][1] = dav2d_dq_lookup(yac);

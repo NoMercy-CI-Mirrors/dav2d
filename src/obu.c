@@ -1523,6 +1523,10 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             hdr->quant.vdc_delta = hdr->quant.udc_delta;
             hdr->quant.vac_delta = hdr->quant.uac_delta;
         }
+        if (seqhdr->equal_ac_dc_q) {
+            hdr->quant.udc_delta = hdr->quant.uac_delta;
+            hdr->quant.vdc_delta = hdr->quant.vac_delta;
+        }
     }
 
     hdr->secondary_ref_frame = DAV2D_PRIMARY_REF_NONE;
@@ -1618,8 +1622,13 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 #endif
 
     // derive lossless flags
-    const int delta_lossless = !hdr->quant.ydc_delta && !hdr->quant.udc_delta &&
-        !hdr->quant.uac_delta && !hdr->quant.vdc_delta && !hdr->quant.vac_delta;
+    // (including the sequence header's base delta q offsets)
+    const int delta_lossless = !hdr->delta.q.present &&
+        hdr->quant.ydc_delta + seqhdr->base_ydc_dq <= 0 &&
+        hdr->quant.udc_delta + seqhdr->base_uvdc_dq <= 0 &&
+        hdr->quant.uac_delta + seqhdr->base_uvac_dq <= 0 &&
+        hdr->quant.vdc_delta + seqhdr->base_uvdc_dq <= 0 &&
+        hdr->quant.vac_delta + seqhdr->base_uvac_dq <= 0;
     hdr->all_lossless = 1;
     hdr->any_lossless = 0;
     for (int i = 0; i < DAV2D_MAX_SEGMENTS; i++) {
