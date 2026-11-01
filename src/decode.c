@@ -2337,7 +2337,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             b->is_sm[1].l = sm_uv_flag(&t->l, cby4);
         }
         if (t->task_thread.pass == PASS_ENTROPY) {
-            f->bd_fn.read_coef_blocks(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.read_coef_blocks(t, DB_ONLY(depth) lbs, cbs, b);
+            if (res < 0) return res;
         } else {
             const int res = recon_b(t, DB_ONLY(depth) lbs, cbs, b);
             if (res < 0) return res;
@@ -2428,7 +2429,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
         // reconstruction
         if (t->task_thread.pass == PASS_ENTROPY) {
-            f->bd_fn.read_coef_blocks(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.read_coef_blocks(t, DB_ONLY(depth) lbs, cbs, b);
+            if (res < 0) return res;
             b->filter = DAV2D_FILTER_BILINEAR;
         } else {
             const int res = recon_b(t, DB_ONLY(depth) lbs, cbs, b);
@@ -3330,7 +3332,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
         // reconstruction
         if (t->task_thread.pass == PASS_ENTROPY) {
-            f->bd_fn.read_coef_blocks(t, DB_ONLY(depth) lbs, cbs, b);
+            const int res = f->bd_fn.read_coef_blocks(t, DB_ONLY(depth) lbs, cbs, b);
+            if (res < 0) return res;
         } else {
             const int res = recon_b(t, DB_ONLY(depth) lbs, cbs, b);
             if (res < 0) return res;
