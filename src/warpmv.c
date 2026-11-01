@@ -60,7 +60,7 @@ int dav2d_get_shear_params(Dav2dWarpedMotionParams *const wm) {
     int shift;
     const int y = apply_sign(dav2d_resolve_divisor_32(abs(mat[2]), &shift), mat[2]);
     const int64_t v1 = ((int64_t) mat[4] * 0x10000) * y;
-    const int rnd = (1 << shift) >> 1;
+    const int64_t rnd = (1LL << shift) >> 1;
     wm->u.p.gamma = iclip_wmp(apply_sign64((int) ((llabs(v1) + rnd) >> shift), v1));
     const int64_t v2 = ((int64_t) mat[3] * mat[4]) * y;
     wm->u.p.delta = iclip_wmp(mat[5] -
