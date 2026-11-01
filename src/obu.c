@@ -1523,8 +1523,13 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER) {
         int refs[2];
         derive_pri_sec_ref(c, refs);
-        if (!hdr->primary_ref_signaled)
-            hdr->primary_ref_frame = refs[0];
+        if (!hdr->primary_ref_signaled || refs[0] == DAV2D_PRIMARY_REF_NONE) {
+             hdr->primary_ref_frame = refs[0];
+        } else if (hdr->primary_ref_frame != DAV2D_PRIMARY_REF_NONE &&
+                   hdr->primary_ref_frame >= hdr->n_ref_frames)
+        {
+            goto error;
+        }
         if (hdr->primary_ref_frame != DAV2D_PRIMARY_REF_NONE)
             hdr->secondary_ref_frame = refs[refs[1] != hdr->primary_ref_frame];
     }
