@@ -1086,8 +1086,12 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 
     hdr->show_existing_frame = obu_type == DAV2D_OBU_SEF;
     if (hdr->show_existing_frame) {
-        hdr->existing_frame_idx = dav2d_get_bits(gb, seqhdr->ref_frames_log2);
-        if (hdr->existing_frame_idx >= seqhdr->ref_frames) goto error;
+        hdr->existing_frame_idx = dav2d_get_bits0(gb, seqhdr->ref_frames_log2);
+        if (hdr->existing_frame_idx >= seqhdr->ref_frames ||
+            !c->refs[hdr->existing_frame_idx].p.p.data[0])
+        {
+            goto error;
+        }
         const int poc =
             c->refs[hdr->existing_frame_idx].p.p.frame_hdr->frame_offset;
         if (!dav2d_get_bit(gb)) {
@@ -1206,7 +1210,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         hdr->refresh_frame_flags = (1 << seqhdr->ref_frames) - 1;
     } else if (obu_type == DAV2D_OBU_OPEN_LOOP_KF || seqhdr->max_mlayer_id) {
         if (seqhdr->short_refresh_frame_flags) {
-            hdr->refresh_frame_flags = 1 << dav2d_get_bits(gb, seqhdr->ref_frames_log2);
+            hdr->refresh_frame_flags = 1 << dav2d_get_bits0(gb, seqhdr->ref_frames_log2);
         } else {
             hdr->refresh_frame_flags = dav2d_get_bits(gb, seqhdr->ref_frames);
         }
@@ -1215,7 +1219,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     {
         const int refresh = dav2d_get_bit(gb);
         if (refresh) {
-            const int refresh_idx = dav2d_get_bits(gb, seqhdr->ref_frames_log2);
+            const int refresh_idx = dav2d_get_bits0(gb, seqhdr->ref_frames_log2);
             if (refresh_idx >= seqhdr->ref_frames) goto error;
             hdr->refresh_frame_flags = 1 << refresh_idx;
         }
@@ -1237,16 +1241,19 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             // explicit ref frame signaling
             hdr->n_ref_frames = dav2d_get_bits(gb, 3);
             if (hdr->n_ref_frames > imin(7, seqhdr->ref_frames)) goto error;
-            for (int n = 0; n < hdr->n_ref_frames; n++) {
-                hdr->refidx[n] = dav2d_get_bits(gb, seqhdr->ref_frames_log2);
+            for (unsigned n = 0; n < hdr->n_ref_frames; n++) {
+                assert(n < ARRAY_SIZE(hdr->refidx)); // fixes a compiler warning
+                hdr->refidx[n] = dav2d_get_bits0(gb, seqhdr->ref_frames_log2);
                 if (hdr->refidx[n] >= seqhdr->ref_frames) goto error;
             }
         } else {
             // implicit ref frame scoring (this will fill hdr->refidx[])
             hdr->n_ref_frames = get_ref_frames(c, 0);
         }
+        if (!hdr->n_ref_frames) goto error;
         const unsigned poc = hdr->frame_offset;
         for (int n = 0; n < hdr->n_ref_frames; n++) {
+            if (!c->refs[hdr->refidx[n]].p.p.data[0]) goto error;
             const int pocdiff =
                 get_poc_diff(seqhdr->order_hint_n_bits, poc,
                              c->refs[hdr->refidx[n]].p.p.frame_hdr->frame_offset);
@@ -1276,6 +1283,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         {
             // include resolution constraints
             hdr->n_ref_frames = get_ref_frames(c, 1);
+            if (!hdr->n_ref_frames) goto error;
 #if DEBUG_FRAME_HDR
             printf("HDR: post-refs2[refs:%d,%d,%d,%d,%d,%d,%d]: off=%td\n",
                    hdr->refidx[0], hdr->refidx[1], hdr->refidx[2], hdr->refidx[3],

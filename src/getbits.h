@@ -40,6 +40,9 @@ typedef struct GetBits {
 void dav2d_init_get_bits(GetBits *c, const uint8_t *data, size_t sz);
 unsigned dav2d_get_bit(GetBits *c);
 unsigned dav2d_get_bits(GetBits *c, int n);
+static ALWAYS_INLINE unsigned dav2d_get_bits0(GetBits *c, int n) {
+    return n ? dav2d_get_bits(c, n) : 0;
+}
 int dav2d_get_sbits(GetBits *c, int n);
 void dav2d_skip_bits(GetBits *c, int n_bits);
 unsigned dav2d_get_uleb128(GetBits *c);
