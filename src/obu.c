@@ -2176,19 +2176,20 @@ static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
 #endif
     const unsigned mask = dav2d_get_bits(gb, 8);
     enum Dav2dPixelLayout layout = dav2d_get_vlc(gb);
-    if (layout > 3) goto error;
+    if (layout > 3) return -1;
 #if DEBUG_FGM_HDR
     printf("FGM: post-init[mask=0x%x,layout=%d]: off=%td\n",
            mask, layout,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     layout = dav2d_layouts[layout];
-    if (layout != c->seq_hdr->layout) goto error;
+    if (layout != c->seq_hdr->layout) return -1;
 
     for (int idx = 0, m = 1; idx < 8; idx++, m <<= 1) {
         if (!(mask & m)) continue;
-        if (c->fgm[idx]) dav2d_ref_dec(&c->fgm[idx]);
+        dav2d_ref_dec(&c->fgm[idx]);
         c->fgm[idx] = dav2d_ref_create_using_pool(c->fgm_pool, sizeof(Dav2dFilmGrainData));
+        if (!c->fgm[idx]) goto error;
         Dav2dFilmGrainData *const fgd = c->fgm[idx]->data;
         memset(fgd, 0, sizeof(*fgd));
 
@@ -2204,7 +2205,9 @@ static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
             const int index_bits = 1 + dav2d_get_bits(gb, 3);
             const int scaling_bits = 5 + dav2d_get_bits(gb, 2);
             for (int i = 0, base = 0; i < fgd->num_points[pl]; i++) {
-                base += dav2d_get_bits(gb, index_bits);
+                const int inc = dav2d_get_bits(gb, index_bits);
+                if (i && !inc) goto error;
+                base += inc;
                 if (base > 255) goto error;
                 fgd->points[pl][i][0] = base;
                 fgd->points[pl][i][1] = dav2d_get_bits(gb, scaling_bits);
@@ -2267,6 +2270,10 @@ static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
     return 0;
 
 error:
+    // clean-up all FGM data in this OBU
+    for (int idx = 0, m = 1; idx < 8; idx++, m <<= 1) {
+        if (mask & m) dav2d_ref_dec(&c->fgm[idx]);
+    }
     return -1;
 }
 
