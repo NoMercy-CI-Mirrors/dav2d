@@ -503,6 +503,12 @@ static int output_picture_ready(Dav2dContext *const c) {
 static int gen_picture(Dav2dContext *const c) {
     Dav2dData *const in = &c->in;
 
+    if (c->cached_error) {
+        const int res = c->cached_error;
+        c->cached_error = 0;
+        return res;
+    }
+
     if (output_picture_ready(c))
         return 0;
 
@@ -516,8 +522,13 @@ static int gen_picture(Dav2dContext *const c) {
             in->data += res;
             if (!in->sz) dav2d_data_unref_internal(in);
         }
-        if (output_picture_ready(c))
+        if (output_picture_ready(c)) {
+            // whether a picture is ready at this point depends on timing if
+            // using frame threading, so report the error on the next call
+            if (res < 0)
+                c->cached_error = (int) res;
             break;
+        }
         if (res < 0)
             return (int)res;
     }
@@ -609,6 +620,7 @@ void dav2d_flush(Dav2dContext *const c) {
     c->dpb_in = c->dpb_out = c->drain = 0;
     c->dpb_poc = c->dpb_mlayer = 0;
     c->seen_layer_in_tu = 0;
+    c->cached_error = 0;
 
     for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
         if (c->refs[i].p.p.frame_hdr)

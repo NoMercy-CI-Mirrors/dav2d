@@ -217,10 +217,10 @@ struct Dav2dContext {
     enum Dav2dInloopFilterType inloop_filters;
     enum Dav2dDecodeFrameType decode_frame_type;
     Dav2dDataProps cached_error_props;
+    int cached_error;
 #if 0
     enum PictureFlags frame_flags;
     enum Dav2dEventFlags event_flags;
-    int cached_error;
 #endif
 
     Dav2dLogger logger;

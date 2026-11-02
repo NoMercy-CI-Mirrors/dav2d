@@ -5959,9 +5959,13 @@ error:
             dav2d_thread_picture_unref(&f->refp[i]);
         dav2d_ref_dec(&f->ref_mvs_ref[i]);
     }
-    // FIXME is it correct to re-report error messages during picture output
-    // if we already reported them during picture input?
-    if (q) q->res = res;
+    // if the picture is already in the output queue, the error is reported
+    // when it is output (like errors during frame-threaded decoding), so
+    // don't also return it here
+    if (q) {
+        q->res = res;
+        res = 0;
+    }
     dav2d_thread_picture_unref(&f->cur);
     dav2d_ref_dec(&f->cur_segmap_ref);
     dav2d_ref_dec(&f->prev_segmap_ref);
