@@ -347,13 +347,14 @@ nested_break:
             if ((res = signal_terminate)) break;
 
             if ((res = dav2d_get_picture(c, &p)) < 0) {
-                if (res != DAV2D_EOF) {
-                    fprintf(stderr, "Error decoding frame: %s\n",
-                            strerror(DAV2D_ERR(res)));
-                } else {
+                if (res == DAV2D_EOF) {
                     res = 0;
+                    break;
                 }
-                break;
+                fprintf(stderr, "Error decoding frame: %s\n",
+                        strerror(DAV2D_ERR(res)));
+                if (res != DAV2D_ERR(EINVAL)) break;
+                res = 0;
             } else {
                 if (!n_out) {
                     if ((res = output_open(&out, cli_settings.muxer,
