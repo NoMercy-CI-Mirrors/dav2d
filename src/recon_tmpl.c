@@ -2100,8 +2100,10 @@ static int tip_pred(Dav2dTaskContext *const t,
         p_stride = ((step + 2) * 4 * sizeof(pixel) + 63) & ~63;
         if (opfl) {
             const int d0 = f->absrefdist[ref.ref[0]], d1 = f->absrefdist[ref.ref[1]];
-            d.i8[0] = apply_sign(1 + (d0 > d1), -f->refdist[ref.ref[0]]);
-            d.i8[1] = apply_sign(1 + (d1 > d0), +f->refdist[ref.ref[1]]);
+            if (d0 && d1) {
+                d.i8[0] = apply_sign(1 + (d0 > d1), -f->refdist[ref.ref[0]]);
+                d.i8[1] = apply_sign(1 + (d1 > d0), +f->refdist[ref.ref[1]]);
+            } else d.u16 = 0;
         }
     }
 
@@ -2252,10 +2254,11 @@ static int opfl_pred(Dav2dTaskContext *const t,
     // FIXME namespace opfl symbols
     // find reduced distance as inverse weights
     const int d0 = f->absrefdist[b->ref.ref[0]], d1 = f->absrefdist[b->ref.ref[1]];
-    const union aliasi16 d = { .i8 = {
-        apply_sign(1 + (d0 > d1), -f->refdist[b->ref.ref[0]]),
-        apply_sign(1 + (d1 > d0), +f->refdist[b->ref.ref[1]]),
-    }};
+    union aliasi16 d;
+    if (d0 && d1) {
+        d.i8[0] = apply_sign(1 + (d0 > d1), -f->refdist[b->ref.ref[0]]);
+        d.i8[1] = apply_sign(1 + (d1 > d0), +f->refdist[b->ref.ref[1]]);
+    } else d.u16 = 0;
     const int bs = 2 - (b->bs == BS_8x8 /* FIXME not tip */);
     union OpflMvDeltaBlock dd[2 * 2];
 
