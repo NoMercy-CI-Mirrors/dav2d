@@ -733,7 +733,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                             depth, "", stx_type, stx_set, ts->msac.rng);
         }
     } else if (f->seq_hdr->cctx && plane == 1 && eob >= intra && !lossless &&
-               (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || t_dim->max < 8))
+               (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || t_dim->min < TX_32X32))
     {
         const int cctx = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                                          ts->cdf.m.cctx, 6);
@@ -4090,7 +4090,7 @@ chroma: {}
 
             if (!skip_txfm) {
                 const int cctx = f->seq_hdr->cctx &&
-                    (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || uv_t_dim->max < 8);
+                    (f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420 || uv_t_dim->min < TX_32X32);
                 uint16_t /*enum TxfmType*/ (*const txtp)[2] = t->chroma_txtp;
                 int16_t (*const eob)[2] = t->chroma_eob;
                 coef *cf[2];

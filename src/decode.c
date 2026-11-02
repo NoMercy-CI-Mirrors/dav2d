@@ -2511,7 +2511,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         int is_comp, has_subpel_filter, is_tip = 0;
 
         if (!b->skip_mode && f->frame_hdr->tip.frame_mode &&
-            lbs == cbs_tree && imax(bw4, bh4) >= 2)
+            lbs == cbs_tree && imin(bw4, bh4) >= 2)
         {
             const int ctx = (idx < 1 ? 0 : nx[0]->ref[0][xoff[0]] == TIP_FRAME) +
                             (idx < 2 ? 0 : nx[1]->ref[0][xoff[1]] == TIP_FRAME);
@@ -3945,10 +3945,14 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     if (t->task_thread.pass & PASS_ENTROPY) {
         bx4 = t->bx & 63;
         by4 = t->by & 63;
-        // FIXME some of the code below needs to be tested for 4:2:2 w/ SDP=1
-        const int eff_ss_ver = ss_ver & (lbs == BS_INVALID);
-        const int eff_ss_hor = ss_hor & (lbs == BS_INVALID);
-        const int bwh4ss[2] = { bw4 >> eff_ss_hor, bh4 >> eff_ss_ver };
+        const int eff_ss = lbs == BS_INVALID;
+        const int bwh4ss[2] = { bw4 >> eff_ss, bh4 >> eff_ss };
+        // in 4:2:2, some block size + partition combinations lead to chroma
+        // block sizes that don't exist (32x128 or 64x256, or 4x64 further down
+        // when deriving has_hv3/has_hv4ab)
+        const int no_v = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I422 &&
+                         (bs == BS_128x128 || bs == BS_256x256 ||
+                          (bs == BS_16x64 && cbs != BS_INVALID));
         assert(bwh4ss[0] >= 1 && bwh4ss[1] >= 1);
         int dir = -1;
         const int mix_inter = IS_INTER_OR_SWITCH(f->frame_hdr) &&
@@ -3963,8 +3967,10 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             bp = PARTITION_NONE;
         } else if (!have_h_split || !have_v_split) {
             if (bw4 == bh4) {
-                dir = have_v_split;
-                bp = !have_v_split ? PARTITION_H : PARTITION_V;
+                if (!have_v_split || !no_v) {
+                    dir = have_v_split;
+                    bp = !have_v_split ? PARTITION_H : PARTITION_V;
+                }
             } else if (bw4 > bh4) {
                 if (!have_h_split || f->bh <= t->by + qh4) {
                     dir = 1;
@@ -4010,7 +4016,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     bp = PARTITION_NONE;
                 } else {
                     if ((bs == BS_128x128 || bs == BS_256x256) &&
-                        have_v_split && have_h_split)
+                        have_v_split && (have_h_split || no_v))
                     {
                         assert(lbs == cbs || f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I400);
                         const int ctx3 = ctx1 + (bs == BS_256x256) * 4;
@@ -4027,7 +4033,9 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     if (bp == PARTITION_INVALID) {
                         // split - find direction
                         const int aspect_isn8 = aspect != 8;
-                        if (imin(bwh4ss[0], bwh4ss[1]) == 1) {
+                        if (no_v) {
+                            dir = 0;
+                        } else if (imin(bwh4ss[0], bwh4ss[1]) == 1) {
                             dir = bwh4ss[0] > bwh4ss[1];
                         } else if (aspect_req_split) {
                             assert(bw4 != bh4);
@@ -4054,6 +4062,8 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                             const int bwh4ss2[2] = { bw4 >> f->ss_hor,
                                                      bh4 >> f->ss_ver };
                             const int has_hv3 = f->seq_hdr->ext_partitions &&
+                                !(f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I422 &&
+                                  dir && bs == BS_32x64 && cbs != BS_INVALID) &&
                                 bwh4ss[!dir] >= 4 && bwh4ss[dir] >= 2 &&
                                 b_dim[!dir] * 8 >= b_dim[dir] * 4 + aspect_isn8 &&
                                 (cbs != lbs || (bwh4ss2[!dir] >= 4 &&
@@ -4063,6 +4073,8 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                  (lbs == BS_8x32 ? have_h_split :
                                   t->by + qh4 * 3 < f->bh)));
                             const int has_hv4ab = bwh4ss[!dir] >= 8 &&
+                                !(f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I422 &&
+                                  dir && bs == BS_64x64) &&
                                 f->seq_hdr->uneven_4way_partitions &&
                                 b_dim[!dir] * 8 >= b_dim[dir] * 8 + aspect_isn8 &&
                                 (cbs != lbs || bwh4ss2[!dir] >= 8 || (dir ?
@@ -4231,16 +4243,19 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         break;
     }
     case PARTITION_SPLIT: {
-        assert(have_v_split && have_h_split && cbs == lbs);
+        assert(have_v_split && cbs == lbs &&
+               (have_h_split || f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I422));
         const enum BlockSize sbs = pcc->part[0][3];
         if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir)) return -1;
         t->bx += hw4;
-        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir)) return -1;
+        if (have_h_split && decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir))
+            return -1;
         t->bx -= hw4;
         t->by += hh4;
         if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir)) return -1;
         t->bx += hw4;
-        if (decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir)) return -1;
+        if (have_h_split && decode_sb(t, DB_ONLY(depth + 1) sbs, sbs, &child_dir))
+            return -1;
         t->bx -= hw4;
         t->by -= hh4;
         break;
