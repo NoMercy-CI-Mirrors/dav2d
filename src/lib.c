@@ -530,7 +530,7 @@ int dav2d_get_picture(Dav2dContext *const c, Dav2dPicture *const out) {
     if (res < 0)
         return res;
 
-    if (c->drain)
+    if (c->drain && !c->in.data)
         queue_flush(c);
 
     return output_image(c, out);

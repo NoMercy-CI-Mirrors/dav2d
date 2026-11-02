@@ -5409,7 +5409,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             if (first + 1U < c->n_fc)
                 atomic_fetch_add(&c->task_thread.first, 1U);
             else
-                atomic_store(&c->task_thread.first, 0);
+                    atomic_store(&c->task_thread.first, 0);
             atomic_compare_exchange_strong(&c->task_thread.reset_task_cur,
                                            &first, UINT_MAX);
             if (c->task_thread.cur && c->task_thread.cur < c->n_fc)
