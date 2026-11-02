@@ -193,8 +193,8 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     paddd                   m0, m1
     paddd                   m2, m3
     paddd                  xm4, xm5
-    REPX          {psrld x, 3}, m0, m2, xm4
     packusdw                m0, m2
+    REPX          {psrlw x, 3}, m0, xm4
     vpermq                  m0, m0, q3120
     mova                [dstq], m0
     movd             [dstq+32], xm4
@@ -224,9 +224,9 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     paddd                   m2, m3
     paddd                   m4, m5
     paddd                   m6, m7
-    REPX          {psrld x, 3}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
+    REPX          {psrlw x, 3}, m0, m4
     REPX  {vpermq x, x, q3120}, m0, m4
     mova             [dstq+ 0], m0
     mova             [dstq+32], m4
@@ -261,11 +261,11 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     paddd                  m10, m11
     paddd                  m12, m13
     paddd                   m1, m3
-    REPX          {psrld x, 3}, m0, m2, m4, m6, m8, m10, m12, m1
     packusdw                m0, m2
     packusdw                m4, m6
     packusdw                m8, m10
     packusdw               m12, m1
+    REPX          {psrlw x, 3}, m0, m4, m8, m12
     REPX  {vpermq x, x, q3120}, m0, m4, m8, m12
     mova             [dstq+ 0], m0
     mova             [dstq+32], m4
@@ -307,9 +307,9 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     vpblendd                m1, m5, 0xf0
     REPX      {pmaddwd x, m14}, m0, m1
     paddd                   m0, m1
-    psrld                   m0, 3
-    packusdw                m0, m0
-    vpermq                  m0, m0, q3220
+    vextracti128           xm1, m0, 1
+    packusdw               xm0, xm1
+    psrlw                  xm0, 3
     pshufb                 xm0, xm8
     movu               [dstlq], xm0
     lea                  dstlq, [dstlq+nleftq*2]
@@ -371,9 +371,9 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     paddd                   m2, m3
     paddd                   m4, m5
     paddd                   m6, m7
-    REPX          {psrld x, 3}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
+    REPX          {psrlw x, 3}, m0, m4
     REPX  {vpermq x, x, q3120}, m0, m4
     mova             [dstq+ 0], m0
     mova             [dstq+32], m4
@@ -395,9 +395,9 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     paddd                   m2, m3
     paddd                   m4, m5
     paddd                   m6, m7
-    REPX          {psrld x, 3}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
+    REPX          {psrlw x, 3}, m0, m4
     REPX  {vpermq x, x, q3120}, m0, m4
     mova             [dstq+ 0], m0
     mova             [dstq+32], m4
@@ -419,9 +419,9 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     paddd                   m2, m3
     paddd                   m4, m5
     paddd                   m6, m7
-    REPX          {psrld x, 3}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
+    REPX          {psrlw x, 3}, m0, m4
     REPX  {vpermq x, x, q3120}, m0, m4
     mova             [dstq+ 0], m0
     mova             [dstq+32], m4
@@ -513,8 +513,8 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pand                   xm3, xm4
     paddd                  xm0, xm2
     paddd                  xm1, xm3
-    REPX          {psrld x, 2}, xm0, xm1
     packusdw               xm0, xm1
+    psrlw                  xm0, 2
     mova       [dstq+t0*2+  0], xm0
     mova       [dstq+t0*2+128], xm0
     add                    t0d, 8
@@ -552,9 +552,9 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     paddd                   m0, m1
     paddd                   m2, m3
     paddd                   m0, m2
-    psrld                   m0, 3
     vextracti128           xm1, m0, 1
     packusdw               xm0, xm1
+    psrlw                  xm0, 3
     mova                [dstq], xm0
     lea                   srcq, [srcq+ssq*2]
     add                   dstq, 128
@@ -593,8 +593,8 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     paddd                   m1, m3
     paddd                   m0, m8
     paddd                   m1, m10
-    REPX          {psrld x, 3}, m0, m1
     packusdw                m0, m1
+    psrlw                   m0, 3
     vpermq                  m0, m0, q3120
     mova             [dstq+ 0], m0
     movd             [dstq+32], xm4
@@ -649,9 +649,9 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     paddd                   m3, m9
     paddd                   m4, m1
     paddd                   m6, m3
-    REPX          {psrld x, 3}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
+    REPX          {psrlw x, 3}, m0, m4
     REPX  {vpermq x, x, q3120}, m0, m4
     mova             [dstq+ 0], m0
     mova             [dstq+32], m4
@@ -703,9 +703,9 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pand                    m3, m13, [srcq+ssq*0+0x9e]
     pand                   m12, m13, [srcq+ssq*1+0x9e]
     pmaddwd                 m9, m14, [srcq+ssq*0+0xc0]
-    REPX          {psrld x, 3}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
+    REPX          {psrlw x, 3}, m0, m4
     REPX  {vpermq x, x, q3120}, m0, m4
     paddd                  m11, m5
     paddd                   m7, m8
@@ -728,9 +728,9 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     paddd                  m12, m0
     paddd                   m9, m6
     paddd                   m8, m12
-    REPX          {psrld x, 3}, m11, m10, m9, m8
     packusdw               m11, m10
     packusdw                m9, m8
+    REPX          {psrlw x, 3}, m11, m9
     REPX  {vpermq x, x, q3120}, m11, m9
     mova             [dstq+64], m11
     mova             [dstq+96], m9
@@ -784,9 +784,9 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     paddd                   m2, m3
     paddd                   m0, m1
     paddd                   m0, m2
-    psrld                   m0, 3
-    packusdw                m0, m0
-    vpermq                  m0, m0, q3220
+    vextracti128           xm1, m0, 1
+    packusdw               xm0, xm1
+    psrlw                  xm0, 3
     pshufb                 xm0, xm10
     movu               [dstlq], xm0
     lea                  dstlq, [dstlq+nleftq*2]
@@ -849,8 +849,8 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     paddd                   m2, m3
     paddd                   m0, m4
     paddd                   m2, m6
-    REPX          {psrld x, 3}, m0, m2
     packusdw                m0, m2
+    psrlw                   m0, 3
     mova                [dstq], m0
     add                   dstq, 32
     sub                     hd, 4
@@ -895,9 +895,9 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     paddd                   m5, m7
     paddd                   m4, m10
     paddd                   m5, m12
-    REPX          {psrld x, 3}, m0, m1, m4, m5
     packusdw                m0, m1
     packusdw                m4, m5
+    REPX          {psrlw x, 3}, m0, m4
     REPX  {vpermq x, x, q3120}, m0, m4
     mova             [dstq+ 0], m0
     mova             [dstq+32], m4
@@ -946,9 +946,9 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     paddd                   m2, m3
     paddd                   m4, m10
     paddd                   m5, m2
-    REPX          {psrld x, 3}, m0, m1, m4, m5
     packusdw                m0, m1
     packusdw                m4, m5
+    REPX          {psrlw x, 3}, m0, m4
     REPX  {vpermq x, x, q3120}, m0, m4
     mova             [dstq+ 0], m0
     mova             [dstq+32], m4
@@ -996,9 +996,9 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     paddd                   m2, m3
     paddd                   m4, m10
     paddd                   m5, m2
-    REPX          {psrld x, 3}, m0, m1, m4, m5
     packusdw                m0, m1
     packusdw                m4, m5
+    REPX          {psrlw x, 3}, m0, m4
     REPX  {vpermq x, x, q3120}, m0, m4
     mova             [dstq+ 0], m0
     mova             [dstq+32], m4
