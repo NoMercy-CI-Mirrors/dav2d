@@ -273,16 +273,6 @@ build-debian-aarch64-clang-5:
         - ninja -C build
         - meson test -v -C build
 
-build-debian-aarch64-clang:
-    extends: .debian-amd64-common
-    script:
-        - meson setup build --buildtype release
-                            -Dtrim_dsp=false
-                            --werror
-                            --cross-file package/crossfiles/aarch64-linux-clang.meson
-        - ninja -C build
-        - meson test -v -C build
-
 .build-macos-common:
     stage: build
     script:
@@ -396,7 +386,7 @@ build-debian-riscv64-testdata:
 build-debian-aarch64-testdata:
     extends: .build-qemu-testdata-common
     variables:
-        CROSSFILE: aarch64-linux
+        CROSSFILE: aarch64-linux-clang
 
 .test-common:
     extends: .testdata-common
