@@ -186,9 +186,7 @@ struct refmvs_state {
     int drvd_cnt, sngl_cnt, *cnt;
     int drvd_iter_cntr, sngl_iter_cntr, iter_cntr;
     ptrdiff_t b8x8;
-#if DEBUG_BLOCK_INFO && DEBUG_REFMV
     int bx4, by4;
-#endif
 };
 
 static ALWAYS_INLINE mv scale_mv(const mv in, const int sf) {
@@ -218,9 +216,9 @@ static void add_spatial_candidate(const int y_off, const int x_off,
              imin(dav2d_block_dimensions[b->bs][0],
                   dav2d_block_dimensions[b->bs][1]) >= 4) || b->bs == BS_256x256;
         const int tip16m = ~tip16;
-        const int rbx8 = b->bx4 >> 1, rby8 = b->by4 >> 1;
-        off_y_8x8 = rby8 + ((off_y_8x8 - rby8) & tip16m);
-        off_x_8x8 = rbx8 + ((off_x_8x8 - rbx8) & tip16m);
+        const int cy4 = st->by4 + y_off, cx4 = st->bx4 + x_off;
+        off_y_8x8 += (b->by4 >> 1) + (((cy4 - b->by4) >> 1) & tip16m) - (cy4 >> 1);
+        off_x_8x8 += (b->bx4 >> 1) + (((cx4 - b->bx4) >> 1) & tip16m) - (cx4 >> 1);
     }
     const ptrdiff_t off_8x8 = rf->rp_stride * off_y_8x8 + off_x_8x8;
 
@@ -751,10 +749,8 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
         .drvd_iter_cntr = 0,
         .sngl_iter_cntr = 0,
         .b8x8 = lms_8x8x + tms_8x8y * stride,
-#if DEBUG_BLOCK_INFO && DEBUG_REFMV
         .by4 = by4,
         .bx4 = bx4,
-#endif
     };
 
     const int use_tmvp =
