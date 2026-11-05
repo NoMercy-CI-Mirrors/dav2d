@@ -65,6 +65,7 @@
 #define CFL_FLT_TYPE_UNIFORM (0)
 #define CFL_FLT_TYPE_VSTRIP  (1)
 #define CFL_FLT_TYPE_GAUSS   (2)
+#define CFL_FLT_TYPE_CENTER  (2)
 #define CFL_FLT_TYPE         (0x3)
 #define CFL_HAS_TOP          (1 << 2)
 #define CFL_HAS_LEFT         (1 << 3)

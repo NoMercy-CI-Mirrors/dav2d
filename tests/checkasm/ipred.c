@@ -49,7 +49,16 @@ static const char *const intra_pred_mode_names[N_IMPL_INTRA_PRED_MODES] = {
 };
 
 static const char *const cfl_pred_type_names[3] = { "cfl_explicit", "cfl_implicit" };
-static const char *const cfl_luma_filter_names[3] = { "uniform", "vstrip", "gauss" };
+static const int cfl_ds_flt_types[3][2] = {
+    { CFL_FLT_TYPE_UNIFORM, CFL_FLT_TYPE_GAUSS },
+    { CFL_FLT_TYPE_UNIFORM, CFL_FLT_TYPE_CENTER },
+    { CFL_FLT_TYPE_CENTER, CFL_FLT_TYPE_CENTER }
+};
+static const char *const cfl_ds_flt_names[3][3] = {
+    { "uniform", "vstrip", "gauss" },
+    { "uniform", "vstrip", "center" },
+    { [CFL_FLT_TYPE_CENTER] = "center" }
+};
 static const char cfl_mh_dir_names[3] = { 'c', 't', 'l' };
 static const char *const layout_names[3] = { "420", "422", "444" };
 
@@ -205,14 +214,14 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
             for (int w = 4; w <= 64; w <<= 1)
                 for (int padding = 0; padding <= 1; padding++)
                     for (int rng0 = 1; rng0 >= 0; rng0--)
-                        for (int flt_type = CFL_FLT_TYPE_UNIFORM;
-                             flt_type <= CFL_FLT_TYPE_GAUSS; flt_type++)
+                        for (int flt_type = cfl_ds_flt_types[layout - 1][0];
+                             flt_type <= cfl_ds_flt_types[layout - 1][1]; flt_type++)
                         {
                             if (check_func(c->cfl_pred[type][layout - 1],
                                 "%s_%s_w%d_pad%d_%s_%s_%dbpc",
                                 cfl_pred_type_names[type], layout_names[layout - 1],
                                 w, padding, rng0 ? "uv" : "u_or_v",
-                                cfl_luma_filter_names[flt_type], BITDEPTH))
+                                cfl_ds_flt_names[layout - 1][flt_type], BITDEPTH))
                             {
                                 const int h0 = padding && w < 16 ? 16 : 4;
                                 for (int h = h0; h <= 64; h <<= 1) {
@@ -313,19 +322,19 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
 #if BENCH_DIR
             for (int dir = CFL_DIR_CENTER; dir < CFL_DIR_ALL; dir++)
 #endif
-                for (int flt_type = CFL_FLT_TYPE_UNIFORM;
-                     flt_type <= CFL_FLT_TYPE_GAUSS; flt_type++)
+                for (int flt_type = cfl_ds_flt_types[layout - 1][0];
+                     flt_type <= cfl_ds_flt_types[layout - 1][1]; flt_type++)
                 {
                     for (int itse = 0; itse <= 1; itse++)
 #if BENCH_DIR
                         if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
                             "cfl_mh_gen_y_%s_%s_w%d_tse%d_%c_%dbpc",
-                            layout_names[layout - 1], cfl_luma_filter_names[flt_type],
+                            layout_names[layout - 1], cfl_ds_flt_names[layout - 1][flt_type],
                             w, itse, cfl_mh_dir_names[dir], BITDEPTH))
 #else
                         if (check_func(c->cfl_mh_gen_y[layout - 1][flt_type],
                             "cfl_mh_gen_y_%s_%s_w%d_tse%d_%dbpc",
-                            layout_names[layout - 1], cfl_luma_filter_names[flt_type],
+                            layout_names[layout - 1], cfl_ds_flt_names[layout - 1][flt_type],
                             w, itse, BITDEPTH))
 #endif
                         {

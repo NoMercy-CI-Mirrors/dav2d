@@ -1115,14 +1115,25 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
     const int n_top_rows = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
 
 // ::
-#define FILTER_UNIFORM(src) \
+#define FILTER_UNIFORM(src, ...) \
     (src[c] + src[r] + src[b + c] + src[b + r]) >> 2
 // :::
-#define FILTER_VSTRIP(src) \
+#define FILTER_VSTRIP(src, ...) \
     (src[l] + 2 * src[c] + src[r] + src[b + l] + 2 * src[b + c] + src[b + r]) >> 3
 // -|-
 #define FILTER_GAUSS(src, top) \
     (src[l] + 4 * src[c] + src[r] + (top)[c] + src[b + c]) >> 3
+#define FILTER_TYPE(type, dst, idx, src, ...) \
+    case CFL_FLT_TYPE_##type: \
+        dst[idx] = FILTER_##type(src, __VA_ARGS__); \
+        break
+#define FILTER_TYPES(type0, type1, type2, ...) \
+    switch (filter_type) { \
+        FILTER_TYPE(type0, __VA_ARGS__); \
+        FILTER_TYPE(type1, __VA_ARGS__); \
+        FILTER_TYPE(type2, __VA_ARGS__); \
+    }
+#define FILTER(...) FILTER_TYPES(UNIFORM, VSTRIP, GAUSS, __VA_ARGS__)
 
     // tl+t+tr
     if (has_t) {
@@ -1135,17 +1146,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
             for (int x = start; x < start + needed_top_cols; x++) {
                 const int c = x * 2, r = c + 1;
                 const int l = (n_left_cols & 1) ? c - 1 : imax(c - 1, 0);
-                switch (filter_type) {
-                case CFL_FLT_TYPE_UNIFORM:
-                    dst[x - start] = FILTER_UNIFORM(top);
-                    break;
-                case CFL_FLT_TYPE_VSTRIP:
-                    dst[x - start] = FILTER_VSTRIP(top);
-                    break;
-                case CFL_FLT_TYPE_GAUSS:
-                    dst[x - start] = FILTER_GAUSS(top, &top[t]);
-                    break;
-                }
+                FILTER(dst, x - start, top, &top[t]);
             }
             top += 2 * b;
             t = -b;
@@ -1165,17 +1166,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
         for (int x = 0; x < n_left_cols; x++) {
             const int c = x * 2, r = c + 1;
             const int l = (n_left_cols & 1) ? c - 1 : imax(c - 1, 0);
-            switch (filter_type) {
-            case CFL_FLT_TYPE_UNIFORM:
-                dst_left[x] = FILTER_UNIFORM(src_left);
-                break;
-            case CFL_FLT_TYPE_VSTRIP:
-                dst_left[x] = FILTER_VSTRIP(src_left);
-                break;
-            case CFL_FLT_TYPE_GAUSS:
-                dst_left[x] = FILTER_GAUSS(src_left, top_left);
-                break;
-            }
+            FILTER(dst_left, x, src_left, top_left);
         }
         src_left += src_stride << 1;
         top_left = src_left - src_stride;
@@ -1188,41 +1179,144 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
         for (int x = 0; x < w; x++) {
             const int c = x * 2, r = c + 1;
             const int l = !has_l ? imax(c - 1, 0) : c - 1;
-            switch (filter_type) {
-            case CFL_FLT_TYPE_UNIFORM:
-                dst[x] = FILTER_UNIFORM(src);
-                break;
-            case CFL_FLT_TYPE_VSTRIP:
-                dst[x] = FILTER_VSTRIP(src);
-                break;
-            case CFL_FLT_TYPE_GAUSS:
-                dst[x] = FILTER_GAUSS(src, top);
-                break;
-            }
+            FILTER(dst, x, src, top);
         }
         src += src_stride << 1;
         top = src - src_stride;
         dst += w;
     }
+#undef FILTER_UNIFORM
+#undef FILTER_VSTRIP
+#undef FILTER_GAUSS
+#undef FILTER
 }
 
-#define cfl_mh_gen_y_420_fn(ucflt, lcflt) \
+static NOINLINE void
+cfl_mh_gen_y_422_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
+                   const ptrdiff_t src_stride, const int needed_top_cols,
+                   const int needed_left_rows, const int w, const int h,
+                   const int flags, const int filter_type)
+{
+    const int has_t = flags & CFL_HAS_TOP;
+    const int has_l = flags & CFL_HAS_LEFT;
+    const int dir = flags & CFL_DIR_MASK;
+    const int n_left_cols = has_l ? 1 + (dir == CFL_DIR_LEFT): 0;
+    const int n_top_rows = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
+
+#define FILTER_UNIFORM(src, ...) (src[c] + src[r]) >> 1
+#define FILTER_VSTRIP(src, ...) (src[l] + 2 * src[c] + src[r]) >> 2
+#define FILTER_CENTER(src, ...) (src[c])
+#define FILTER(...) FILTER_TYPES(UNIFORM, VSTRIP, CENTER, __VA_ARGS__)
+
+    // tl+t+tr
+    if (has_t) {
+        const pixel *top = (top_sb_edge ? top_sb_edge :
+            src - n_top_rows * src_stride) - n_left_cols * 2;
+        const int start = !has_l && dir == CFL_DIR_CENTER;
+        for (int y = 0; y < n_top_rows; y++) {
+            for (int x = start; x < start + needed_top_cols; x++) {
+                const int c = x * 2, r = c + 1;
+                const int l = (n_left_cols & 1) ? c - 1 : imax(c - 1, 0);
+                FILTER(dst, x - start, top);
+            }
+            top += !top_sb_edge * src_stride;
+            dst += CFL_MH_TOP_STRIDE;
+        }
+    }
+
+    // l+bl
+    const int ystart = !has_t && dir == CFL_DIR_CENTER;
+    const pixel *src_left = src + ystart * src_stride - n_left_cols * 2;
+    pixel *dst_left = dst + 32 * 32;
+    for (int y = ystart; y < ystart + needed_left_rows; y++) {
+        for (int x = 0; x < n_left_cols; x++) {
+            const int c = x * 2, r = c + 1;
+            const int l = (n_left_cols & 1) ? c - 1 : imax(c - 1, 0);
+            FILTER(dst_left, x, src_left);
+        }
+        src_left += src_stride;
+        dst_left += n_left_cols;
+    }
+
+    // blk
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            const int c = x * 2, r = c + 1;
+            const int l = !has_l ? imax(c - 1, 0) : c - 1;
+            FILTER(dst, x, src);
+        }
+        src += src_stride;
+        dst += w;
+    }
+#undef FILTER_UNIFORM
+#undef FILTER_VSTRIP
+#undef FILTER_CENTER
+#undef FILTER_TYPE
+#undef FILTER_TYPES
+#undef FILTER
+}
+
+#define cfl_mh_gen_y_fn(ss, ucflt, lcflt) \
 static void \
-cfl_mh_gen_y_420_##lcflt##_c(pixel *const dst, const pixel *const src, \
-                             const pixel *const top_sb_edge, \
-                             ptrdiff_t const src_stride, const int refw, \
-                             const int refh, int const w, int const h, int flags) \
+cfl_mh_gen_y_##ss##_##lcflt##_c(pixel *const dst, const pixel *const src, \
+                                const pixel *const top_sb_edge, \
+                                ptrdiff_t const src_stride, const int refw, \
+                                const int refh, int const w, int const h, \
+                                int flags) \
 { \
-    cfl_mh_gen_y_420_c(dst, src, top_sb_edge, PXSTRIDE(src_stride), \
-                       refw, refh, w, h, flags, CFL_FLT_TYPE_##ucflt); \
+    cfl_mh_gen_y_##ss##_c(dst, src, top_sb_edge, PXSTRIDE(src_stride), \
+                          refw, refh, w, h, flags, CFL_FLT_TYPE_##ucflt); \
 }
 
-#define cfl_mh_gen_y_fn(fmt) \
-cfl_mh_gen_y_##fmt##_fn(UNIFORM, uniform) \
-cfl_mh_gen_y_##fmt##_fn(VSTRIP, vstrip) \
-cfl_mh_gen_y_##fmt##_fn(GAUSS, gauss)
+cfl_mh_gen_y_fn(420, UNIFORM, uniform)
+cfl_mh_gen_y_fn(420, VSTRIP, vstrip)
+cfl_mh_gen_y_fn(420, GAUSS, gauss)
+cfl_mh_gen_y_fn(422, UNIFORM, uniform)
+cfl_mh_gen_y_fn(422, VSTRIP, vstrip)
+cfl_mh_gen_y_fn(422, CENTER, center)
 
-cfl_mh_gen_y_fn(420)
+static NOINLINE void
+cfl_mh_gen_y_444_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
+                   const ptrdiff_t src_stride, const int needed_top_cols,
+                   const int needed_left_rows, const int w, const int h,
+                   const int flags)
+{
+    const int has_t = flags & CFL_HAS_TOP;
+    const int has_l = flags & CFL_HAS_LEFT;
+    const int dir = flags & CFL_DIR_MASK;
+    const int n_left_cols = has_l ? 1 + (dir == CFL_DIR_LEFT): 0;
+    const int n_top_rows = has_t ? 1 + (dir == CFL_DIR_TOP) : 0;
+
+    // tl+t+tr
+    if (has_t) {
+        const pixel *top = (top_sb_edge ? top_sb_edge :
+            src - n_top_rows * src_stride) - n_left_cols;
+        const int start = !has_l && dir == CFL_DIR_CENTER;
+        for (int y = 0; y < n_top_rows; y++) {
+            memcpy(dst, top + start, needed_top_cols * sizeof(pixel));
+            top += !top_sb_edge * src_stride;
+            dst += CFL_MH_TOP_STRIDE;
+        }
+    }
+
+    // l+bl
+    const int ystart = !has_t && dir == CFL_DIR_CENTER;
+    const pixel *src_left = src + ystart * src_stride - n_left_cols;
+    pixel *dst_left = dst + 32 * 32;
+    for (int y = ystart; y < ystart + needed_left_rows; y++) {
+        for (int x = 0; x < n_left_cols; x++)
+            dst_left[x] = src_left[x];
+        src_left += src_stride;
+        dst_left += n_left_cols;
+    }
+
+    // blk
+    for (int y = 0; y < h; y++) {
+        memcpy(dst, src, w * sizeof(pixel));
+        src += src_stride;
+        dst += w;
+    }
+}
 
 #define SQRND(v) (((v) * (v) + mid) >> bd)
 #define GEN_MATRIX() \
@@ -1628,6 +1722,12 @@ COLD void bitfn(dav2d_intra_pred_dsp_init)(Dav2dIntraPredDSPContext *const c) {
     c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][0] = cfl_mh_gen_y_420_uniform_c;
     c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][1] = cfl_mh_gen_y_420_vstrip_c;
     c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I420 - 1][2] = cfl_mh_gen_y_420_gauss_c;
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I422 - 1][0] = cfl_mh_gen_y_422_uniform_c;
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I422 - 1][1] = cfl_mh_gen_y_422_vstrip_c;
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I422 - 1][2] = cfl_mh_gen_y_422_center_c;
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I444 - 1][0] = cfl_mh_gen_y_444_c;
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I444 - 1][1] = cfl_mh_gen_y_444_c;
+    c->cfl_mh_gen_y[DAV2D_PIXEL_LAYOUT_I444 - 1][2] = cfl_mh_gen_y_444_c;
     c->cfl_mh_gen_mat = cfl_mh_gen_mat_c; \
     c->cfl_mh_calc_alphas = cfl_mh_calc_alphas_c;
     c->cfl_mh_pred[CFL_DIR_CENTER] = cfl_mh_pred_c_c;
