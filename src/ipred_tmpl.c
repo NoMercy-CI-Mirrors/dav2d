@@ -826,8 +826,21 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
          const unsigned flags, const int implicit, const int ss_hor,
          const int ss_ver HIGHBD_DECL_SUFFIX)
 {
-    assert(wpad >= 0 && wpad * 4 < w / 2);
-    assert(hpad >= 0 && hpad * 4 < h / 2);
+    // For non subsampled blocks of at least 32px, padding can only be a
+    // multiple of 8.
+    const int wpad_mul = !ss_hor && w >= 32;
+    const int hpad_mul = !ss_ver && h >= 32;
+    // Padding stops at 56 luma as the block must be split if its luma part is
+    // 128 but half or less of it is visible.
+    // For smaller luma sizes, chroma is not split in inter intra regions, so
+    // there, as little as only 8 luma pixels can be visible.
+    // Exception: for non subsampled 8px blocks, 4px can be invisible.
+    const int min_wpad = (w > 4) << wpad_mul;
+    const int min_hpad = (h > 4) << hpad_mul;
+    const int max_wpad = w / (4 << ((w << ss_hor) == 128)) - (1 << (!ss_hor && w > 8));
+    const int max_hpad = h / (4 << ((h << ss_ver) == 128)) - (1 << (!ss_ver && h > 8));
+    assert(!wpad || (wpad >= min_wpad && wpad <= max_wpad));
+    assert(!hpad || (hpad >= min_hpad && hpad <= max_hpad));
 
     const int has_t = flags & CFL_HAS_TOP;
     const int has_l = flags & CFL_HAS_LEFT;

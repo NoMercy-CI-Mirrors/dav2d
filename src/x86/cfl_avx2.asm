@@ -66,6 +66,9 @@ pb_flt0: times 2 db 2, 2
 pb_flt1: times 2 db 2, 1
 pb_flt2: times 2 db 4, 1
          times 2 db 6, 1
+pb_3:    times 4 db 3
+pb_11:   times 4 db 11
+pb_6_7:  times 2 db 6, 7
 pw_128:  times 2 dw 128
 pw_1024: times 2 dw 1024
 pd_1:            dd 1
@@ -139,8 +142,8 @@ SECTION .text
 %endmacro
 
 %macro F1 0 ; w4/8
-    pshufb                  m5, m3, m11             ; l0
-    pshufb                  m6, m4, m11             ; l1
+    pshufb                  m5, m3, m15             ; l0
+    pshufb                  m6, m4, m15             ; l1
     REPX    {pmaddubsw x, m14}, m3, m4              ; c/r 01
     paddw                   m5, m6
     paddw                   m3, m4
@@ -148,13 +151,16 @@ SECTION .text
     jmp .pred
 %endmacro
 
-%macro F2 0 ; w4/8
+%macro F2 0-1 0 ; w4/8
     pshufb                  m5, m3, m11             ; l
     pmaddubsw               m3, m14                 ; c/r
     REPX          {pand x, m7}, m4, m6              ; t/b
     paddw                   m4, m5
     paddw                   m4, m6
     paddw                   m3, m4
+%if %1 == 1
+    movu                   m11, [rsp+8]
+%endif
     jmp .pred
 %endmacro
 
@@ -315,14 +321,16 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jz .left.chroma.h4
     movu            [rsp+0x70], m10
 %endif
+    jb .left.luma.f2.pad.hm4
     xor                    t0d, t0d
 %ifidn %1, implicit
     mov                    t1d, 4
     jmp .left.luma.f2.loop
 .left.luma.f2.skip_sampling:
-    sub                     hd, 4
     mov                    t1d, 2
     mov                    t0d, t1d
+    sub                     hd, 4
+    jb .left.luma.f2.pad.hm4.step8
 %endif
 .left.luma.f2.loop:
     movd                    m1, [ysrcq+ystrideq*0  ]
@@ -352,6 +360,11 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pand                    m2, m1, m11
     sub                     t0, t1
     test                   t0d, t1d
+    ; When the step is < 8, we're jumping to the wrong one,
+    ; ie nz is actually an odd loop iter, z even.
+    ; todo I think this can be fixed by init t0 to 4 for step<8,
+    ; while init t0 to 6, for step=8. Then index stack with 0x60
+    ; instead of 0x70.
     jnz .left.luma.f2.acc_even
 %else
     xor                    t0d, 1
@@ -378,59 +391,44 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jz .left.chroma
 %ifidn %1, explicit
     test                   t0b, 1
-    jz .left.luma.f2.pad_odd
+    jz .left.luma.f2.pad.odd
 %else
-    sub                     t0, t1
     test                   t0d, t1d
-    jz .left.luma.f2.pad_odd
+    jnz .left.luma.f2.pad.odd
 %endif
     pshufd                  m1, m1, q3333
     pshuflw                 m2, m1, q2301
     pshufhw                 m2, m2, q2301
-%ifidn %1, implicit
-    pand                    m3, m1, m11
-    cmp                  stepd, 8
-    jb .left.luma.f2.pad
-    sub                     t0, 2
-%endif
     jmp .left.luma.f2.pad
-.left.luma.f2.pad_odd:
+.left.luma.f2.pad.odd:
     pshufd                  m2, m1, q3333
     pshuflw                 m1, m2, q2301
     pshufhw                 m1, m1, q2301
-%ifidn %1, implicit
-    pand                    m3, m2, m11
-%endif
 .left.luma.f2.pad:
-    cmp                  hpadd, 8
+    mov                    t2d, hpadd
+.left.luma.f2.h64.pad:
 %ifidn %1, implicit
-    jb .left.luma.f2.pad1.hpad4
-    je .left.luma.f2.pad1.hpad8
-%endif
-.left.luma.f2.pad1:
-    paddw                   m0, m1
-%ifidn %1, explicit
-    jb .left.chroma
-%else
+    pand                    m3, m1, m11
+    sub                     t0, t1
+    and                     t0, -1 ^ 2
     movu       [rsp+0x70+t0*4], m3
-    sub                     t0, 4
-.left.luma.f2.pad1.hpad8:
 %endif
-    paddw                   m0, m2
-%ifidn %1, explicit
+.left.luma.f2.pad.loop:
+    paddw                   m0, m1
+    sub                    t2d, 4
     je .left.chroma
-%else
-    cmp                  stepd, 8
-    je .left.luma.f2.pad1.hpad4
-    movu       [rsp+0x70+t0*4], m3
-    sub                     t0, 4
-.left.luma.f2.pad1.hpad4:
-%endif
-    paddw                   m0, m1
-%ifidn %1, implicit
-    movu       [rsp+0x70+t0*4], m3
-%endif
+    paddw                   m0, m2
+    sub                    t2d, 4
+    jg .left.luma.f2.pad.loop
     jmp .left.chroma
+.left.luma.f2.pad.hm4:
+%ifidn %1, implicit
+    xor                    t0d, t0d
+    mov                    t1d, 4
+%endif
+.left.luma.f2.pad.hm4.step8:
+    mova                    m1, m0
+    jmp .left.luma.f2.pad.odd
 .left.luma.f2.h64:
 %ifidn %1, explicit
  DEFINE_ARGS ptrs, ystride, wpad, hpad, w, h0, h, ystride3, flt, cstride, \
@@ -501,7 +499,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movd                    m1, [row0q+ystrideq*0-4]
     movd                    m3, [row1q+ystrideq*0-4]
     sub                     hd, 2
-    jb .left.luma.f2.h64.pad_half
+    jb .left.luma.f2.h64.pad.2px
     movd                    m6, [row1q+ystride3q -2]
     movd                   m11, [row2q+ystrideq*1-2]
     movd                    m8, [row2q+ystride3q -2]
@@ -548,10 +546,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     ja .left.luma.f2.h64.loop
 %ifidn %1, implicit
     mov                    r12, t0
-    mov                    t3d, 4
-    test                   t0d, 2       ; step=4 or step=8 and even loop iter
-    cmovz                  t1d, t3d
-    sub                    r12, t1
+    mov                    t2d, t1d
     mov                    h0d, [rsp+4]
     mov                  wpadd, [rsp]
     add                    rsp, 8
@@ -564,23 +559,18 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jz .left.chroma
     movd                    m1, [row3q+ystrideq*2-4]
     movd                    m2, [row3q+ystride3q -2]
+    mov                   r13d, t2d
     pmaddubsw               m1, m14
     punpcklwd               m2, m12
     pand                    m2, m13
     paddw                   m1, m2
     pshufd                  m2, m1, q0000
-%ifidn %1, implicit
-    pand                    m3, m2, m11
-%endif
     pshuflw                 m1, m2, q2301
     pshufhw                 m1, m1, q2301
-    cmp                  hpadd, 16
-%ifidn %1, implicit
-    jb .left.luma.f2.pad1.hpad4
-    je .left.luma.f2.pad1.hpad8
-%endif
-    jmp .left.luma.f2.pad1
-.left.luma.f2.h64.pad_half:
+    mov                    t2d, hpadd
+    shr                    t2d, 1
+    jmp .left.luma.f2.h64.pad
+.left.luma.f2.h64.pad.2px:
     movd                    m6, [row1q+ystride3q -2]
     movd                    m5, [row1q+ystrideq*2-4]
     punpcklwd               m2, m9  ; b0/t0
@@ -602,35 +592,27 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %else
     test                   t0b, 1
 %endif
-    jnz .left.luma.f2.h64.pad_half.even
+    jnz .left.luma.f2.h64.pad.2px.even
     pshuflw                 m1, m1, q2301
     pshufhw                 m1, m1, q2301
 %ifidn %1, implicit
-    mov                    t2d, t0d
     movu       [rsp+0x78+t0*4], m3
-    sub                     t0, 4
-    test                   t2d, t1d
 %endif
-.left.luma.f2.h64.pad_half.even:
+.left.luma.f2.h64.pad.2px.even:
     paddw                   m0, m1
-    jz .left.luma.f2.h64.pad_half.end
+    jz .left.luma.f2.h64.pad.2px.end
     mova                    m2, m1
     pshufhw                 m1, m1, q2301
 %ifidn %1, implicit
     cmp                  stepd, 8
-    je .left.luma.f2.h64.pad_half.even.skip_sampling
+    je .left.luma.f2.h64.pad.2px.end
     movu       [rsp+0x78+t0*4], m3
-    sub                     t0, 4
 %endif
-    jmp .left.luma.f2.h64.pad_half.end
-.left.luma.f2.h64.pad_half.even.skip_sampling:
-    sub                     t0, 2
-    jmp .left.luma.f2.h64.pad_half.end
-.left.luma.f2.h64.pad_half.end:
+.left.luma.f2.h64.pad.2px.end:
     pshufhw                 m2, m1, q2301
 %ifidn %1, implicit
     mov                    r12, t0
-    mov                    r13, t1
+    mov                   r13d, t1d
     mov                    h0d, [rsp+4]
     mov                  wpadd, [rsp]
     add                    rsp, 8
@@ -642,15 +624,9 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     je .left.chroma
     punpckhqdq              m1, m1 ;  odd iter: shuffled
     punpckhqdq              m2, m2 ; even iter: original
-%ifidn %1, implicit
-    pand                    m3, m1, m11
-%endif
-    cmp                  hpadd, 20
-%ifidn %1, implicit
-    jb .left.luma.f2.pad1.hpad4
-    je .left.luma.f2.pad1.hpad8
-%endif
-    jmp .left.luma.f2.pad1
+    lea                    t2d, [hpadq-4]
+    shr                    t2d, 1
+    jmp .left.luma.f2.h64.pad
 
 .left.luma.f1:
     vpbroadcastd          ym14, [pb_left_flt1]
@@ -685,6 +661,9 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %else
     jz .left.chroma.h4
     movu            [rsp+0x70], m10
+%endif
+    jb .left.luma.f1.pad.hm4
+%ifidn %1, implicit
     sub                    rsp, 8
     mov                [rsp+0], wpadd
     mov                [rsp+4], h0d
@@ -693,11 +672,12 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jmp .left.luma.f1.loop
 .left.luma.f1.skip_sampling:
     sub                    rsp, 8
-    sub                     hd, 4
     mov                [rsp+0], wpadd
     mov                [rsp+4], h0d
     mov                    t1d, 2
     mov                    t0d, t1d
+    sub                     hd, 4
+    jb .left.luma.f1.pad.hm4.step8
 %endif
 .left.luma.f1.loop:
     lea                  row0q, [row0q+rowq*4]
@@ -709,7 +689,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movd                    m3, [row0q+ystrideq*1-4]
     movd                    m4, [row1q+ystrideq*1-4]
     sub                     hd, 2
-    jb .left.luma.f1.pad64_half
+    jb .left.luma.f1.pad.h64.2px
     movd                    m5, [row2q+ystrideq*0-4]
     movd                    m6, [row3q+ystrideq*0-4]
     movd                    m7, [row2q+ystrideq*1-4]
@@ -724,7 +704,6 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pshuflw                 m1, m1, q2301
     pshufhw                 m1, m1, q2301
     paddw                   m1, m3
-    paddw                   m0, m1
 %ifidn %1, implicit
     sub                     t0, t1
     test                   t0d, 2
@@ -733,6 +712,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movu       [rsp+0x78+t0*4], m2
 .left.luma.f1.loop.skip_sampling:
 %endif
+    paddw                   m0, m1
     sub                     hd, 2
     ja .left.luma.f1.loop
 %ifidn %1, explicit
@@ -742,19 +722,27 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jz .left.chroma.reload
     cmp          dword [rsp+4], 64
 %endif
-    je .left.luma.f1.pad64
+    je .left.luma.f1.pad.h64
+.left.luma.f1.pad.start:
     pshufd                  m1, m1, q3333
 %ifidn %1, implicit
     pand                    m2, m1, m11
-    sub                     t0, t1
-    xor                    t2d, t2d
-    test                   t0d, 2
-    cmovz                   t1, t2
-    sub                     t0, t1
 %endif
-    cmp                  hpadd, 8
+    mov                    t2d, hpadd
     jmp .left.luma.pad
-.left.luma.f1.pad64:
+.left.luma.f1.pad.hm4:
+%ifidn %1, implicit
+    movu            [rsp+0x70], m10
+    sub                    rsp, 8
+    mov                [rsp+0], wpadd
+    mov                [rsp+4], h0d
+    mov                    t1d, 4
+    xor                    t0d, t0d
+.left.luma.f1.pad.hm4.step8:
+%endif
+    mova                    m1, m0
+    jmp .left.luma.f1.pad.start
+.left.luma.f1.pad.h64:
     lea                     t2, [ystrideq*3]
     movd                    m1, [row3q+ystrideq*2-4]
     movd                    m2, [row3q+t2-4]
@@ -768,14 +756,10 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     paddw                   m1, m2
 %ifidn %1, implicit
     pand                    m2, m1, m11
-    mov                    t3d, 4
-    test                   t0d, 2
-    cmovz                  t1d, t3d
-    sub                     t0, t1
 %endif
-    cmp                  hpadd, 16
-    jmp .left.luma.pad
-.left.luma.f1.pad64_half:
+    mov                    t2d, hpadd
+    jmp .left.luma.pad.h64.end
+.left.luma.f1.pad.h64.2px:
     lea                     t3, [ystrideq*3]
     movd                    m5, [row1q+ystrideq*2-4]
     movd                    m6, [row1q+t3-4]
@@ -801,14 +785,10 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     paddw                   m0, m1
     sub                     t0, t1
     test                   t0d, 2
-    jnz .left.luma.f1.pad64_half.skip_sampling
+    jnz .left.luma.f1.pad.h64.2px.skip_sampling
     pand                    m2, m1, m11
     movu       [rsp+0x78+t0*4], m2
-    sub                     t0, 4
-    jmp .left.luma.f1.pad64_half.samping_done
-.left.luma.f1.pad64_half.skip_sampling:
-    sub                     t0, 2
-.left.luma.f1.pad64_half.samping_done:
+.left.luma.f1.pad.h64.2px.skip_sampling:
 %endif
     cmp                  hpadd, 4
 %ifidn %1, explicit
@@ -821,8 +801,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     punpckhqdq              m1, m1
     pand                    m2, m1, m11
 %endif
-    cmp                  hpadd, 20
-    jmp .left.luma.pad
+    jmp .left.luma.pad.h64.2px.end
 
 .left.luma.f0:
     vpbroadcastd          ym14, [pb_flt0]
@@ -852,6 +831,9 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jz .left.chroma
 %else
     jz .left.chroma.h4
+%endif
+    jb .left.luma.f0.pad.hm4
+%ifidn %1, implicit
     movu            [rsp+0x70], m10
     sub                    rsp, 8
     mov                [rsp+0], wpadd
@@ -861,11 +843,12 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jmp .left.luma.f0.loop
 .left.luma.f0.skip_sampling:
     sub                    rsp, 8
-    sub                     hd, 4
     mov                [rsp+0], wpadd
     mov                [rsp+4], h0d
     mov                    t1d, 2
     mov                    t0d, t1d
+    sub                     hd, 4
+    jb .left.luma.f0.pad.hm4.step8
 %endif
 .left.luma.f0.loop:
     lea                  row0q, [row0q+rowq*4]
@@ -877,7 +860,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movd                    m3, [row1q+ystrideq*0-2]
     movd                    m4, [row1q+ystrideq*1-2]
     sub                     hd, 2
-    jb .left.luma.f0.pad64_half
+    jb .left.luma.f0.pad.h64.2px
     movd                    m5, [row2q+ystrideq*0-2]
     movd                    m6, [row2q+ystrideq*1-2]
     movd                    m7, [row3q+ystrideq*0-2]
@@ -908,34 +891,33 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jz .left.chroma.reload
     cmp          dword [rsp+4], 64
 %endif
-    je .left.luma.f0.pad64
+    je .left.luma.f0.pad.h64.4px
+.left.luma.f0.pad.start:
     pshufd                  m1, m1, q3333
-%ifidn %1, implicit
-    pand                    m2, m1, m11
-    mov                    t3d, 4
-    test                   t0d, 2
-    cmovz                  t1d, t3d
-    sub                     t0, t1
-%endif
-    cmp                  hpadd, 8
+    mov                    t2d, hpadd
     jmp .left.luma.pad
-.left.luma.f0.pad64:
+.left.luma.f0.pad.hm4:
+%ifidn %1, implicit
+    movu            [rsp+0x70], m10
+    sub                    rsp, 8
+    mov                [rsp+0], wpadd
+    mov                [rsp+4], h0d
+    mov                    t1d, 4
+    xor                    t0d, t0d
+.left.luma.f0.pad.hm4.step8:
+%endif
+    mova                    m1, m0
+    jmp .left.luma.f0.pad.start
+.left.luma.f0.pad.h64.4px:
     lea                     t2, [ystrideq*3]
     movd                    m1, [row3q+ystrideq*2-2]
     movd                    m2, [row3q+t2-2]
     punpcklwd               m1, m2
     pshufd                  m1, m1, q0000
     pmaddubsw               m1, m14
-%ifidn %1, implicit
-    pand                    m2, m1, m11
-    mov                    t3d, 4
-    test                   t0d, 2
-    cmovz                  t1d, t3d
-    sub                     t0, t1
-%endif
-    cmp                  hpadd, 16
-    jmp .left.luma.pad
-.left.luma.f0.pad64_half:
+    mov                    t2d, hpadd
+    jmp .left.luma.pad.h64.end
+.left.luma.f0.pad.h64.2px:
     lea                     t3, [ystrideq*3]
     movd                    m5, [row1q+ystrideq*2-2]
     movd                    m6, [row1q+t3-2]
@@ -946,54 +928,40 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     punpckldq               m5, m5
     punpcklqdq              m1, m5
     pmaddubsw               m1, m14
+    paddw                   m0, m1
 %ifidn %1, implicit
     sub                     t0, t1
     test                   t0d, 2       ; step=4 or (step=8 and even loop iter)
-    jnz .left.luma.f0.pad64_half.skip_sampling
+    jnz .left.luma.f0.pad.h64.2px.skip_sampling
     pand                    m2, m1, m11
     movu       [rsp+0x78+t0*4], m2
-    sub                     t0, 4
-    jmp .left.luma.f0.pad64_half.sampling_done
-.left.luma.f0.pad64_half.skip_sampling:
-    sub                     t0, 2
-.left.luma.f0.pad64_half.sampling_done:
+.left.luma.f0.pad.h64.2px.skip_sampling:
 %endif
-    paddw                   m0, m1
-    pshufd                  m1, m1, q3333
     cmp                  hpadd, 4
 %ifidn %1, explicit
     je .left.chroma
 %else
     je .left.chroma.reload
-    pand                    m2, m1, m11
 %endif
-    cmp                  hpadd, 20
+    pshufd                  m1, m1, q3333
+.left.luma.pad.h64.2px.end:
+    lea                    t2d, [hpadq-4]
+.left.luma.pad.h64.end:
+    shr                    t2d, 1
 .left.luma.pad:
 %ifidn %1, implicit
-    jb .left.luma.pad4
-    je .left.luma.pad8
+    pand                    m2, m1, m11
+    sub                     t0, t1
+    and                     t0, -1 ^ 2
+    movu       [rsp+0x78+t0*4], m2
 %endif
+.left.luma.pad.loop:
     paddw                   m0, m1
+    sub                    t2d, 4
+    jg .left.luma.pad.loop
 %ifidn %1, explicit
-    jb .left.chroma
+    jmp .left.chroma
 %else
-    movu       [rsp+0x78+t0*4], m2
-    sub                     t0, 4
-.left.luma.pad8:
-%endif
-    paddw                   m0, m1
-%ifidn %1, explicit
-    je .left.chroma
-%else
-    cmp                  stepd, 8
-    je .left.luma.pad4
-    movu       [rsp+0x78+t0*4], m2
-    sub                     t0, 4
-.left.luma.pad4:
-%endif
-    paddw                   m0, m1
-%ifidn %1, implicit
-    movu       [rsp+0x78+t0*4], m2
     jmp .left.chroma.reload
 %endif
 
@@ -1035,6 +1003,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     add                    t1d, t3d
     sub                     hd, 4
     jz .top
+    jb .left.chroma.pad
 .left.chroma.loop:
     lea                  usrcq, [usrcq+rowq*2]
     lea                  vsrcq, [vsrcq+rowq*2]
@@ -1047,7 +1016,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     add                    t0d, t2d
     add                    t1d, t3d
     sub                     hd, 2
-    jb .left.chroma.pad.h64_half
+    jb .left.chroma.pad.h64
     lea                  usrcq, [usrcq+rowq*2]
     lea                  vsrcq, [vsrcq+rowq*2]
     movzx                  t2d, byte [usrcq+rowq*0]
@@ -1063,8 +1032,9 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jz .top
     cmp                    h0d, 64
     je .left.chroma.pad.h64
-    mov                    t4d, hpadd
 .left.chroma.pad:
+    mov                    t4d, hpadd
+.left.chroma.pad.acc:
     imul                   t2d, t4d
     imul                   t3d, t4d
     add                    t0d, t2d
@@ -1073,28 +1043,16 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 .left.chroma.pad.h64:
     add                  usrcq, rowq
     add                  vsrcq, rowq
-    mov                    t4d, hpadd
-    shr                    t4d, 1
-    movzx                  t2d, byte [usrcq+cstrideq]
-    movzx                  t3d, byte [vsrcq+cstrideq]
-    jmp .left.chroma.pad
-.left.chroma.pad.h64_half:
-    add                  usrcq, rowq
-    add                  vsrcq, rowq
     movzx                  t2d, byte [usrcq+cstrideq]
     movzx                  t3d, byte [vsrcq+cstrideq]
     mov                    t4d, hpadd
-    sub                    t4d, 4
     shr                    t4d, 1
-    lea                    t0d, [t0+t2*2]
-    lea                    t1d, [t1+t3*2]
-    jnz .left.chroma.pad
-    jmp .top
+    jmp .left.chroma.pad.acc
 %else ; implicit
  INIT_XMM avx2
  DEFINE_ARGS ptrs, ystride, wpad, hpad, _, h0, _, step, _, cstride, \
              usrc, vsrc, _, h, row
- DECLARE_REG_TMP 4, 6
+ DECLARE_REG_TMP 4, 6, 12
     movu                   m10, [rsp+0x70]
     mov                     hd, [rsp+0x80]
 .left.chroma2:
@@ -1148,6 +1106,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     xor                    t0d, t0d
     sub                     hd, 4
     jz .top
+    jb .left.chroma.pad.hm4
 .left.chroma.loop:
     lea                  usrcq, [usrcq+rowq*2]
     lea                  vsrcq, [vsrcq+rowq*2]
@@ -1156,7 +1115,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movd                    m3, [vsrcq+rowq*0]
     movd                    m5, [vsrcq+rowq*1]
     sub                     hd, 2
-    jb .left.chroma.pad.h64_half
+    jb .left.chroma.pad.h64.2px
     lea                  usrcq, [usrcq+rowq*2]
     lea                  vsrcq, [vsrcq+rowq*2]
     movd                    m6, [usrcq+rowq*0]
@@ -1193,7 +1152,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     ja .left.chroma.loop
     jz .top
     cmp                    h0d, 64
-    je .left.chroma.pad.h64
+    je .left.chroma.pad.h64.4px
+.left.chroma.pad.start:
     movu                    m6, [rsp+%%stksz+t1]
     pshuflw                 m2, m2, q3333
     pshufhw                 m2, m2, q3333
@@ -1202,32 +1162,27 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pmaddwd                 m8, m6, m6
     pmaddwd                 m9, m6, m2
     pand                    m7, m2, m14
-    mov                    t0d, hpadd
+    mov                    t1d, hpadd
 .left.chroma.pad:
-    cmp                    t0d, 8
-    jb .left.chroma.pad4
-    je .left.chroma.pad8
-    paddw                   m1, m2
-    paddw                  m10, m6
-    paddw                  m11, m7
-    paddd                  m12, m8
-    paddd                  m13, m9
-.left.chroma.pad8:
     paddw                   m1, m2
     cmp                  stepd, 8
-    je .left.chroma.pad4
+    ; todo we could fuse this by sete t2, xor t0, t2
+    jne .left.chroma.pad.sampling
+    xor                    t0d, 1
+    jz .left.chroma.pad.skip_sampling
+.left.chroma.pad.sampling:
     paddw                  m10, m6
     paddw                  m11, m7
     paddd                  m12, m8
     paddd                  m13, m9
-.left.chroma.pad4:
-    paddw                   m1, m2
-    paddw                  m10, m6
-    paddw                  m11, m7
-    paddd                  m12, m8
-    paddd                  m13, m9
+.left.chroma.pad.skip_sampling:
+    sub                    t1d, 4
+    jg .left.chroma.pad
     jmp .top
-.left.chroma.pad.h64:
+.left.chroma.pad.hm4:
+    mova                    m2, m1
+    jmp .left.chroma.pad.start
+.left.chroma.pad.h64.4px:
     add                  usrcq, rowq
     add                  vsrcq, rowq
     movu                    m6, [rsp+%%stksz+t1]
@@ -1240,10 +1195,10 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pmaddwd                 m8, m6, m6
     pmaddwd                 m9, m6, m2
     pand                    m7, m2, m14
-    mov                    t0d, hpadd
-    shr                    t0d, 1
+    mov                    t1d, hpadd
+    shr                    t1d, 1
     jmp .left.chroma.pad
-.left.chroma.pad.h64_half:
+.left.chroma.pad.h64.2px:
     add                  usrcq, rowq
     add                  vsrcq, rowq
     movd                    m7, [usrcq+cstrideq]
@@ -1257,8 +1212,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     punpcklqdq              m2, m3
     pand                    m2, m15
     paddw                   m1, m2
-    test                   t0d, 1
-    jnz .left.chroma.pad.h64_half.skip_sampling
+    xor                    t0d, 1
+    jz .left.chroma.pad.h64.2px.skip_sampling
     movu                    m6, [rsp+%%stksz+t1]
     sub                     t1, 16
     phaddw                  m6, m6
@@ -1270,12 +1225,12 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     paddw                  m11, m7
     paddd                  m12, m8
     paddd                  m13, m9
-.left.chroma.pad.h64_half.skip_sampling:
-    mov                    t0d, hpadd
-    sub                    t0d, 4
-    shr                    t0d, 1
+.left.chroma.pad.h64.2px.skip_sampling:
+    lea                    t2d, [hpadq-4]
+    shr                    t2d, 1
     jz .top
     movu                    m6, [rsp+%%stksz+t1]
+    mov                    t1d, t2d
     phaddw                  m6, m6
     psrlw                   m6, 3
     pshufd                  m2, m2, q3311
@@ -1367,6 +1322,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     shl                  wpadd, 2
     jz .top.no_pad
     ; gen right edge extend
+    cmp                     wd, 8
+    je .top.prep_pad.w8
     mov                    t0d, wpadd
     mov                    t1d, wpadd
     and                    t0d, 15
@@ -1378,11 +1335,12 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     lea                    t2d, [t1+1]
     shl                    t2d, 8
     or                     t1d, t2d
-    movd                   xm5, t0d
+    movd                   xm3, t0d
     movd                   xm9, t1d
-    vpbroadcastb            m5, xm5
+    vpbroadcastb            m3, xm3
     vpbroadcastw            m9, xm9
-    pminub                  m8, m5
+.top.prep_pad.end:
+    pminub                  m8, m3
     pminub                  m7, m9
 .top.no_pad:
     test                flagsb, 0x4             ; have_top
@@ -1402,6 +1360,12 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movsxd                  t3, [fltq+t3*4]
     add                     t3, tblq
     jmp                     t3
+.top.prep_pad.w8:
+    vpbroadcastd            m3, [base+pb_3]
+    vpbroadcastd            m4, [base+pb_11]
+    vpbroadcastd            m9, [base+pb_6_7]
+    punpcklqdq              m3, m4
+    jmp .top.prep_pad.end
 
  INIT_XMM avx2
 .top.f0.w4:
@@ -1435,8 +1399,10 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movu                    m4, [ytop1q]
     movhps                  m5, [vtopq]
     REPX    {pmaddubsw x, m14}, m2, m4
+    pshufb                  m5, m8
     pmaddubsw               m3, m5, m15
     paddw                   m2, m4
+    pshufb                  m2, m7
 %ifidn %1, explicit
     psrlq                   m5, m3, 32
     paddw                   m3, m5
@@ -1450,16 +1416,16 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     punpcklbw               m5, m7              ; v
     REPX         {pand x, m11}, m4, m6, m5      ; x y0 y1
     pmaddwd                 m7, m4, m4          ; xx
-    pmaddwd                 m9, m4, m6          ; xy1
-    pmaddwd                 m8, m4, m5          ; xy0
+    pmaddwd                m11, m4, m6          ; xy1
+    pmaddwd                 m9, m4, m5          ; xy0
+    phaddw                  m5, m6
+    phaddd                  m9, m11
     psrldq                 m11, m4, 8
     psrldq                 m15, m7, 8
-    phaddw                  m5, m6
-    phaddd                  m8, m9
     paddw                   m4, m11
     paddd                   m7, m15
     paddw                  m11, m5, [rsp+0x10]
-    paddd                  m13, m8
+    paddd                  m13, m9
     paddw                  m10, m4
     paddd                  m12, m7
     pcmpeqw                m15, m15
@@ -1471,12 +1437,13 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movu                    m2, [ytop0q]
     movu                    m4, [ytop1q]
     vinserti128             m5, [vtopq], 1
-    vpblendd                m7, m6, 0xf
     REPX    {pmaddubsw x, m14}, m2, m4
-    pshufb                  m5, m8
-    pmaddubsw               m3, m5, m15
     paddw                   m4, m2
-    pshufb                  m4, m7
+    cmp                  wpadd, 4
+    jb .top.f0.w16.acc
+    call .top.f0.w16.pad
+.top.f0.w16.acc:
+    pmaddubsw               m3, m5, m15
     psrldq                  m9, m3, 8
     vextracti128           xm6, m4, 1
     paddw                   m3, m9
@@ -1517,6 +1484,17 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pcmpeqw               xm15, xm15
 %endif
     jmp .acc_dc
+.top.f0.w16.pad:
+    pshufb                  m5, m8
+    jne .top.f0.w16.pad.ge8
+    vpblendd                m7, m6, 0x0f
+    pshufb                  m4, m7
+    ret
+.top.f0.w16.pad.ge8:
+    pshufb                 xm3, xm4, xm9
+    pshufb                 xm4, xm7
+    vinserti128             m4, xm3, 1
+    ret
 .top.f0.w32:
     movu                  xm13, [utopq+ 0]
     movu                   xm5, [utopq+16]
@@ -1527,13 +1505,14 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     vinserti128            m13, [vtopq+ 0], 1
     vinserti128             m5, [vtopq+16], 1
     REPX    {pmaddubsw x, m14}, m2, m4, m10, m12
+    paddw                   m4, m2
+    paddw                  m10, m12
     cmp                  wpadd, 4
-    jnb .top.f0.w32.pad
+    jb .top.f0.w32.acc
+    call .top.f0.w32.pad
 .top.f0.w32.acc:
     pmaddubsw               m3, m13, m15
     pmaddubsw               m7, m5, m15
-    paddw                   m4, m2
-    paddw                  m10, m12
     paddw                   m3, m7
     paddw                   m2, m4, m10
     psrldq                  m7, m3, 8
@@ -1587,17 +1566,34 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jmp .acc_dc
 .top.f0.w32.pad:
     pshufb                  m5, m8
-    jne .top.f0.w32.pad_gt4
+    jne .top.f0.w32.pad.ge8
     vpblendd                m7, m6, 0x0f
-    REPX        {pshufb x, m7}, m10, m12
-    jmp .top.f0.w32.acc
-.top.f0.w32.pad_gt4:
+    pshufb                 m10, m7
+    ret
+.top.f0.w32.pad.ge8:
+    cmp                  wpadd, 16
+    jae .top.f0.w32.pad.ge16
     pshufb                 xm3, xm10, xm9
-    pshufb                 xm6, xm12, xm9
-    REPX        {pshufb x, xm7}, xm10, xm12
+    pshufb                xm10, xm7
     vinserti128            m10, xm3, 1
-    vinserti128            m12, xm6, 1
-    jmp .top.f0.w32.acc
+    ret
+.top.f0.w32.pad.ge16:
+    pshufb                  m5, m13, m3
+    pshufb                 m13, m8
+    cmp                  wpadd, 24
+    jae .top.f0.w32.pad.ge24
+    vextracti128          xm10, m4, 1
+    vpblendd                m7, m6, 0x0f
+    pshufb                xm10, xm9
+    pshufb                  m4, m7
+    vinserti128            m10, xm10, 1
+    ret
+.top.f0.w32.pad.ge24:
+    pshufb                xm10, xm4, xm9
+    pshufb                 xm4, xm7
+    vinserti128            m10, xm10, 1
+    vpblendd                m4, m10, 0xf0
+    ret
 .top.f0.w64:
     ; todo how much slower is it to have a single path?
     test                 wpadd, wpadd
@@ -1695,20 +1691,20 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     sub                    rsp, 0x20
     movu                 [rsp], m11
 %endif
-    mova                   xm3, [utopq+ 0]
+    mova                   xm5, [utopq+ 0]
     movu                  xm12, [utopq+15]
     mova                    m2, [ytop0q]
     mova                    m4, [ytop1q]
     movu                    m6, [ytop0q+30]
     movu                   m10, [ytop1q+30]
-    vinserti128             m3, [vtopq+ 0], 1
+    vinserti128             m5, [vtopq+ 0], 1
     vinserti128            m12, [vtopq+15], 1
     psrlw                  m13, m15, 8
     REPX    {pmaddubsw x, m14}, m2, m4, m6, m10
-    vpblendvb              m12, m3, m13
+    vpblendvb              m12, m5, m13
     paddw                   m4, m2
     paddw                   m6, m10
-    pmaddubsw               m3, m12, m15
+    pmaddubsw               m5, m12, m15
     pblendw                 m4, m6, 0xaa
     mova                   xm2, [ytop0q+64]
     mova                  xm10, [ytop0q+96]
@@ -1731,31 +1727,30 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pshufb                 m10, m7
     cmp                  wpadd, 16
     jb .top.f0.w64.acc
-    pshufb                 m15, m11, m5
+    pshufb                 m15, m11, m3
     pshufb                 m11, m8
     pshufb                  m6, m13, m9
-    pshufb                 m10, m13, m9
     pshufb                 m13, m7
+    mova                   m10, m6
     cmp                  wpadd, 24
     jb .top.f0.w64.acc
     pshufb                  m6, m2, m9
-    pshufb                 m10, m2, m9
-    pshufb                 m13, m2, m9
     pshufb                  m2, m7
+    REPX          {mova x, m6}, m10, m13
 .top.f0.w64.acc:
     pcmpeqw                 m9, m9
-    psllw                   m5, m9, 8
+    psllw                   m3, m9, 8
     psllw                  m15, 8
-    vpblendvb              m11, m15, m5
+    vpblendvb              m11, m15, m3
     pmaddubsw               m7, m11, m9
-    paddw                   m3, m7
+    paddw                   m5, m7
 %ifidn %1, explicit
     paddw                   m2, m10
     paddw                   m6, m13
     pslld                   m6, 16
     pblendw                 m6, m2, 0x55
 %else
-    vbroadcasti128          m5, [t64f0smplCshuf]
+    vbroadcasti128          m9, [t64f0smplCshuf]
     REPX         {pslld x, 16}, m10, m6
     pblendw                 m2, m10, 0xaa
     pblendw                 m6, m13, 0x55
@@ -1765,8 +1760,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %endif
     paddw                   m2, m4, m6
     vextracti128           xm7, m2, 1
-    psrldq                  m9, m3, 8
-    paddw                   m3, m9
+    psrldq                  m3, m5, 8
+    paddw                   m3, m5
     vpermq                  m3, m3, q3220
     paddw                  xm2, xm7
 %ifidn %1, explicit
@@ -1782,7 +1777,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     punpckhdq              m13, m13
     pxor                   m10, m10
     vpblendd               m13, m10, 0x03
-    REPX        {pshufb x, m5}, m12, m11
+    REPX        {pshufb x, m9}, m12, m11
     pand                    m4, m13
     REPX         {pand x, m15}, m12, m11
     psrldq                  m6, m4, 8
@@ -1841,12 +1836,14 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movu                    m4, [ytop1q]
     movhps                  m5, [vtopq]
     pshufb                  m6, m2, m3
-    pshufb                  m7, m4, m3
+    pshufb                  m9, m4, m3
     REPX    {pmaddubsw x, m14}, m2, m4
+    pshufb                  m5, m8
     pmaddubsw               m3, m5, m15
-    paddw                   m6, m7
+    paddw                   m6, m9
     paddw                   m2, m4
     paddw                   m2, m6
+    pshufb                  m2, m7
 %ifidn %1, explicit
     psrlq                   m9, m3, 32
     paddw                   m3, m9
@@ -1871,10 +1868,12 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     palignr                 m6, m4, m2, 15  ; high left
     REPX    {pmaddubsw x, m14}, m2, m4
     paddw                   m2, m3
-    pmaddubsw               m3, m5, m15
     pand                    m6, m13
     paddw                   m4, m6
-    pshufb                  m4, m7
+    cmp                  wpadd, 4
+    jnb .top.f1.w16.pad
+.top.f1.w16.acc:
+    pmaddubsw               m3, m5, m15
 %ifidn %1, implicit
     vperm2i128              m6, m2, m4, 0x31
     vperm2i128              m2, m4, 0x20
@@ -1885,7 +1884,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     vextracti128           xm6, m4, 1
     psrldq                  m7, m3, 8
     paddw                   m3, m7
-    vpermq                  m3, m3, q2020
+    vpermq                  m3, m3, q3220
     paddw                  xm2, xm4, xm6
 %ifidn %1, explicit
     psrlq                  xm5, xm3, 32
@@ -1896,6 +1895,15 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jnz .top.w16.sampling
     jmp .acc_dc.skip_top_sampling
 %endif
+.top.f1.w16.pad:
+    pshufb                  m5, m8
+    jne .top.f1.w16.pad.gt4
+    pshufb                  m4, m7
+    jmp .top.f1.w16.acc
+.top.f1.w16.pad.gt4:
+    pshufb                  m4, m2, m9
+    pshufb                  m2, m7
+    jmp .top.f1.w16.acc
 .top.f1.w32:
     vbroadcasti128         m13, [base+w8Llshuf]
     mova                   xm4, [ytop0q+ 0]
@@ -1910,22 +1918,23 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %ifidn %1, implicit
     SWAP                   m15, m11
 %endif
-    pshufb                 m13, m4, m13             ; l0
+    pmaddubsw              m11, m4, m14
     palignr                 m2, m6, m4, 15          ; l1
-    palignr                m11, m10, m6, 15         ; l2
-    palignr                 m3, m12, m10, 15        ; l3
-    REPX    {pmaddubsw x, m14}, m4, m6, m10, m12
-    REPX          {pand x, m5}, m2, m11, m3
-    paddw                   m4, m13
+    pshufb                  m4, m13                 ; l0
+    palignr                m13, m10, m6, 15         ; l2
+    paddw                   m4, m11
+    palignr                m11, m12, m10, 15        ; l3
+    REPX    {pmaddubsw x, m14}, m6, m10, m12
+    REPX          {pand x, m5}, m2, m13, m11
+    paddw                   m6, m2
+    paddw                  m10, m13
     movu                   xm5, [utopq+16]
     movu                  xm13, [utopq+ 0]
     vinserti128             m5, [vtopq+16], 1
     vinserti128            m13, [vtopq+ 0], 1
-    paddw                   m6, m2
-    paddw                  m10, m11
-    paddw                  m12, m3
-    test                 wpadd, wpadd
-    jnz .top.f1.w32.pad
+    paddw                  m12, m11
+    cmp                  wpadd, 4
+    jnb .top.f1.w32.pad
 .top.f1.w32.acc:
 %ifidn %1, explicit
     paddw                   m4, m6
@@ -1965,12 +1974,28 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %endif
 .top.f1.w32.pad:
     pshufb                  m5, m8
+    jne .top.f1.w32.pad.ge8
     pshufb                 m12, m7
-    cmp                  wpadd, 8
-    jb .top.f1.w32.acc
-    vinserti128             m9, xm9, 1
+    jmp .top.f1.w32.acc
+.top.f1.w32.pad.ge8:
+    cmp                  wpadd, 16
+    jae .top.f1.w32.pad.ge16
     pshufb                 m12, m10, m9
     pshufb                 m10, m7
+    jmp .top.f1.w32.acc
+.top.f1.w32.pad.ge16:
+    pshufb                  m5, m13, m3
+    pshufb                 m13, m8
+    cmp                  wpadd, 24
+    jae .top.f1.w32.pad.ge24
+    pshufb                 m10, m6, m9
+    pshufb                  m6, m7
+    mova                   m12, m10
+    jmp .top.f1.w32.acc
+.top.f1.w32.pad.ge24:
+    pshufb                  m6, m4, m9
+    pshufb                  m4, m7
+    REPX          {mova x, m6}, m10, m12
     jmp .top.f1.w32.acc
 .top.f1.w64:
 %ifidn %1, implicit
@@ -2112,7 +2137,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %ifidn %1, explicit
     sub                    rsp, 0x40
 %endif
-    movu            [rsp+0x20], m5
+    movu            [rsp+0x20], m3
     mova                   xm2, [ytop0q+0x00]
     mova                   xm3, [ytop0q+0x10]
     mova                   xm4, [ytop0q+0x20]
@@ -2170,14 +2195,18 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     REPX        {pshufb x, m7}, m13, m5
     cmp                  wpadd, 16
     jb .top.f1.w64pad.acc_luma
-    REPX   {pshufb x,  m4, m9}, m6, m13
-    REPX   {pshufb x, m14, m9}, m15, m5
+    pshufb                  m6, m4, m9
+    pshufb                 m15, m14, m9
     REPX        {pshufb x, m7}, m4, m14
+    mova                   m13, m6
+    mova                    m5, m15
     cmp                  wpadd, 24
     jb .top.f1.w64pad.acc_luma
-    REPX   {pshufb x, m12, m9}, m6, m13, m4
-    REPX   {pshufb x,  m2, m9}, m15, m5, m14
+    pshufb                  m6, m12, m9
+    pshufb                 m15, m2, m9
     REPX        {pshufb x, m7}, m12, m2
+    REPX          {mova x, m6}, m13, m4
+    REPX         {mova x, m15}, m5, m14
 .top.f1.w64pad.acc_luma:
 ; m0m1=left m2=yacc m3=uvacc m4m5m6=y m7 m8=pad
 ; m9 m10=y m11=uv m12=y m13 m14=weights m15=uv
@@ -2288,16 +2317,18 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     movq                    m5, [utopq]
     movu                    m2, [ytop0q]
     movu                    m4, [ytopaq]
-    movu                    m7, [ytop1q]
+    movu                    m3, [ytop1q]
     movhps                  m5, [vtopq]
     psrlw                   m9, m15, 8
     pshufb                  m6, m2, [base+w8Llshuf]
-    REPX          {pand x, m9}, m4, m7
+    REPX          {pand x, m9}, m4, m3
     pmaddubsw               m2, m14
+    pshufb                  m5, m8
+    paddw                   m4, m3
     pmaddubsw               m3, m5, m15
     paddw                   m4, m6
-    paddw                   m4, m7
     paddw                   m2, m4
+    pshufb                  m2, m7
 %ifidn %1, explicit
     psrlq                   m5, m3, 32
     paddw                   m3, m5
@@ -2307,29 +2338,29 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jnz .top.w8.sampling
     jmp .acc_dc.skip_top_sampling_wle8
 %endif
-.top.f2.w16:
  INIT_YMM avx2
-    movu                    m4, [ytopaq]
-    movu                    m9, [ytop1q]
+.top.f2.w16:
     vbroadcasti128          m2, [ytop0q+ 0]
     vbroadcasti128         m12, [ytop0q+16]
+    movu                    m4, [ytopaq]
+    movu                    m3, [ytop1q]
     movu                   xm5, [utopq]
     vinserti128             m5, [vtopq], 1
-    vpblendd                m7, m6, 0xf
     psrlw                  m13, m15, 8
-    REPX         {pand x, m13}, m4, m9
-    paddw                   m4, m9
-    pshufb                 xm6, xm2, [base+w8Llshuf]; l low
     palignr                m10, m12, m2, 15     ; l high
+    REPX         {pand x, m13}, m4, m3, m10
+    paddw                   m4, m3
+    pshufb                xm13, xm2, [base+w8Llshuf]; l low
     vpblendd                m2, m12, 0xf0
-    vpblendd                m6, m10, 0xf0
-    pshufb                  m5, m8              ; wpad chroma
+    vpblendd               m13, m10, 0xf0
     pmaddubsw               m2, m14
-    pmaddubsw               m3, m5, m15
-    pand                    m6, m13
-    paddw                   m4, m6              ; t+b+l
+    paddw                   m4, m13             ; t+b+l
     paddw                   m4, m2              ; c+r+t+b+l
-    pshufb                  m4, m7              ; wpad luma
+    cmp                  wpadd, 4
+    jb .top.f2.w16.acc
+    call .top.f0.w16.pad
+.top.f2.w16.acc:
+    pmaddubsw               m3, m5, m15
     vextracti128           xm6, m4, 1
     psrldq                  m9, m3, 8
     paddw                   m3, m9
@@ -2349,82 +2380,58 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %ifidn %1, implicit
     SWAP                   m15, m11             ; sampling mask
 %endif
-    mova                   xm3, [ytop0q+16]
-    mova                  xm10, [ytop0q+32]
-    mova                   xm2, [ytop0q+48]
-    mova                   xm4, [ytopaq+32]
-    mova                   xm6, [ytopaq+48]
+    vbroadcasti128          m6, [ytop0q+ 0]
+    vbroadcasti128         m10, [ytop0q+16]
+    vbroadcasti128          m2, [ytop0q+32]
+    vbroadcasti128          m4, [ytop0q+48]
+    pand                   m12, m13, [ytopaq]
+    pshufb                 xm5, xm6, [base+w8Llshuf]
+    palignr                m11, m10, m6, 15
+    vpblendd                m6, m10, 0xf0
+    vpblendd               m10, m2, 0xf0
+    vpblendd                m2, m4, 0xf0
+    pand                    m4, m13, [ytop1q]
+    vpblendd                m5, m11, 0xf0
+    pand                   m11, m13, [ytopaq+32]
+    palignr                m10, m2, m10, 15
+    REPX    {pmaddubsw x, m14}, m6, m2
+    REPX         {pand x, m13}, m5, m10
+    paddw                   m5, m12
+    pand                   m12, m13, [ytop1q+32]
+    paddw                   m6, m5
+    movu                  xm13, [utopq+ 0]
     movu                   xm5, [utopq+16]
-    vinserti128             m4, [ytop1q+32], 1
-    vinserti128             m6, [ytop1q+48], 1
+    vinserti128            m13, [vtopq+ 0], 1
     vinserti128             m5, [vtopq+16], 1
-    palignr               xm11, xm10, xm3, 15
-    palignr               xm12, xm2, xm10, 15
-    REPX   {pmaddubsw x, xm14}, xm10, xm2
-    REPX        {pand x,  m13}, m4, m6
-    REPX        {pand x, xm13}, xm11, xm12
-    paddw                   m4, m11
-    paddw                   m6, m12
-    paddw                  m10, m4
-    paddw                   m2, m6
-    mova                   xm4, [ytop0q]
-    movu                    m6, [ytopaq]
-    movu                   m12, [ytop1q]
-    test                 wpadd, wpadd
-    jnz .top.f2.w32.pad
-.top.f2.w32.acc:
-%ifidn %1, explicit
     paddw                  m10, m2
-%else
-    vperm2i128              m7, m10, m2, 0x20
-    vperm2i128             m10, m2, 0x31
-    paddw                  m10, m7              ; L1
-%endif
-    pshufb                 xm7, xm4, [base+w8Llshuf]
-    palignr                xm9, xm3, xm4, 15
-    REPX   {pmaddubsw x, xm14}, xm4, xm3        ; c+r 0a/0b
-    REPX        {pand x,  m13}, m6, m12         ; t/b 0
-    REPX        {pand x, xm13}, xm7, xm9        ; l 0a/0b
-    movu                  xm13, [utopq]
-    vinserti128            m13, [vtopq], 1
-    paddw                   m6, m12             ; t+b 0|1
-    paddw                  xm4, xm7
-    paddw                  xm3, xm9
-    vinserti128             m4, xm3, 1
-    paddw                   m4, m6              ; L0
-    paddw                   m2, m10, m4
-    vextracti128           xm6, m2, 1
+    paddw                   m4, m6      ; L0
+    paddw                  m10, m11
+    paddw                  m10, m12     ; L1
+    cmp                  wpadd, 4
+    jb .top.f2.w32.acc
+    mova                   xm6, [base+pb_0to15]
+    call .top.f0.w32.pad
+.top.f2.w32.acc:
 %ifidn %1, implicit
-    SWAP                    m3, m15
+    SWAP                   m11, m15
     pcmpeqd                m15, m15
 %endif
     pmaddubsw               m9, m5, m15
     pmaddubsw              m12, m13, m15
-%ifidn %1, implicit
-    SWAP                    m3, m15
-%endif
+    paddw                   m2, m4, m10
+    vextracti128           xm6, m2, 1
     paddw                   m9, m12
     psrldq                  m3, m9, 8
     paddw                   m3, m9
-    vpermq                  m3, m3, q3220
     paddw                  xm2, xm6
+    vpermq                  m3, m3, q3220
 %ifidn %1, explicit
     psrlq                  xm5, xm3, 32
     paddw                  xm3, xm5
     jmp .acc_dc
 %else
-    SWAP                   m11, m15
-    pcmpeqd               xm15, xm15
     jmp .top.w32.sampling
 %endif
-.top.f2.w32.pad:
-    pshufb                  m2, m7
-    pshufb                  m5, m8
-    cmp                  wpadd, 8
-    jb .top.f2.w32.acc
-    pshufb                  m2, m10, m9
-    pshufb                 m10, m7
-    jmp .top.f2.w32.acc
 .top.f2.w64:
     mova                   xm2, [ytop0q+0x30]
     mova                   xm3, [ytop0q+0x40]
@@ -2605,16 +2612,18 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pshufb                  m5, m7
     cmp                  wpadd, 16
     jb .top.f2.w64.acc
-    REPX    {pshufb x, m4, m9}, m5, m6
+    pshufb                  m5, m4, m9
     pshufb                  m4, m7
     pshufb                 m10, m8
     psrldq                 m11, m10, 15
     pxor                   m12, m12
     pshufb                 m11, m12
+    mova                    m6, m5
     cmp                  wpadd, 24
     jb .top.f2.w64.acc
-    REPX    {pshufb x, m3, m9}, m4, m5, m6
+    pshufb                  m4, m3, m9
     pshufb                  m3, m7
+    REPX          {mova x, m4}, m5, m6
     jmp .top.f2.w64.acc
 
  DEFINE_ARGS ptrs, ystride, wpad, hpad, w, h, flags, tbl, flt, cstride
@@ -2912,6 +2921,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jmp .ret
 .pred_uv.w8:
     lea              ystride3q, [ystrideq*3]
+    test                 wpadd, wpadd
+    jnz .pred_uv.w8_pad
 .pred_uv.w8.loop:
     call                    t3
     vextracti128           xm3, m2, 1
@@ -2940,6 +2951,25 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     sub                  hpadd, 4
     jg .pred_uv.w8.hpad
     jmp .ret
+.pred_uv.w8_pad:
+    lea                    rsp, [rsp-32]
+.pred_uv.w8_pad.loop:
+    call                    t3
+    pshufb                  m2, m11
+    vextracti128           xm3, m2, 1
+    movq    [udstq+cstrideq*0], xm2
+    movhps  [vdstq+cstrideq*0], xm2
+    movq    [udstq+cstrideq*1], xm3
+    movhps  [vdstq+cstrideq*1], xm3
+    lea                  ysrcq, [ysrcq+ystrideq*4]
+    lea                  udstq, [udstq+cstrideq*2]
+    lea                  vdstq, [vdstq+cstrideq*2]
+    sub                     hd, 2
+    jg .pred_uv.w8_pad.loop
+    add                    rsp, 32
+    test                 hpadd, hpadd
+    jz .ret
+    jmp .pred_uv.w8.hpad
 .pred_uv.w16:
     call                    t3
     vpermq                  m2, m2, q3120
@@ -2989,7 +3019,6 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     add                  wpadd, t1d
     mov                     t1, ysrcq
     sub                     wd, wpadd
-;   mova                   m11, m8
 .pred_uv.w32.loop:
     call                    t3
     vpermq                  m2, m2, q3120
@@ -3071,7 +3100,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     F0
 
 .blk.f1.w4.prep:
-    vbroadcasti128         m11, [base+w4Llshuf]
+    vbroadcasti128         m15, [base+w4Llshuf]
     lea                     t3, [.blk.f1.w4]
 .blk.f1.w4:
     movq                   xm3, [ysrcq+ystrideq*0]
@@ -3087,7 +3116,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     vpblendd                m4, m6, 0xc0
     F1
 .blk.f1.w8.prep:
-    vbroadcasti128         m11, [base+w8Llshuf]
+    vbroadcasti128         m15, [base+w8Llshuf]
     lea                     t3, [.blk.f1.w8]
 .blk.f1.w8:
     movu                   xm3, [ysrcq+ystrideq*0]
@@ -3182,6 +3211,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     vpblendd                m4, m15, 0xc0               ; b
     F2
 .blk.f2.w8.prep:
+    jnz .blk.f2.w8_pad.prep
     vbroadcasti128         m11, [base+w8Llshuf]
     lea                     t3, [.blk.f2.w8.start]
     xor                    t4d, t4d
@@ -3202,6 +3232,30 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     vpblendd                m6, m4, 0xf0    ; t
     vpblendd                m4, m15, 0xf0   ; b
     F2
+.blk.f2.w8_pad.prep:
+ DECLARE_REG_TMP 0, 14, 13, 8, 2
+    movu               [rsp+8], m11
+    lea                     t3, [.blk.f2.w8_pad.start]
+    xor                    t4d, t4d
+.blk.f2.w8_pad.h32:
+    movu                  xm15, [ysrcq+ystrideq*0]
+    jmp .blk.f2.w8_pad
+.blk.f2.w8_pad.start:
+    add                    t4d, 0x10000000
+    jc .blk.f2.w8_pad.h32
+.blk.f2.w8_pad:
+    mova                   xm6, xm15
+    movu                   xm3, [ysrcq+ystrideq*0]
+    vbroadcasti128          m4, [ysrcq+ystrideq*1]
+    vbroadcasti128         m15, [ysrcq+ystride3q ]
+    vinserti128             m3, [ysrcq+ystrideq*2], 1
+    vbroadcasti128         m11, [base+w8Llshuf]
+    pcmpeqw                 m7, m7
+    psrlw                   m7, 8
+    vpblendd                m6, m4, 0xf0    ; t
+    vpblendd                m4, m15, 0xf0   ; b
+    F2 1
+ DECLARE_REG_TMP 0, 14, 13, 8, 7
 .blk.f2.w16.prep:
     lea                     t3, [.blk.f2.w16.start]
     xor                    t4d, t4d

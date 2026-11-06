@@ -223,12 +223,27 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                 w, padding, rng0 ? "uv" : "u_or_v",
                                 cfl_ds_flt_names[layout - 1][flt_type], BITDEPTH))
                             {
-                                const int h0 = padding && w < 16 ? 16 : 4;
+                                const int h0 = padding && w == 4 ? 8 : 4;
                                 for (int h = h0; h <= 64; h <<= 1) {
                                     int wpad = 0, hpad = 0;
+                                    // For non subsampled blocks of at least 32px,
+                                    // padding can only be a multiple of 8.
+                                    const int wpad_mul = !ss_hor && w >= 32;
+                                    const int hpad_mul = !ss_ver && h >= 32;
+                                    // Padding stops at 56 luma as the block must be split
+                                    // if its luma part is 128 but half or less of it is visible.
+                                    // For smaller luma sizes, chroma is not split in inter intra regions,
+                                    // so there, as little as only 8 luma pixels can be visible.
+                                    // Exception: for non subsampled 8px blocks, 4px can be invisible.
+                                    const int min_wpad = (w > 4) << wpad_mul;
+                                    const int min_hpad = (h > 4) << hpad_mul;
+                                    const int max_wpad = w / (4 << ((w << ss_hor) == 128)) - (1 << (!ss_hor && w > 8));
+                                    const int max_hpad = h / (4 << ((h << ss_ver) == 128)) - (1 << (!ss_ver && h > 8));
                                     if (padding) {
-                                        wpad = imax(w > 8, rnd() & imax(w / 8 - 1, 0));
-                                        hpad = imax(h > 8, rnd() & imax(h / 8 - 1, 0));
+                                        wpad = rnd() & (w / 4 - (1 << wpad_mul));
+                                        hpad = rnd() & (h / 4 - (1 << hpad_mul));
+                                        wpad = iclip(wpad, min_wpad, max_wpad);
+                                        hpad = iclip(hpad, min_hpad, max_hpad);
                                     }
 
                                     int flags = flt_type | itse |
@@ -277,8 +292,8 @@ static void check_cfl_pred(Dav2dIntraPredDSPContext *const c) {
                                                                 a_v, strides[1], w, h, "v_dst");
 
                                     if (padding) {
-                                        wpad = imax(w / 8 - 1, 0);
-                                        hpad = imax(h / 8 - 1, 0);
+                                        wpad = max_wpad;
+                                        hpad = max_hpad;
                                     }
                                     // re-init luma buffers to prevent 0 alphas
                                     if (type == CFL_IMPLICIT) {
