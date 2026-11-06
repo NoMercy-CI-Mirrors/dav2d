@@ -252,9 +252,9 @@ function setup_thr_cols_sb64_seg_8bpc_neon, export=1
         // If width > 8, immediately branch to the w16 loads, without changing the
         // NZCV flags. This ensures that we only branch on height <= 8 iff the width
         // is also <= 8.
-        b.gt            L(transpose.w16)
+        b.gt            L(transpose_w16)
         cmp             w7,  #8
-L(transpose.w8):
+L(transpose_w8):
         // Load all of segmap into registers v16-v31.
         ldr             d18, [x1, x2]
         ld1             {v16.8b}, [x1], x12
@@ -264,7 +264,7 @@ L(transpose.w8):
         ld1             {v20.8b}, [x1], x12
         ldr             d23, [x9, x2]
         ld1             {v21.8b}, [x9], x12
-        b.le            L(transpose.8)                      // height <= 8
+        b.le            L(transpose_8)                      // height <= 8
 
         ldr             d26, [x1, x2]
         ld1             {v24.8b}, [x1], x12
@@ -274,9 +274,9 @@ L(transpose.w8):
         ld1             {v28.8b}, [x1]
         ldr             d31, [x9, x2]
         ld1             {v29.8b}, [x9]
-        b               L(transpose.8)
+        b               L(transpose_8)
 
-L(transpose.w16):
+L(transpose_w16):
         // Load all of segmap into registers v16-v31.
         ldr             q18, [x1, x2]
         ld1             {v16.16b}, [x1], x12
@@ -306,16 +306,16 @@ L(transpose.w16):
         //            ...
         //  [ op0 op1 ... op6  op7  ],
         //  [ op8 op9 ... op14 op15 ]]
-L(transpose.8):
+L(transpose_8):
         zip1            v0.16b,  v16.16b, v17.16b
         zip1            v2.16b,  v18.16b, v19.16b
         zip1            v4.16b,  v20.16b, v21.16b
         zip1            v6.16b,  v22.16b, v23.16b
         // Skip to the next stage if height <= 8 (and width <= 8), as we've already
         // zipped the eight rows together into the four full-width vector registers.
-        b.le            L(transpose.16)
+        b.le            L(transpose_16)
         // Skip zip2 instructions if width <= 8.
-        tbnz            w13, #0,  L(transpose.8.w8)
+        tbnz            w13, #0,  L(transpose_8_w8)
 
         zip2            v1.16b,  v16.16b, v17.16b
         zip2            v3.16b,  v18.16b, v19.16b
@@ -325,7 +325,7 @@ L(transpose.8):
         zip2            v19.16b, v26.16b, v27.16b
         zip2            v21.16b, v28.16b, v29.16b
         zip2            v23.16b, v30.16b, v31.16b
-L(transpose.8.w8):
+L(transpose_8_w8):
         zip1            v16.16b, v24.16b, v25.16b
         zip1            v18.16b, v26.16b, v27.16b
         zip1            v20.16b, v28.16b, v29.16b
@@ -339,15 +339,15 @@ L(transpose.8.w8):
         //  [ efgh0 ... ],
         //      ...
         //  [ mnop12 mnop13 mnop14 mnop15 ]]
-L(transpose.16):
+L(transpose_16):
         zip1            v24.8h,  v0.8h,   v2.8h
         zip2            v25.8h,  v0.8h,   v2.8h
         zip1            v28.8h,  v4.8h,   v6.8h
         zip2            v29.8h,  v4.8h,   v6.8h
         // Skip to the next stage if height <= 8.
-        b.le            L(transpose.32)
+        b.le            L(transpose_32)
         // Skip top-half handling if width <= 8.
-        tbnz            w13, #0,  L(transpose.16.w8)
+        tbnz            w13, #0,  L(transpose_16_w8)
 
         zip1            v26.8h,  v1.8h,   v3.8h
         zip2            v27.8h,  v1.8h,   v3.8h
@@ -357,7 +357,7 @@ L(transpose.16):
         zip2            v3.8h,   v17.8h,  v19.8h
         zip1            v6.8h,   v21.8h,  v23.8h
         zip2            v7.8h,   v21.8h,  v23.8h
-L(transpose.16.w8):
+L(transpose_16_w8):
         zip2            v1.8h,   v16.8h,  v18.8h
         zip1            v0.8h,   v16.8h,  v18.8h
         zip2            v5.8h,   v20.8h,  v22.8h
@@ -373,11 +373,11 @@ L(transpose.16.w8):
         //  [ abcdefgh12 abcdefgh13 ],
         //  [ abcdefgh14 abcdefgh15 ],
         //   ... and likewise for ijklmnop ...]
-L(transpose.32):
+L(transpose_32):
         // Skip to unconditional top rows if height <= 8.
-        b.le            L(transpose.32.top)
+        b.le            L(transpose_32_top)
         // Skip top-half handling if width <= 8.
-        tbnz            w13, #0,  L(transpose.32.w8)
+        tbnz            w13, #0,  L(transpose_32_w8)
 
         zip1            v16.4s,  v26.4s,  v30.4s
         zip2            v18.4s,  v26.4s,  v30.4s
@@ -387,20 +387,20 @@ L(transpose.32):
         zip2            v19.4s,  v2.4s,   v6.4s
         zip1            v21.4s,  v3.4s,   v7.4s
         zip2            v23.4s,  v3.4s,   v7.4s
-L(transpose.32.w8):
+L(transpose_32_w8):
         zip2            v7.4s,   v1.4s,   v5.4s
         zip1            v5.4s,   v1.4s,   v5.4s
         zip2            v3.4s,   v0.4s,   v4.4s
         zip1            v1.4s,   v0.4s,   v4.4s
-L(transpose.32.top):
+L(transpose_32_top):
         zip2            v2.4s,   v24.4s,  v28.4s
         zip1            v0.4s,   v24.4s,  v28.4s
         zip2            v6.4s,   v25.4s,  v29.4s
         zip1            v4.4s,   v25.4s,  v29.4s
         // Store the 8 rows directly if height <= 8 and width <= 8.
-        b.le            L(transpose.64.h8)
+        b.le            L(transpose_64_h8)
         // Width <= 8, so only perform half of the stores.
-        tbnz            w13, #0,  L(transpose.64)
+        tbnz            w13, #0,  L(transpose_64)
 
         // 64-bit interleave top and bottom halves whilst storing.
         mov             x1,  sp
@@ -416,7 +416,7 @@ L(transpose.32.top):
         mov             x2,  #16
         b               L(main)
 
-L(transpose.64):
+L(transpose_64):
         // 64-bit interleave top and bottom halves whilst storing.
         mov             x1,  sp
         add             x8,  sp,  #64
@@ -427,7 +427,7 @@ L(transpose.64):
         mov             x2,  #16
         b               L(main)
 
-L(transpose.64.h8):
+L(transpose_64_h8):
         stp             q0,  q2, [sp]
         stp             q4,  q6, [sp, #32]
         mov             x2,  #8
