@@ -30,6 +30,8 @@
 
 decl_setup_thr_sb_seg_fn(BF(dav2d_setup_thr_cols_sb64_seg, neon));
 decl_setup_thr_sb_seg_fn(BF(dav2d_setup_thr_rows_sb64_seg, neon));
+decl_setup_thr_sb_dq_fn(BF(dav2d_setup_thr_cols_sb64_dq, neon));
+decl_setup_thr_sb_dq_fn(BF(dav2d_setup_thr_rows_sb64_dq, neon));
 
 static ALWAYS_INLINE void deblock_dsp_init_arm(
     Dav2dDeblockDSPContext *const c)
@@ -41,5 +43,7 @@ static ALWAYS_INLINE void deblock_dsp_init_arm(
 #if ARCH_AARCH64 && BITDEPTH == 8
     c->setup_thr_sb_seg[0] = BF(dav2d_setup_thr_cols_sb64_seg, neon);
     c->setup_thr_sb_seg[1] = BF(dav2d_setup_thr_rows_sb64_seg, neon);
+    c->setup_thr_sb_dq[0] = BF(dav2d_setup_thr_cols_sb64_dq, neon);
+    c->setup_thr_sb_dq[1] = BF(dav2d_setup_thr_rows_sb64_dq, neon);
 #endif
 }

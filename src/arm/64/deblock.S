@@ -436,3 +436,148 @@ L(main):
         add             sp,  sp,  #256
         ret             x15
 endfunc
+
+// void dav2d_setup_thr_rows_sb64_dq_8bpc_neon(
+//     pixel (*thr_dst)[16 * 16], const uint16_t (*const mask)[5][4],
+//     const pixel thr_lut[2][16], const int h4, const int w4,
+//     /*const*/ pixel above_thr_lut[2][16])
+function setup_thr_rows_sb64_dq_8bpc_neon, export=1
+        ldrb            w9,  [x2]                           // cur_q_thr
+        ldrb            w10, [x2, #16]                      // cur_side_thr
+
+        movrel          x7,  X(deblock_comparisons)
+        add             x1,  x1,  #32
+        // -3: the conditional shift to apply using ushl.
+        movi            v2.16b,  #253
+        ldp             q4,  q5,  [x7]
+
+        ldrb            w11, [x5]                           // prev_q_thr
+        ldrb            w12, [x5, #16]                      // prev_side_thr
+
+        ldr             h24, [x1], #40                      // Load mask.
+        // a_edge_q_thr and a_edge_side_thr
+        // Unconditionally compute `prev | cur`, and reuse the result when
+        // both q and side thresholds are non-zero to compute the average
+        // (orr + eor + sub implements `(cur + prev + 1) / 2`).
+        orr             w6,  w11, w9
+        orr             w7,  w12, w10
+        cbz             w9,  1f
+        cbz             w11, 1f
+
+        // Average prev_q_thr and cur_q_thr.
+        eor             w11, w11, w9
+        sub             w6,  w6,  w11, lsr #1
+1:
+        cbz             w10, 1f
+        cbz             w12, 1f
+
+        // Average prev_side_thr and cur_side_thr.
+        eor             w12, w12, w10
+        sub             w7,  w7,  w12, lsr #1
+1:
+        tbl             v24.16b, {v24.16b}, v5.16b          // shift_cmp
+
+        dup             v16.16b, w6
+        dup             v20.16b, w7
+
+        cmtst           v24.16b, v24.16b, v4.16b
+
+        // Compute the shifted thresholds into a different register unconditionally,
+        // to reuse these calculations in the loop by selecting which vector to
+        // take values from based on the mask.
+        lsr             w6,  w9,  #3                        // cur_q_thr_shft
+        lsr             w7,  w10, #3                        // cur_side_thr_shft
+
+        // However, for the first row, it's better to conditionally shift the values
+        // instead using `ushl` (saving two `bit` instructions).
+        and             v24.16b, v2.16b,  v24.16b
+
+        sub             w3,  w3,  #1
+        // If the side threshold is zero, zero out the q threshold.
+        cmp             w7,  #0
+        csel            w6,  wzr, w6,  eq
+        cmp             w10, #0
+        // Keep w9 unchanged so we can store it later in the cols variant.
+        csel            w14, wzr, w9,  eq
+
+        ushl            v20.16b, v20.16b, v24.16b           // a_edge_side_thr
+        ushl            v16.16b, v16.16b, v24.16b           // a_edge_q_thr
+
+        // Zero out corresponding q thresholds when the side thresholds are
+        // zero, using cmgt + and.
+        cmgt            v3.16b,  v20.16b, #0
+
+        cmp             w3,  #1
+
+        and             v16.16b, v16.16b, v3.16b
+
+        dup             v6.16b,  w14
+        dup             v7.16b,  w10
+        dup             v21.16b, w6
+        dup             v22.16b, w7
+
+        str             q20, [x0, #256]
+        str             q16, [x0], #DST_STRIDE
+        b.lt            3f
+        b.eq            2f
+        // Fallthrough when more than two rows are left.
+1:
+        // Two rows interleaved.
+        // Load masks.
+        ldr             h26, [x1, #40]
+        ldr             h24, [x1], #80
+
+        sub             w3,  w3,  #2
+
+        // Select whether the shifted or unshifted thresholds should be used
+        // based on tbl + cmtst.
+        tbl             v26.16b, {v26.16b}, v5.16b
+        tbl             v24.16b, {v24.16b}, v5.16b
+
+        cmp             w3,  #1
+
+        cmtst           v26.16b, v26.16b, v4.16b
+        cmtst           v24.16b, v24.16b, v4.16b
+
+        mov             v27.16b, v26.16b
+        mov             v25.16b, v24.16b
+
+        bsl             v26.16b, v21.16b, v6.16b
+        bsl             v24.16b, v21.16b, v6.16b
+        bsl             v27.16b, v22.16b, v7.16b
+        bsl             v25.16b, v22.16b, v7.16b
+
+        str             q27, [x0, #(DST_STRIDE + 256)]
+        str             q26, [x0, #DST_STRIDE]
+        str             q25, [x0, #256]
+        str             q24, [x0], #(2 * DST_STRIDE)
+        b.gt            1b
+        b.lt            3f
+        // Fallthrough for single row.
+2:
+        ldr             h24, [x1]
+        tbl             v24.16b, {v24.16b}, v5.16b
+        cmtst           v24.16b, v24.16b, v4.16b
+        mov             v25.16b, v24.16b
+
+        bsl             v24.16b, v21.16b, v6.16b
+        bsl             v25.16b, v22.16b, v7.16b
+
+        str             q25, [x0, #256]
+        str             q24, [x0]
+3:
+        ret
+endfunc
+
+// void dav2d_setup_thr_cols_sb64_dq_8bpc_neon(pixel (*thr_dst)[16 * 16],
+//                                             const uint16_t (*const mask)[5][4],
+//                                             const pixel thr_lut[2][16],
+//                                             const int w4, const int h4,
+//                                             pixel (*left_thr)[16])
+function setup_thr_cols_sb64_dq_8bpc_neon, export=1
+        mov             x15, x30
+        bl              setup_thr_rows_sb64_dq_8bpc_neon
+        strb            w9,  [x5]
+        strb            w10, [x5, #16]
+        ret             x15
+endfunc
