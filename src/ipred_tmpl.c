@@ -1127,13 +1127,13 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
     case CFL_FLT_TYPE_##type: \
         dst[idx] = FILTER_##type(src, __VA_ARGS__); \
         break
-#define FILTER_TYPES(type0, type1, type2, ...) \
+#define FILTER_TYPES(type0, type1, type2, dst, idx, src, ...) \
     switch (filter_type) { \
-        FILTER_TYPE(type0, __VA_ARGS__); \
-        FILTER_TYPE(type1, __VA_ARGS__); \
-        FILTER_TYPE(type2, __VA_ARGS__); \
+        FILTER_TYPE(type0, dst, idx, src, __VA_ARGS__); \
+        FILTER_TYPE(type1, dst, idx, src, __VA_ARGS__); \
+        FILTER_TYPE(type2, dst, idx, src, __VA_ARGS__); \
     }
-#define FILTER(...) FILTER_TYPES(UNIFORM, VSTRIP, GAUSS, __VA_ARGS__)
+#define FILTER(dst, idx, src, top) FILTER_TYPES(UNIFORM, VSTRIP, GAUSS, dst, idx, src, top)
 
     // tl+t+tr
     if (has_t) {
@@ -1206,7 +1206,7 @@ cfl_mh_gen_y_422_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
 #define FILTER_UNIFORM(src, ...) (src[c] + src[r]) >> 1
 #define FILTER_VSTRIP(src, ...) (src[l] + 2 * src[c] + src[r]) >> 2
 #define FILTER_CENTER(src, ...) (src[c])
-#define FILTER(...) FILTER_TYPES(UNIFORM, VSTRIP, CENTER, __VA_ARGS__)
+#define FILTER(dst, idx, src) FILTER_TYPES(UNIFORM, VSTRIP, CENTER, dst, idx, src)
 
     // tl+t+tr
     if (has_t) {
