@@ -410,6 +410,37 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
             }
         }
     }
+    // For chroma, we crop 16 long tx edges that overhang by 12 pixels.
+    if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400 && (y64 + 1) * 16 >= f->bh) {
+        const int uv_crop_y4 = (starty4 >> ss_ver) + uv_h4 - 1;
+        for (int x256 = 0; x256 < f->sb256w; x256++) {
+            uint16_t (*const uv_vmask)[4] = lflvl[x256].filter_uv[1][uv_crop_y4];
+            for (int i = 0; i < 4; i++) {
+                unsigned mask = uv_vmask[2][i];
+                uv_vmask[2][i] = 0;
+                uv_vmask[1][i] |= mask;
+            }
+        }
+    }
+
+    // Crop deblock size on the right of the frame, as above
+    {
+        const int luma_crop_x4 = f->bw - 2;
+        uint16_t (*const y_hmask)[4] =
+            lflvl[luma_crop_x4 >> 6].filter_y[0][luma_crop_x4 & 63];
+        unsigned mask = y_hmask[3][y64 & 3];
+        y_hmask[3][y64 & 3] = 0;
+        y_hmask[2][y64 & 3] |= mask;
+
+        if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
+            const int uv_crop_x4 = (f->bw >> ss_hor) - 1;
+            uint16_t (*const uv_hmask)[4] =
+                lflvl[uv_crop_x4 >> (6 - ss_hor)].filter_uv[0][uv_crop_x4 & (63 >> ss_hor)];
+            mask = uv_hmask[2][y64 & 3];
+            uv_hmask[2][y64 & 3] = 0;
+            uv_hmask[1][y64 & 3] |= mask;
+        }
+    }
 
     const int any_ll = f->frame_hdr->any_lossless;
     const int seg = f->frame_hdr->segmentation.enabled;
