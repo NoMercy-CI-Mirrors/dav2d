@@ -2653,30 +2653,30 @@ cglobal prep_6tap_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     jg .v_w8_loop0
     RET
 .hv:
-    WIN64_SPILL_XMM      13, 15
+    WIN64_SPILL_XMM      13, 16 ; same as prep_8tap_sharp, see .hv_w4x4
     vpbroadcastd         m7, [prep_8tap_2d_rnd]
     vbroadcasti128       m8, [subpel_h_shufA]
     cmp                  wd, 4
     jg .hv_w8
     movzx               mxd, mxb
     vpbroadcastd         m0, [base+subpel_filters+mxq*8+2]
-    movzx               mxd, myb
-    shr                 myd, 16
-    cmp                  hd, 4
-    cmove               myd, mxd
-    vpbroadcastq         m1, [base+subpel_filters+1+myq*8]
-    mov                  r6, ssq
+    vbroadcasti128       m9, [base+subpel_h_shufB]
     sub                srcq, 2
     pxor                 m6, m6
-    neg                  r6
     punpcklbw            m6, m0
-    punpcklbw            m1, m1
     psraw                m6, 4
-    psraw                m1, 8
     test          dword r8m, 0x800
     jz .hv_w4_10bit
     psraw                m6, 2
 .hv_w4_10bit:
+    cmp                  hd, 4
+    je .hv_w4x4
+    shr                 myd, 16
+    vpbroadcastq         m1, [base+subpel_filters+1+myq*8]
+    mov                  r6, ssq
+    neg                  r6
+    punpcklbw            m1, m1
+    psraw                m1, 8
     pshufd              m10, m1, q0000
     pshufd              m11, m1, q1111
     pshufd              m12, m1, q2222
@@ -2684,7 +2684,6 @@ cglobal prep_6tap_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     movu                xm2, [srcq+r6 *2]
     vinserti128          m2, [srcq+r6 *1], 1 ; 0 1
     pshufd               m5, m6, q0000
-    vbroadcasti128       m9, [base+subpel_h_shufB]
     movu                xm0, [srcq+ssq*0]
     pshufd               m6, m6, q1111
     vinserti128          m0, [srcq+ssq*1], 1 ; 2 3
@@ -2744,6 +2743,77 @@ cglobal prep_6tap_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     lea                dstq, [dstq+dsq*4]
     sub                  hd, 2
     jg .hv_w4_loop
+    RET
+.hv_w4x4:
+    ; both filters are 4-tap, so only 7 rows are used. prep_8tap_sharp jumps
+    ; here too, with the same registers and xmm spill area.
+    movzx               myd, myb
+    vpbroadcastd         m1, [base+subpel_filters+2+myq*8]
+    lea                  r6, [ssq*3]
+    sub                srcq, ssq
+    pshufd               m5, m6, q0000
+    pshufd               m6, m6, q1111
+    movu                xm0, [srcq+ssq*0]
+    vinserti128          m0, [srcq+ssq*1], 1 ; 0 1
+    movu                xm2, [srcq+ssq*2]
+    vinserti128          m2, [srcq+r6   ], 1 ; 2 3
+    lea                srcq, [srcq+ssq*4]
+    movu                xm3, [srcq+ssq*0]
+    vinserti128          m3, [srcq+ssq*1], 1 ; 4 5
+    movu                xm4, [srcq+ssq*2]    ; 6
+    punpcklbw            m1, m1
+    psraw                m1, 8
+    pshufd              m10, m1, q0000
+    pshufd              m11, m1, q1111
+    pshufb               m1, m0, m8
+    pmaddwd              m1, m5
+    pshufb               m0, m9
+    pmaddwd              m0, m6
+    pshufb              m12, m2, m8
+    pmaddwd             m12, m5
+    pshufb               m2, m9
+    pmaddwd              m2, m6
+    paddd                m0, m1
+    pshufb               m1, m3, m8
+    pmaddwd              m1, m5
+    pshufb               m3, m9
+    pmaddwd              m3, m6
+    paddd                m2, m12
+    pshufb             xm12, xm4, xm8
+    pmaddwd            xm12, xm5
+    pshufb              xm4, xm9
+    pmaddwd             xm4, xm6
+    paddd                m3, m1
+    paddd               xm4, xm12
+    REPX      {paddd x, m7}, m0, m2, m3
+    paddd               xm4, xm7
+    REPX       {psrad x, 6}, m0, m2, m3, xm4
+    packssdw            xm1, xm2, xm3 ; 2 4
+    packssdw             m0, m2       ; 0 2   1 3
+    packssdw             m3, m3       ; 4 4   5 5
+    packssdw            xm4, xm4      ; 6 6
+    vperm2i128           m1, m0, 0x03 ; 1 3   2 4
+    vperm2i128           m4, m3, 0x03 ; 5 5   6 6
+    punpcklwd            m2, m0, m1   ; 01 12
+    punpckhwd            m0, m1       ; 23 34
+    punpcklwd            m3, m4       ; 45 56
+    pmaddwd              m1, m2, m10  ; a0 b0
+    pmaddwd              m4, m0, m11  ; a1 b1
+    pmaddwd              m0, m10      ; c0 d0
+    pmaddwd              m3, m11      ; c1 d1
+    paddd                m1, m7
+    paddd                m0, m7
+    paddd                m1, m4
+    paddd                m0, m3
+    psrad                m1, 6
+    psrad                m0, 6
+    packssdw             m1, m0       ; a c   b d
+    vextracti128        xm0, m1, 1
+    lea                  r6, [dsq*3]
+    movq       [dstq+dsq*0], xm1
+    movq       [dstq+dsq*2], xm0
+    movhps     [dstq+dsq*4], xm1
+    movhps     [dstq+r6 *2], xm0
     RET
 .hv_w8:
     shr                 mxd, 16
@@ -3096,37 +3166,36 @@ cglobal prep_8tap_sharp_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     RET
 .hv:
     WIN64_SPILL_XMM      16
-    vpbroadcastd        m15, [prep_8tap_2d_rnd]
     cmp                  wd, 4
     jg .hv_w8
+    vpbroadcastd         m7, [prep_8tap_2d_rnd]
+    vbroadcasti128       m8, [subpel_h_shufA]
     movzx               mxd, mxb
     vpbroadcastd         m0, [base+subpel_filters+mxq*8+2]
-    movzx               mxd, myb
-    shr                 myd, 16
-    cmp                  hd, 4
-    cmove               myd, mxd
-    vpbroadcastq         m1, [base+subpel_filters+myq*8]
-    lea                  r6, [ssq*3]
+    vbroadcasti128       m9, [subpel_h_shufB]
     sub                srcq, 2
-    pxor                 m7, m7
-    sub                srcq, r6
-    punpcklbw            m7, m0
-    punpcklbw            m1, m1
-    psraw                m7, 4
-    psraw                m1, 8
+    pxor                 m6, m6
+    punpcklbw            m6, m0
+    psraw                m6, 4
     test          dword r8m, 0x800
     jz .hv_w4_10bit
-    psraw                m7, 2
+    psraw                m6, 2
 .hv_w4_10bit:
+    cmp                  hd, 4
+    je mangle(private_prefix %+ _prep_6tap_16bpc_avx2).hv_w4x4
+    shr                 myd, 16
+    vpbroadcastq         m1, [base+subpel_filters+myq*8]
+    lea                  r6, [ssq*3]
+    sub                srcq, r6
+    punpcklbw            m1, m1
+    psraw                m1, 8
     pshufd              m11, m1, q0000
     pshufd              m12, m1, q1111
     pshufd              m13, m1, q2222
     pshufd              m14, m1, q3333
 .hv_w4:
-    vbroadcasti128       m9, [subpel_h_shufA]
-    vbroadcasti128      m10, [subpel_h_shufB]
-    pshufd               m8, m7, q1111
-    pshufd               m7, m7, q0000
+    pshufd              m10, m6, q1111
+    pshufd               m6, m6, q0000
     movu                xm1, [srcq+ssq*0]
     vinserti128          m1, [srcq+ssq*1], 1     ; 0 1
     vbroadcasti128       m0, [srcq+r6   ]
@@ -3136,29 +3205,29 @@ cglobal prep_8tap_sharp_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     movu                xm3, [srcq+ssq*1]
     vinserti128          m3, [srcq+ssq*2], 1     ; 5 6
     add                srcq, r6
-    pshufb               m4, m1, m9
-    pshufb               m1, m10
-    pmaddwd              m4, m7
-    pmaddwd              m1, m8
-    pshufb               m5, m2, m9
-    pshufb               m2, m10
-    pmaddwd              m5, m7
-    pmaddwd              m2, m8
-    paddd                m4, m15
+    pshufb               m4, m1, m8
+    pshufb               m1, m9
+    pmaddwd              m4, m6
+    pmaddwd              m1, m10
+    pshufb               m5, m2, m8
+    pshufb               m2, m9
+    pmaddwd              m5, m6
+    pmaddwd              m2, m10
+    paddd                m4, m7
     paddd                m1, m4
-    pshufb               m4, m0, m9
-    pshufb               m0, m10
-    pmaddwd              m4, m7
-    pmaddwd              m0, m8
-    paddd                m5, m15
+    pshufb               m4, m0, m8
+    pshufb               m0, m9
+    pmaddwd              m4, m6
+    pmaddwd              m0, m10
+    paddd                m5, m7
     paddd                m2, m5
-    pshufb               m5, m3, m9
-    pshufb               m3, m10
-    pmaddwd              m5, m7
-    pmaddwd              m3, m8
-    paddd                m4, m15
+    pshufb               m5, m3, m8
+    pshufb               m3, m9
+    pmaddwd              m5, m6
+    pmaddwd              m3, m10
+    paddd                m4, m7
     paddd                m4, m0
-    paddd                m5, m15
+    paddd                m5, m7
     paddd                m5, m3
     vperm2i128           m0, m1, m2, 0x21
     psrld                m1, 6
@@ -3179,16 +3248,16 @@ cglobal prep_8tap_sharp_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     pmaddwd              m5, m11, m1   ; a0 b0
     mova                 m1, m2
     pmaddwd              m2, m12       ; a1 b1
-    paddd                m5, m15
+    paddd                m5, m7
     paddd                m5, m2
     mova                 m2, m3
     pmaddwd              m3, m13       ; a2 b2
     paddd                m5, m3
-    pshufb               m3, m4, m9
-    pshufb               m4, m10
-    pmaddwd              m3, m7
-    pmaddwd              m4, m8
-    paddd                m3, m15
+    pshufb               m3, m4, m8
+    pshufb               m4, m9
+    pmaddwd              m3, m6
+    pmaddwd              m4, m10
+    paddd                m3, m7
     paddd                m4, m3
     psrad                m4, 6
     packssdw             m0, m4        ; _ 7 6 8
@@ -3207,6 +3276,7 @@ cglobal prep_8tap_sharp_16bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     jg .hv_w4_loop
     RET
 .hv_w8:
+    vpbroadcastd        m15, [prep_8tap_2d_rnd]
     shr                 mxd, 16
     vpbroadcastq         m2, [base+subpel_filters+mxq*8]
     movzx               mxd, myb
