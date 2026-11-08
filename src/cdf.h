@@ -81,8 +81,8 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t intrabc_precision[2], 4);
     ALIGN(uint16_t morph_pred[3][2], 4);
     ALIGN(uint16_t txsz_lossless[4][2][2], 4);
-    ALIGN(uint16_t tx_split[2][2][9][2], 4);
-    ALIGN(uint16_t tx_part_1d[2][2][2][2], 4);
+    ALIGN(uint16_t tx_split[3][9][2], 4);
+    ALIGN(uint16_t tx_part_1d[3][2][2], 4);
     ALIGN(uint16_t txtp_lossless[2], 4);
     ALIGN(uint16_t txtp_long32_dct[2][2], 4);
     ALIGN(uint16_t txtp_intra_short_1d[4][4], 8);
@@ -186,7 +186,7 @@ typedef struct CdfCoefContext {
 } CdfCoefContext;
 
 typedef struct CdfTxPart2dContext {
-    ALIGN(uint16_t tx_part_2d[2][2][14][7+1], 16);
+    ALIGN(uint16_t tx_part_2d[3][14][7+1], 16);
 } CdfTxPart2dContext;
 
 typedef struct CdfMvContext {

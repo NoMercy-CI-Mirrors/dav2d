@@ -1449,6 +1449,7 @@ static int read_tx_part(Dav2dTaskContext *const t,
             bs != BS_4x4 && imax(bw4, bh4) <= 16)
         {
             const int inter = !b->intra || b->intrabc;
+            assert(!(b->fsc && inter));
             static const uint8_t size_to_tx_part_group_lookup[] = {
                 [BS_64x64] = 7,
                 [BS_64x32] = 6,
@@ -1478,7 +1479,7 @@ static int read_tx_part(Dav2dTaskContext *const t,
             };
             const int szctx = size_to_tx_part_group_lookup[bs];
             int is_split = dav2d_msac_decode_bool_adapt(&ts->msac,
-                               ts->cdf.m.tx_split[b->fsc][inter][szctx]);
+                               ts->cdf.m.tx_split[inter + 2 * b->fsc][szctx]);
             if (is_split) {
                 if (imin(bw4, bh4) >= 2) {
                     static const uint8_t size_to_tx_type_group_vh_lookup[] = {
@@ -1502,12 +1503,12 @@ static int read_tx_part(Dav2dTaskContext *const t,
                     const int ctx = size_to_tx_type_group_vh_lookup[bs];
                     b->tx_part = 1 +
                         dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                            ts->cdf.tx2d.tx_part_2d[b->fsc][inter][ctx], 6);
+                            ts->cdf.tx2d.tx_part_2d[inter + 2 * b->fsc][ctx], 6);
                 } else if (imax(bw4, bh4) >= 4) {
                     const int ctx = bw4 >= 4;
                     const int tx_part_4way = f->seq_hdr->reduced_tx_part_set ? 0 :
                         dav2d_msac_decode_bool_adapt(&ts->msac,
-                            ts->cdf.m.tx_part_1d[b->fsc][inter][ctx]);
+                            ts->cdf.m.tx_part_1d[inter + 2 * b->fsc][ctx]);
                     b->tx_part = TX_PARTITION_H + ctx + tx_part_4way * 2;
                 } else {
                     assert(bs == BS_4x8 || bs == BS_8x4);
