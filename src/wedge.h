@@ -33,7 +33,7 @@
 typedef struct {
     /* Offsets, in units of 8 bytes, relative to the start of the struct. */
     struct {
-        uint8_t wedge[N_BS_SIZES - BS_64x64 - 6];
+        uint8_t wedge[BS_8x8 - BS_64x64 + 1];
         uint16_t ii_nondc[N_BS_SIZES - BS_64x64];
     } offsets;
     uint8_t *wedge[3];
@@ -42,7 +42,9 @@ typedef struct {
     uint8_t ALIGN(wedge_420[68 * (32 + 16 + 8 + 4) * (32 + 16 + 8 + 4)], 64);
     uint8_t ALIGN(wedge_tmvp[68 * (8 + 4 + 2 + 1) * (8 + 4 + 2 + 1)], 64);
     uint8_t ALIGN(ii_dc[64 * 64], 64);
-    uint8_t ALIGN(ii_nondc[(64 + 32 + 16 + 8 + 4) * (64 + 32 + 16 + 8 + 4) * 3], 64);
+    // all sizes from 4 to 64 in either dimension, except 64x4 and 4x64
+    uint8_t ALIGN(ii_nondc[((64 + 32 + 16 + 8 + 4) * (64 + 32 + 16 + 8 + 4) -
+                            2 * 64 * 4) * 3], 64);
 } Dav2dMasks;
 
 #define II_MASK(bs, bw4, bh4, ii_mode) \

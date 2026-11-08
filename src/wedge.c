@@ -268,7 +268,6 @@ static COLD void init_ii_masks(void) {
     fill( 4,  8, 8);
     fill( 4, 16, 4);
     fill( 4, 32, 2);
-    fill( 4, 64, 1);
     fill( 8,  4, 8);
     fill( 8,  8, 8);
     fill( 8, 16, 4);
@@ -284,7 +283,6 @@ static COLD void init_ii_masks(void) {
     fill(32, 16, 2);
     fill(32, 32, 2);
     fill(32, 64, 1);
-    fill(64,  4, 1);
     fill(64,  8, 1);
     fill(64, 16, 1);
     fill(64, 32, 1);

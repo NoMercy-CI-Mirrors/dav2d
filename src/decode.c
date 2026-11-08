@@ -1419,8 +1419,6 @@ static const uint8_t size_group_lookup[] = {
     [BS_32x4]= 1,
     [BS_8x64] = 2,
     [BS_64x8] = 2,
-    [BS_4x64] = 2,
-    [BS_64x4] = 2,
 };
 
 static int read_tx_part(Dav2dTaskContext *const t,
@@ -1455,7 +1453,6 @@ static int read_tx_part(Dav2dTaskContext *const t,
                 [BS_64x32] = 6,
                 [BS_64x16] = 8,
                 [BS_64x8] = 8,
-                [BS_64x4] = 8,
                 [BS_32x64] = 6,
                 [BS_32x32] = 5,
                 [BS_32x16] = 4,
@@ -1471,7 +1468,6 @@ static int read_tx_part(Dav2dTaskContext *const t,
                 [BS_8x16] = 2,
                 [BS_8x8] = 1,
                 [BS_8x4] = 0,
-                [BS_4x64] = 8,
                 [BS_4x32] = 8,
                 [BS_4x16] = 8,
                 [BS_4x8] = 0,
@@ -3308,7 +3304,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                  b->warp_ref_idx == 0))
             {
                 assert(imin(bw4, bh4) >= 2);
-                const int prec_ctx = bs - imax(4 - b_dim[2], 0);
+                const int prec_ctx = bs - imax(3 - b_dim[2], 0);
                 const int prec = dav2d_msac_decode_bool_adapt(&ts->msac,
                                      ts->cdf.m.warp_delta_prec[prec_ctx]);
                 const int np = f->seq_hdr->six_param_warp_delta &&
@@ -3856,24 +3852,20 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
               { BS_32x64, BS_16x64, BS_8x64, BS_32x32 } },
             { 3, 6, 2 },
         }, [BS_64x32] = {
-            { { BS_64x16, BS_64x8, BS_64x4, BS_32x16 },
+            { { BS_64x16, BS_64x8, -1, BS_32x16 },
               { BS_32x32, BS_16x32, BS_8x32, BS_32x16 } },
             { 3, 5, 2 },
         }, [BS_64x16] = {
-            { { BS_64x8, BS_64x4, -1, BS_32x8 },
+            { { BS_64x8, -1, -1, BS_32x8 },
               { BS_32x16, BS_16x16, BS_8x16, BS_32x8 } },
             { 15, 10, 6 },
         }, [BS_64x8] = {
             { { -1, -1, -1, -1 },
               { -1, -1, -1, -1 } },
             { 0, 0, -1 },
-        }, [BS_64x4] = {
-            { { -1, -1, -1, -1 },
-              { -1, -1, -1, -1 } },
-            { 0, -1, -1 },
         }, [BS_32x64] = {
             { { BS_32x32, BS_32x16, BS_32x8, BS_16x32 },
-              { BS_16x64, BS_8x64, BS_4x64, BS_16x32 } },
+              { BS_16x64, BS_8x64, -1, BS_16x32 } },
             { 3, 4, 2 },
         }, [BS_32x32] = {
             { { BS_32x16, BS_32x8, BS_32x4, BS_16x16 },
@@ -3893,7 +3885,7 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             { 0, -1, -1 },
         }, [BS_16x64] = {
             { { BS_16x32, BS_16x16, BS_16x8, BS_8x32 },
-              { BS_8x64, BS_4x64, -1, BS_8x32 } },
+              { BS_8x64, -1, -1, BS_8x32 } },
             { 14, 9, 5 },
         }, [BS_16x32] = {
             { { BS_16x16, BS_16x8, BS_16x4, BS_8x16 },
@@ -3930,10 +3922,6 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         }, [BS_8x4] = {
             { { -1, -1, -1, -1 },
               { BS_4x4, -1, -1, -1 } },
-            { 0, -1, -1 },
-        }, [BS_4x64] = {
-            { { -1, -1, -1, -1 },
-              { -1, -1, -1, -1 } },
             { 0, -1, -1 },
         }, [BS_4x32] = {
             { { -1, -1, -1, -1 },
