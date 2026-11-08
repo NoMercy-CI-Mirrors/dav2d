@@ -46,9 +46,9 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t wiener_ns_cf[4], 8);
     ALIGN(uint16_t part_split[2][64][2], 4);
     ALIGN(uint16_t part_square[8][2], 4);
-    ALIGN(uint16_t part_dir[2][64][2], 4);
-    ALIGN(uint16_t part_ext[2][64][2], 4);
-    ALIGN(uint16_t part_4way[2][64][2], 4);
+    ALIGN(uint16_t part_dir[2][44][2], 4);
+    ALIGN(uint16_t part_ext[2][28][2], 4);
+    ALIGN(uint16_t part_4way[2][28][2], 4);
     ALIGN(uint16_t region_type[4][2], 4);
     ALIGN(uint16_t intrabc[3][2], 4);
     ALIGN(uint16_t gdf[2], 4);
