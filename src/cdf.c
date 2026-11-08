@@ -892,27 +892,18 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(17451),  40 << 8 },
             { CDF1(17823),  35 << 8 },
             { CDF1(18893),   5 << 8 },
-            { CDF1(16384),   0 << 8 },
             { CDF1(17968),  25 << 8 },
             { CDF1(18210),  32 << 8 },
             { CDF1(18671),  32 << 8 },
             { CDF1(20345),  15 << 8 },
-            { CDF1(16384),   0 << 8 },
             { CDF1(19398),  25 << 8 },
             { CDF1(20146),  27 << 8 },
             { CDF1(22585),  26 << 8 },
             { CDF1(26435),  26 << 8 },
-            { CDF1(16384),   0 << 8 },
             { CDF1(20066),  25 << 8 },
             { CDF1(21783),  28 << 8 },
             { CDF1(27357),  31 << 8 },
             { CDF1(31107),  56 << 8 },
-            { CDF1(16384),   0 << 8 },
-            { CDF1(16384),   0 << 8 },
-            { CDF1(16384),   0 << 8 },
-            { CDF1(16384),   0 << 8 },
-            { CDF1(16384),   0 << 8 },
-            { CDF1(16384),   0 << 8 },
         }, .warp_delta_param = {
             {
                 { CDF7( 8995, 22970, 25406, 29673, 30295, 31670, 31863),   0 << 8 },
@@ -6308,7 +6299,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_1d(3, m, amvd_joint, op); \
     update_cdf_2d(2, 7, m, amvd_index, op); \
     update_cdf_1d(1, m, warpmv_with_mvd, op); \
-    update_cdf_2d(N_BS_SIZES, 1, m, warp_delta_prec, op); \
+    update_cdf_2d(22, 1, m, warp_delta_prec, op); \
     update_cdf_3d(2, 2, 7, m, warp_delta_param, op); \
     update_cdf_1d(1, m, warp_delta_sign, op); \
     update_cdf_2d(4, 1, m, warp_interintra, op); \

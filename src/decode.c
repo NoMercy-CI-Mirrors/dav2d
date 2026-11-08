@@ -3307,8 +3307,10 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 ((f->seq_hdr->six_param_warp_delta && b->warp_ref_idx == 1) ||
                  b->warp_ref_idx == 0))
             {
+                assert(imin(bw4, bh4) >= 2);
+                const int prec_ctx = bs - imax(4 - b_dim[2], 0);
                 const int prec = dav2d_msac_decode_bool_adapt(&ts->msac,
-                                     ts->cdf.m.warp_delta_prec[bs]);
+                                     ts->cdf.m.warp_delta_prec[prec_ctx]);
                 const int np = f->seq_hdr->six_param_warp_delta &&
                                b->warp_ref_idx == 1 ? 4 : 2;
                 const int step = 2 >> prec;
