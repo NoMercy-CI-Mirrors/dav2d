@@ -1952,15 +1952,12 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (f->frame_hdr->ccso.p[p].sb_reuse) {
                 flag = f->prev_ccsomap[p][ccso_fidx];
             } else {
-                // for left/left-bottom [if no overhang] context:
-                // ctx=0: --/--, false/--, --/false, false/false
-                // ctx=1: false/true, true/false
-                // ctx=2: true/--, --/true, true/true [same coded block]
-                // ctx=3: true/true [different coded block]
-                const int ccso_l = t->bx == ts->tiling.col_start ? 0 :
+                // left/left-bottom context: CCSO units are never smaller than
+                // the superblock, so both neighbours are in the same unit and
+                // only the true/true (1) and false/false (0) contexts exist
+                const int ctx = t->bx == ts->tiling.col_start ? 0 :
                     bx4 > 0 ? t->lf_mask->ccso[p][ccso_bidx - ccso_bs] :
                     t->lf_mask[-1].ccso[p][(ccso_bidx | 3) & ~(ccso_bs - 1)];
-                const int ctx = ccso_l * 2;
                 flag = dav2d_msac_decode_bool_adapt(&ts->msac,
                            ts->cdf.m.ccso[p][ctx]);
                 DEBUG_BLOCK_printf("%*sPost-ccso[pl=%c,ctx=%d,%d]: r=%d\n",

@@ -54,7 +54,7 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t gdf[2], 4);
     ALIGN(uint16_t cdef_idx0[4][2], 4);
     ALIGN(uint16_t cdef_idx[6][7+1], 16);
-    ALIGN(uint16_t ccso[3][4][2], 4);
+    ALIGN(uint16_t ccso[3][2][2], 4);
     ALIGN(uint16_t skip_txfm[6][2], 4);
     ALIGN(uint16_t dpcm[2][2], 4);
     ALIGN(uint16_t dpcm_dir[2][2], 4);

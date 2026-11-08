@@ -478,19 +478,13 @@ static const CdfDefaultContext default_cdf = {
         }, .ccso = {
             {
                 { CDF1(18469),  62 << 8 },
-                { CDF1(16384),   0 << 8 },
                 { CDF1( 4949),  37 << 8 },
-                { CDF1(16384),   0 << 8 },
             }, {
                 { CDF1(23470),  37 << 8 },
-                { CDF1(16384),   0 << 8 },
                 { CDF1( 6666),  37 << 8 },
-                { CDF1(16384),   0 << 8 },
             }, {
                 { CDF1(22914),  37 << 8 },
-                { CDF1(16384),   0 << 8 },
                 { CDF1( 6993),  37 << 8 },
-                { CDF1(16384),   0 << 8 },
             }
         }, .skip_txfm = {
             { CDF1(25865),  25 << 8 },
@@ -6210,7 +6204,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_1d(1, m, gdf, op); \
     update_cdf_2d(4, 1, m, cdef_idx0, op); \
     update_cdf_2d(6, 1 + j, m, cdef_idx, op); \
-    update_cdf_3d(3, 4, 1, m, ccso, op); \
+    update_cdf_3d(3, 2, 1, m, ccso, op); \
     update_cdf_2d(6, 1, m, skip_txfm, op); \
     update_cdf_2d(2, 1, m, dpcm, op); \
     update_cdf_2d(2, 1, m, dpcm_dir, op); \
