@@ -165,23 +165,23 @@ typedef struct CdfCoefContext {
     ALIGN(uint16_t eob_bin_512[3][8], 16);
     ALIGN(uint16_t eob_bin_1024[3][8], 16);
     ALIGN(uint16_t eob_hi_bit[2], 4);
-    ALIGN(uint16_t eob_base_y_tok_hf[5][4][3+1], 8);
+    ALIGN(uint16_t eob_base_y_tok_hf[5][3][3+1], 8);
     ALIGN(uint16_t base_y_tok_hf[5][20][2][4], 8);
     ALIGN(uint16_t br_y_tok_hf[7][4], 8);
     ALIGN(uint16_t eob_base_y_tok_lf[5][4][5+3], 16);
     ALIGN(uint16_t base_y_tok_lf[5][33][2][6+2], 16);
     ALIGN(uint16_t br_y_tok_lf[14][4], 8);
     ALIGN(uint16_t ph_dc_y_tok[5][3+1], 8);
-    ALIGN(uint16_t dc_sign[2][2][3][2], 4);
+    ALIGN(uint16_t dc_sign[2][3][2], 4);
     ALIGN(uint16_t bob_base_y_tok[3][3][3+1], 8);
     ALIGN(uint16_t br_y_tok_idtx[3][7][4], 8);
     ALIGN(uint16_t base_y_tok_idtx[3][7][4], 8);
     ALIGN(uint16_t sign_idtx[3][9][2], 4);
     ALIGN(uint16_t skip_v[12][2], 4);
-    ALIGN(uint16_t eob_base_uv_tok_hf[4][3+1], 8);
+    ALIGN(uint16_t eob_base_uv_tok_hf[3][3+1], 8);
     ALIGN(uint16_t base_uv_tok_hf[12][4], 8);
     ALIGN(uint16_t br_uv_tok_hf[4][4], 8);
-    ALIGN(uint16_t eob_base_uv_tok_lf[4][5+3], 16);
+    ALIGN(uint16_t eob_base_uv_tok_lf[3][5+3], 16);
     ALIGN(uint16_t base_uv_tok_lf[12][6+2], 16);
 } CdfCoefContext;
 
