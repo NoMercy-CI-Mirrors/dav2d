@@ -1324,13 +1324,15 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             if (obu_type == DAV2D_OBU_TIP || obu_type == DAV2D_OBU_LEADING_TIP) {
                 hdr->tip.frame_mode = 2; // output
                 hdr->opfl_refine_type =
-                    2 * (seqhdr->opfl_refine && seqhdr->tip_refine_mv);
+                    seqhdr->opfl_refine && seqhdr->tip_refine_mv ?
+                        DAV2D_OPFL_REFINE_ALL : DAV2D_OPFL_REFINE_NONE;
             } else {
                 hdr->tip.frame_mode = dav2d_get_bit(gb); // 1: ref, or 0: disabled
                 hdr->opfl_refine_type =
-                    seqhdr->opfl_refine < 3 /* auto */ ? seqhdr->opfl_refine :
-                    dav2d_get_bit(gb) ? 1 /* switchable */ :
-                                        2 * dav2d_get_bit(gb) /* all or none */;
+                    seqhdr->opfl_refine < DAV2D_OPFL_REFINE_AUTO ? seqhdr->opfl_refine :
+                    dav2d_get_bit(gb) ? DAV2D_OPFL_REFINE_SWITCHABLE :
+                    dav2d_get_bit(gb) ? DAV2D_OPFL_REFINE_ALL :
+                                        DAV2D_OPFL_REFINE_NONE;
             }
             if (hdr->tip.frame_mode) {
                 if (seqhdr->tip_hole_fill)
@@ -1358,9 +1360,10 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             find_tip_ref_frames(c, hdr, seqhdr);
         } else {
             hdr->opfl_refine_type =
-                seqhdr->opfl_refine < 3 /* auto */ ? seqhdr->opfl_refine :
-                dav2d_get_bit(gb) ? 1 /* switchable */ :
-                                    2 * dav2d_get_bit(gb) /* all or none */;
+                seqhdr->opfl_refine < DAV2D_OPFL_REFINE_AUTO ? seqhdr->opfl_refine :
+                dav2d_get_bit(gb) ? DAV2D_OPFL_REFINE_SWITCHABLE :
+                dav2d_get_bit(gb) ? DAV2D_OPFL_REFINE_ALL :
+                                    DAV2D_OPFL_REFINE_NONE;
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-refinemv-tip[opfl/refine:%d,tip:%d,holefill:%d,"

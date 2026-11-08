@@ -1269,7 +1269,7 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (b->inter_mode != GLOBALMV_GLOBALMV) {
                 refmvs_candidate mvstack[6];
                 int n_mvs[2];
-                const int shift = 6 * (f->frame_hdr->opfl_refine_type == 2 &&
+                const int shift = 6 * (f->frame_hdr->opfl_refine_type == DAV2D_OPFL_REFINE_ALL &&
                                        b->inter_mode >= OPFL_NEARMV_NEARMV);
                 if (b->inter_mode - shift > NEARMV_NEWMV) {
                     dav2d_refmvs_find(&t->rt, mvstack, NULL, &n_mvs[0],
@@ -2658,11 +2658,11 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 !f->svc[b->ref.ref[0]][0].scale && !f->svc[b->ref.ref[1]][0].scale)
             {
                 const int ctx = b->inter_mode > NEARMV_NEARMV;
-                if (f->frame_hdr->opfl_refine_type == 2 /* always */ ||
+                if (f->frame_hdr->opfl_refine_type == DAV2D_OPFL_REFINE_ALL ||
                     dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.opfl[ctx]))
                 {
                     b->inter_mode += 6 - (b->inter_mode >= GLOBALMV_GLOBALMV);
-                    if (f->frame_hdr->opfl_refine_type == 1 /* switchable */)
+                    if (f->frame_hdr->opfl_refine_type == DAV2D_OPFL_REFINE_SWITCHABLE)
                         coded_mode = b->inter_mode;
                 }
             }
@@ -2715,7 +2715,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             if (coded_mode == NEWMV_NEWMV && imin(bw4, bh4) > 1 &&
                 !f->frame_hdr->force_integer_mv && b->ref.ref[0] != b->ref.ref[1] &&
-                f->frame_hdr->opfl_refine_type != 2 /* always */ &&
+                f->frame_hdr->opfl_refine_type != DAV2D_OPFL_REFINE_ALL &&
                 f->frame_hdr->motion_modes & (1 << MM_WARP_CAUSAL))
             {
                 const int is_sb_boundary = !(t->by & (f->sb_step - 1));
@@ -2890,7 +2890,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 f->refdist[b->ref.ref[0]] == -f->refdist[b->ref.ref[1]] &&
                 f->refdist[b->ref.ref[0]] &&
                 !f->svc[b->ref.ref[0]][0].scale && !f->svc[b->ref.ref[1]][0].scale &&
-                (f->frame_hdr->opfl_refine_type != 1 /* switchable */ ||
+                (f->frame_hdr->opfl_refine_type != DAV2D_OPFL_REFINE_SWITCHABLE ||
                  !((1 << b->inter_mode) & ((1 << NEARMV_NEWMV) |
                                            (1 << NEWMV_NEARMV) |
                                            (1 << NEWMV_NEWMV) |
@@ -2972,7 +2972,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 b->cwp_idx = cwp_weighting_factor[!(f->refdir[b->ref.ref[0]] ^
                                                     f->refdir[b->ref.ref[1]])][n];
                 if (coded_mode != b->inter_mode && b->cwp_idx != 8) {
-                    assert(f->frame_hdr->opfl_refine_type == 2 /* always */);
+                    assert(f->frame_hdr->opfl_refine_type == DAV2D_OPFL_REFINE_ALL);
                     b->inter_mode = coded_mode;
                     b->refine_mv = 0;
                 }

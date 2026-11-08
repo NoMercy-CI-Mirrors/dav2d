@@ -110,6 +110,13 @@ enum Dav2dLevel {
     DAV2D_LEVEL_MAX = 31, ///< no level constraints
 };
 
+enum Dav2dOpflRefine {
+    DAV2D_OPFL_REFINE_NONE = 0,       ///< disabled
+    DAV2D_OPFL_REFINE_SWITCHABLE = 1, ///< switchable per block
+    DAV2D_OPFL_REFINE_ALL = 2,        ///< applied to all compound blocks
+    DAV2D_OPFL_REFINE_AUTO = 3,       ///< signaled per frame (sequence header only)
+};
+
 enum Dav2dTxfmMode {
     DAV2D_TX_4X4_ONLY,
     DAV2D_TX_LARGEST,
@@ -425,7 +432,8 @@ typedef struct Dav2dSequenceHeader {
     uint8_t mv_traj, bawp, cwp, imp_msk_bld;
     uint8_t db_sub_pu, tip_explicit_qp;
 
-    uint8_t opfl_refine, refine_mv, tip_refine_mv;
+    uint8_t /*enum Dav2dOpflRefine*/ opfl_refine;
+    uint8_t refine_mv, tip_refine_mv;
     uint8_t bru, adaptive_mvd, mvd_sign_derive, flex_mvres;
     uint8_t global_motion, short_refresh_frame_flags;
 
@@ -520,7 +528,7 @@ typedef struct Dav2dFrameHeader {
     uint8_t motion_modes;
     uint8_t use_ref_frame_mvs;
     uint8_t tmvp_sample_step;
-    uint8_t opfl_refine_type;
+    uint8_t /*enum Dav2dOpflRefine*/ opfl_refine_type;
     struct {
         uint8_t frame_mode;
         uint8_t hole_fill;
