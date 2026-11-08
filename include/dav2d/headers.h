@@ -84,6 +84,32 @@ enum Dav2dProfile {
     DAV2D_PROFILE_CONFIGURABLE    = 31,
 };
 
+enum Dav2dLevel {
+    DAV2D_LEVEL_2_0 = 0,
+    DAV2D_LEVEL_2_1 = 1,
+    DAV2D_LEVEL_3_0 = 2,
+    DAV2D_LEVEL_3_1 = 3,
+    DAV2D_LEVEL_4_0 = 4,
+    DAV2D_LEVEL_4_1 = 5,
+    DAV2D_LEVEL_5_0 = 6,
+    DAV2D_LEVEL_5_1 = 7,
+    DAV2D_LEVEL_5_2 = 8,
+    DAV2D_LEVEL_5_3 = 9,
+    DAV2D_LEVEL_6_0 = 10,
+    DAV2D_LEVEL_6_1 = 11,
+    DAV2D_LEVEL_6_2 = 12,
+    DAV2D_LEVEL_6_3 = 13,
+    DAV2D_LEVEL_7_0 = 14,
+    DAV2D_LEVEL_7_1 = 15,
+    DAV2D_LEVEL_7_2 = 16,
+    DAV2D_LEVEL_7_3 = 17,
+    DAV2D_LEVEL_8_0 = 18,
+    DAV2D_LEVEL_8_1 = 19,
+    DAV2D_LEVEL_8_2 = 20,
+    DAV2D_LEVEL_8_3 = 21,
+    DAV2D_LEVEL_MAX = 31, ///< no level constraints
+};
+
 enum Dav2dTxfmMode {
     DAV2D_TX_4X4_ONLY,
     DAV2D_TX_LARGEST,
@@ -320,7 +346,7 @@ typedef struct Dav2dSequenceHeader {
     uint8_t id;
     uint8_t /*enum Dav2dProfile*/ profile;
     uint8_t reduced_still_picture_header;
-    uint8_t level;
+    uint8_t /*enum Dav2dLevel*/ level;
     uint8_t tier;
 
     uint8_t /*enum Dav2dPixelLayout*/ layout; ///< format of the picture

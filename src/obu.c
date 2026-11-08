@@ -220,7 +220,7 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     hdr->profile = dav2d_get_bits(gb, 5);
     hdr->reduced_still_picture_header = dav2d_get_bit(gb);
     hdr->level = dav2d_get_bits(gb, 5);
-    if (hdr->level >= 4 && !hdr->reduced_still_picture_header)
+    if (hdr->level >= DAV2D_LEVEL_4_0 && !hdr->reduced_still_picture_header)
         hdr->tier = dav2d_get_bit(gb);
 #if DEBUG_SEQ_HDR
     printf("SEQHDR: post-profile_stillpic_level_tier[profile:%d,reducedhdr:%d,"
