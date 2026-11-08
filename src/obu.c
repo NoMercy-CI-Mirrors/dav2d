@@ -1322,12 +1322,13 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         hdr->tip.subpel_filter = DAV2D_FILTER_8TAP_SHARP;
         if (seqhdr->tip && hdr->n_ref_frames > 1 && hdr->use_ref_frame_mvs) {
             if (obu_type == DAV2D_OBU_TIP || obu_type == DAV2D_OBU_LEADING_TIP) {
-                hdr->tip.frame_mode = 2; // output
+                hdr->tip.frame_mode = DAV2D_TIP_FRAME_AS_OUTPUT;
                 hdr->opfl_refine_type =
                     seqhdr->opfl_refine && seqhdr->tip_refine_mv ?
                         DAV2D_OPFL_REFINE_ALL : DAV2D_OPFL_REFINE_NONE;
             } else {
-                hdr->tip.frame_mode = dav2d_get_bit(gb); // 1: ref, or 0: disabled
+                hdr->tip.frame_mode = dav2d_get_bit(gb) ? DAV2D_TIP_FRAME_AS_REF :
+                                                        DAV2D_TIP_FRAME_DISABLED;
                 hdr->opfl_refine_type =
                     seqhdr->opfl_refine < DAV2D_OPFL_REFINE_AUTO ? seqhdr->opfl_refine :
                     dav2d_get_bit(gb) ? DAV2D_OPFL_REFINE_SWITCHABLE :
@@ -1342,7 +1343,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                 {
                     hdr->tip.global_wtd_idx = dav2d_get_bits(gb, 3);
                 }
-                if (hdr->tip.frame_mode == 2) {
+                if (hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT) {
                     if (!dav2d_get_bit(gb)) {
                         hdr->tip.gmv.y = dav2d_get_bits(gb, 4);
                         hdr->tip.gmv.x = dav2d_get_bits(gb, 4);
@@ -1374,7 +1375,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
-        if (hdr->tip.frame_mode == 2) {
+        if (hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT) {
             if (seqhdr->db_sub_pu) {
                 hdr->deblock.sub_pu = dav2d_get_bit(gb);
                 if (hdr->deblock.sub_pu) {
@@ -2973,7 +2974,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
 
     if (c->seq_hdr && c->frame_hdr) {
         // FIXME handle bridge/bru also
-        const int frame_without_data = c->frame_hdr->tip.frame_mode == 2;
+        const int frame_without_data = c->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT;
         if (c->frame_hdr->show_existing_frame) {
             const int fidx = c->frame_hdr->existing_frame_idx;
             if (!c->refs[fidx].p.p.frame_hdr) goto error;

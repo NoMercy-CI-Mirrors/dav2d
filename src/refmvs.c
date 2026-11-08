@@ -209,7 +209,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
 
     const refmvs_frame *const rf = rt->rf;
     if (b->ref.ref[0] == TIP_FRAME) {
-        const int tip16 = rf->frm_hdr->tip.frame_mode == 2 ?
+        const int tip16 = rf->frm_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT ?
             !rf->seq_hdr->tip_refine_mv ||
                 rf->frm_hdr->tip.subpel_filter != DAV2D_FILTER_8TAP_SHARP :
             (!rf->seq_hdr->tip_refine_mv &&
@@ -1382,7 +1382,7 @@ void dav2d_refmvs_reset_sb(refmvs_tile *const rt, const int by, const int bx) {
     rt->warp.hits = 0;
 
     if (by == rt->tile_row.start || IS_KEY_OR_INTRA(rf->frm_hdr) ||
-        rf->frm_hdr->tip.frame_mode == 2)
+        rf->frm_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT)
     {
         return;
     }

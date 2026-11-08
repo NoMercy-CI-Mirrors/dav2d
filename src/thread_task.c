@@ -765,14 +765,14 @@ void *dav2d_worker_task(void *data) {
             assert(c->n_fc > 1);
             int res = DAV2D_ERR(EINVAL);
             if (!atomic_load(&f->task_thread.error)) {
-                if (f->frame_hdr->tip.frame_mode != 2) {
+                if (f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT) {
                     res = dav2d_decode_frame_init_cdf(f);
                 } else {
                     dav2d_decode_tip_frame_init(f);
                     res = 0;
                 }
             }
-            if (f->frame_hdr->tip.frame_mode != 2 &&
+            if (f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT &&
                 (f->frame_hdr->disable_cdf_update ||
                  (!f->task_thread.update_set && !f->seq_hdr->avg_cdf_type)))
             {

@@ -885,12 +885,12 @@ static void derive_lowest_px(Dav2dTaskContext *const t,
         const int h4 = imin(bh4, f->bh - t->cby);
         const int w4 = imin(bw4, f->bw - t->cbx);
         int opfl = f->seq_hdr->tip_refine_mv &&
-            (f->frame_hdr->tip.frame_mode == 1 ||
+            (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF ||
              f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
         const union refpair ref = f->rf.tip.ref;
-        const int refine = opfl && f->frame_hdr->tip.frame_mode == 1 &&
+        const int refine = opfl && f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF &&
                            f->refdist[ref.ref[0]] == -f->refdist[ref.ref[1]];
-        const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
+        const int step = 2 << (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT ? !opfl :
                                ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
         opfl &= !!f->seq_hdr->opfl_refine && f->frame_hdr->has_bothside_refs;
 
@@ -4657,7 +4657,8 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     t->intra_region = 0;
 
     // FIXME turn into assert by not scheduling tip frame entropy parsing tasks
-    if (f->frame_hdr->tip.frame_mode == 2 && t->task_thread.pass == PASS_ENTROPY)
+    if (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT &&
+        t->task_thread.pass == PASS_ENTROPY)
         return 0;
 
     if (IS_INTER_OR_SWITCH(f->frame_hdr) || f->frame_hdr->allow_intrabc) {
@@ -4689,8 +4690,10 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     }
 
     const int sb256y = t->by >> 6;
-    if (!(t->task_thread.pass & PASS_ENTROPY) || f->frame_hdr->tip.frame_mode == 2) {
-        if (f->frame_hdr->tip.frame_mode == 2)
+    if (!(t->task_thread.pass & PASS_ENTROPY) ||
+        f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT)
+    {
+        if (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT)
             reset_context(&t->l, IS_KEY_OR_INTRA(f->frame_hdr), 1);
         for (t->bx = ts->tiling.col_start;
              t->bx < ts->tiling.col_end; t->bx += sb_step)
@@ -4708,7 +4711,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             if (atomic_load_explicit(c->flush, memory_order_acquire))
                 return 1;
             int dir = 0;
-            if (f->frame_hdr->tip.frame_mode == 2) {
+            if (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT) {
                 tip_frame_recon_sb(t, root_bs, c_root_bs);
             } else {
                 if (decode_sb(t, DB_ONLY(1) root_bs, root_bs, &dir))
@@ -4805,7 +4808,7 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
     // error out on symbol decoder overread
     if (ts->msac.cnt <= -15) return 1;
 
-    return c->strict_std_compliance && f->frame_hdr->tip.frame_mode != 2 &&
+    return c->strict_std_compliance && f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT &&
            (t->by >> f->sb_shift) + 1 >= f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] &&
            check_trailing_bits_after_symbol_coder(&ts->msac);
 }
@@ -5173,7 +5176,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     if (c->n_tc > 1) {
         for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.t.rows; n++)
             reset_context(&f->a[n], IS_KEY_OR_INTRA(f->frame_hdr),
-                          f->frame_hdr->tip.frame_mode == 2);
+                          f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT);
     }
 
     retval = 0;
@@ -5302,7 +5305,7 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
 
     for (int n = 0; n < f->sb256w * f->frame_hdr->tiling.t.rows; n++)
         reset_context(&f->a[n], IS_KEY_OR_INTRA(f->frame_hdr),
-                      f->frame_hdr->tip.frame_mode == 2);
+                      f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT);
 
     const int sb128 = f->frame_hdr->sb128;
     for (int tile_row = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
@@ -5365,7 +5368,7 @@ void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
         dav2d_cdf_thread_unref(&f->src_cdf[0]);
         dav2d_cdf_thread_unref(&f->src_cdf[1]);
     }
-    if (f->frame_hdr && f->frame_hdr->tip.frame_mode != 2) {
+    if (f->frame_hdr && f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT) {
         if (f->out_cdf.progress)
             atomic_store(f->out_cdf.progress, retval == 0 ? 1 : TILE_ERROR);
         dav2d_cdf_thread_unref(&f->out_cdf);
@@ -5393,7 +5396,7 @@ int dav2d_decode_frame(Dav2dFrameContext *const f) {
     // threads also. Not sure it makes a measurable difference.
     int res = dav2d_decode_frame_init(f);
     if (!res) {
-        if (f->frame_hdr->tip.frame_mode != 2) {
+        if (f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT) {
             res = dav2d_decode_frame_init_cdf(f);
         } else {
             dav2d_decode_tip_frame_init(f);
@@ -5599,7 +5602,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         f->use_pri_sec_cdf = s_ref_idx != DAV2D_PRIMARY_REF_NONE &&
                              f->frame_hdr->frame_type == DAV2D_FRAME_TYPE_INTER &&
                              f->seq_hdr->avg_cdf && !f->seq_hdr->avg_cdf_type &&
-                             f->frame_hdr->tip.frame_mode != 2;
+                             f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT;
         if (!f->use_pri_sec_cdf) {
             dav2d_cdf_thread_ref(&f->in_cdf, &c->cdf[pri_ref]);
         } else {
@@ -5610,7 +5613,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             dav2d_cdf_thread_ref(&f->src_cdf[1], &c->cdf[sec_ref]);
         }
     }
-    if (f->frame_hdr->tip.frame_mode != 2) {
+    if (f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT) {
         res = dav2d_cdf_thread_alloc(c, &f->out_cdf, c->n_fc > 1);
         if (res < 0) goto error;
     }
@@ -5627,7 +5630,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
         }
         f->n_tile_data_alloc = c->n_tile_data;
     }
-    if (f->frame_hdr->tip.frame_mode == 2) {
+    if (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT) {
         assert(!c->n_tile_data);
         f->n_tile_data = -1; // any non-zero value for threading
     } else {
@@ -5862,7 +5865,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             }
             first = 0;
             dav2d_thread_picture_ref(&c->refs[i].p, &f->cur);
-            if (f->frame_hdr->tip.frame_mode != 2) {
+            if (f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT) {
                 dav2d_cdf_thread_ref(&c->cdf[i], &f->out_cdf);
             } else {
                 dav2d_cdf_thread_ref(&c->cdf[i], &f->in_cdf);
@@ -5910,7 +5913,7 @@ error:
         dav2d_cdf_thread_unref(&f->src_cdf[0]);
         dav2d_cdf_thread_unref(&f->src_cdf[1]);
     }
-    if (f->frame_hdr->tip.frame_mode != 2)
+    if (f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT)
         dav2d_cdf_thread_unref(&f->out_cdf);
     for (int i = 0; i < 7; i++) {
         if (f->refp[i].p.frame_hdr)

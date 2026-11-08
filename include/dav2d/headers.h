@@ -117,6 +117,12 @@ enum Dav2dOpflRefine {
     DAV2D_OPFL_REFINE_AUTO = 3,       ///< signaled per frame (sequence header only)
 };
 
+enum Dav2dTipFrameMode {
+    DAV2D_TIP_FRAME_DISABLED = 0,
+    DAV2D_TIP_FRAME_AS_REF = 1,    ///< TIP frame used as a reference
+    DAV2D_TIP_FRAME_AS_OUTPUT = 2, ///< TIP frame is the output (TIP OBU)
+};
+
 enum Dav2dTxfmMode {
     DAV2D_TX_4X4_ONLY,
     DAV2D_TX_LARGEST,
@@ -530,7 +536,7 @@ typedef struct Dav2dFrameHeader {
     uint8_t tmvp_sample_step;
     uint8_t /*enum Dav2dOpflRefine*/ opfl_refine_type;
     struct {
-        uint8_t frame_mode;
+        uint8_t /*enum Dav2dTipFrameMode*/ frame_mode;
         uint8_t hole_fill;
         uint8_t global_wtd_idx;
         uint8_t apply_filter;

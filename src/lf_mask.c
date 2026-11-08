@@ -247,9 +247,9 @@ static int subpu_flt_lvl(const Dav2dSequenceHeader *const seq_hdr,
         /* do nothing */
     } else if (b->ref.ref[0] == TIP_FRAME) {
         const int opfl = seq_hdr->tip_refine_mv &&
-            (frame_hdr->tip.frame_mode == 1 ||
+            (frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF ||
              frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
-        return 1 + (frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
+        return 1 + (frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT ? !opfl :
                     ((!opfl && imin(bw4, bh4) >= 4) || bs == BS_256x256));
     } else if (b->ref.ref[1] != -1) {
         if (b->inter_mode >= OPFL_NEARMV_NEARMV) {
@@ -283,7 +283,7 @@ void dav2d_create_db_mask(uint16_t (*const masks)[64][5][4],
 
     const int subpu_l2 = subpu_flt_lvl(seq_hdr, frame_hdr,
                                        bs, b_dim[0], b_dim[1], b, 3);
-    const int ds_subpu_mask = (frame_hdr->tip.frame_mode != 2) * 15;
+    const int ds_subpu_mask = (frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT) * 15;
     int twl4c, thl4c;
 
     const int lossless = frame_hdr->segmentation.lossless[b->seg_id];

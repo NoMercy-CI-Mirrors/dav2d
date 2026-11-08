@@ -2182,15 +2182,16 @@ static int tip_pred(Dav2dTaskContext *const t,
 {
     const Dav2dFrameContext *const f = t->f;
     int opfl = f->seq_hdr->tip_refine_mv &&
-        (f->frame_hdr->tip.frame_mode == 1 ||
+        (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF ||
          f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
     const int is_bidir = b->cwp_idx != 16;
     const union refpair ref = is_bidir ? f->rf.tip.ref :
         (union refpair) { .pair = f->rf.tip.ref.ref[0] * 0x101 };
-    const int refine = opfl && f->frame_hdr->tip.frame_mode == 1 &&
+    const int refine = opfl && f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF &&
                        f->seq_hdr->refine_mv &&
                        f->refdist[ref.ref[0]] == -f->refdist[ref.ref[1]];
-    const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
+    const int step = 2 << (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT ?
+                           !opfl :
                            ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
     opfl &= !!f->seq_hdr->opfl_refine && f->frame_hdr->has_bothside_refs;
     ptrdiff_t off_y = 0;
@@ -2219,7 +2220,7 @@ static int tip_pred(Dav2dTaskContext *const t,
     }
 
     union mv (*rmv_line)[2][2] = &t->rmv[((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1)];
-    const unsigned sad8x8_thr = f->frame_hdr->tip.frame_mode == 1 /* reference */ ? 6 : 15;
+    const unsigned sad8x8_thr = f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF ? 6 : 15;
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * (t_stride >> 5) +
                                              (t->bx >> 6)];
@@ -2271,7 +2272,8 @@ static int tip_pred(Dav2dTaskContext *const t,
                 } else dy = dx = 0;
                 union OpflMvDeltaBlock dd;
                 const unsigned sad = !opfl ||
-                    (b->bs == BS_256x256 && f->frame_hdr->tip.frame_mode == 1) ? 0 :
+                    (b->bs == BS_256x256 &&
+                     f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF) ? 0 :
                     f->dsp->mc.sad8x8(&p[0][(4 + dy) * PXSTRIDE(p_stride) +
                                             (4 + dx)], p_stride,
                                       &p[1][(4 - dy) * PXSTRIDE(p_stride) +
@@ -3859,9 +3861,10 @@ chroma: {}
             pixel *const dst = ((pixel *) f->cur.p.data[1 + pl]) + uvdstoff;
             if (b->ref.ref[0] == TIP_FRAME) {
                 const int opfl = f->seq_hdr->tip_refine_mv &&
-                    (f->frame_hdr->tip.frame_mode == 1 ||
+                    (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF ||
                      f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
-                const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
+                const int step = 2 << (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT ?
+                                       !opfl :
                                        ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
                 rmv_uvpred(t, dst, stride, b, pl, step, step, cbw4, cbh4);
             } else if (!f->frame_hdr->force_integer_mv &&
@@ -3895,9 +3898,10 @@ chroma: {}
         for (int pl = 0, bacp, bacpu; pl < 2; pl++, bacpu = bacp, bacp = 0) {
             if (b->ref.ref[0] == TIP_FRAME) {
                 const int opfl = f->seq_hdr->tip_refine_mv &&
-                    (f->frame_hdr->tip.frame_mode == 1 ||
+                    (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF ||
                      f->frame_hdr->tip.subpel_filter == DAV2D_FILTER_8TAP_SHARP);
-                const int step = 2 << (f->frame_hdr->tip.frame_mode == 2 /* frame */ ? !opfl :
+                const int step = 2 << (f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT ?
+                                       !opfl :
                                        ((!opfl && imin(bw4, bh4) >= 4) || b->bs == BS_256x256));
                 bacp = rmv_uvpred(t, NULL, cbw4 * 4 >> ss_hor, b, pl,
                                   step, step, cbw4, cbh4);

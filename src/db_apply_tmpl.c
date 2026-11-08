@@ -310,7 +310,7 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
         f->cur_segmap ? &f->cur_segmap[y64 * 16 * seg_stride] : NULL;
 
     // fix lpf strength at tile col boundaries
-    if (f->frame_hdr->tip.frame_mode != 2) {
+    if (f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT) {
         const uint8_t *lpf_y = &f->lf.tx_db_right_edge[0][y64 * 16];
         const uint8_t *lpf_uv = &f->lf.tx_db_right_edge[1][y64 * 16 >> ss_ver];
         for (int tile_col = 1;; tile_col++) {

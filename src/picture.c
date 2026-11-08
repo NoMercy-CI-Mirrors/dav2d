@@ -189,8 +189,10 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
     const int res = picture_alloc(c, &p->p, f->frame_hdr->width, f->frame_hdr->height,
                                   f->seq_hdr, f->seq_hdr_ref,
                                   f->frame_hdr, f->frame_hdr_ref,
-                                  bpc, f->frame_hdr->tip.frame_mode == 2 ? &c->in.m :
-                                       &f->tile[0].data.m, &c->allocator,
+                                  bpc,
+                                  f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT ?
+                                      &c->in.m : &f->tile[0].data.m,
+                                  &c->allocator,
                                   (void **) &p->progress);
     if (res) return res;
 
@@ -213,16 +215,17 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
         dav2d_picture_copy_props(&p->p, c->content_light, c->content_light_ref,
                                  c->mastering_display, c->mastering_display_ref,
                                  c->itut_t35, c->itut_t35_ref, c->n_itut_t35,
-                                 f->frame_hdr->tip.frame_mode == 2 ? &c->in.m :
-                                 &f->tile[0].data.m);
+                                 f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT ?
+                                     &c->in.m : &f->tile[0].data.m);
 
         // Must be removed from the context after being attached to the frame
         dav2d_ref_dec(&c->itut_t35_ref);
         c->itut_t35 = NULL;
         c->n_itut_t35 = 0;
     } else {
-        dav2d_data_props_copy(&p->p.m, f->frame_hdr->tip.frame_mode == 2 ? &c->in.m :
-                              &f->tile[0].data.m);
+        dav2d_data_props_copy(&p->p.m,
+                              f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT ?
+                                  &c->in.m : &f->tile[0].data.m);
     }
 
     if (c->n_fc > 1) {
