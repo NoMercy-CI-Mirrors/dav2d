@@ -629,9 +629,10 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 txtp = txtp_dct_idtx_iddct_tbl[tx_idx];
             } else {
                 const int setidx = tx == (enum RectTxfmSize)TX_16X16;
+                // all other sizes here are smaller than 16x16
+                assert(setidx == (t_dim->min == TX_16X16));
                 const int set = dav2d_msac_decode_bool_adapt(&ts->msac,
-                                    ts->cdf.m.txtp_inter_tx_set[setidx][ctx]
-                                                               [t_dim->min]);
+                                    ts->cdf.m.txtp_inter_tx_set[ctx][t_dim->min]);
                 if (!set) {
                     txtp = dav2d_msac_decode_symbol_adapt8(&ts->msac,
                                 ts->cdf.m.txtp_inter_set0[setidx][ctx], 7);
