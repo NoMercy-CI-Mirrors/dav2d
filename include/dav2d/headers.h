@@ -75,6 +75,15 @@ enum Dav2dObuType {
     DAV2D_OBU_PADDING          = 25,
 };
 
+enum Dav2dProfile {
+    DAV2D_PROFILE_MAIN_420_10_IP0 = 0,
+    DAV2D_PROFILE_MAIN_420_10_IP1 = 1,
+    DAV2D_PROFILE_MAIN_420_10_IP2 = 2,
+    DAV2D_PROFILE_MAIN_422_10_IP1 = 3,
+    DAV2D_PROFILE_MAIN_444_10_IP1 = 4,
+    DAV2D_PROFILE_CONFIGURABLE    = 31,
+};
+
 enum Dav2dTxfmMode {
     DAV2D_TX_4X4_ONLY,
     DAV2D_TX_LARGEST,
@@ -309,12 +318,7 @@ typedef struct Dav2dTileInfo {
 
 typedef struct Dav2dSequenceHeader {
     uint8_t id;
-    /**
-     * Stream profile, 0 for 8-10 bits/component 4:2:0 or monochrome;
-     * 1 for 8-10 bits/component 4:4:4; 2 for 4:2:2 at any bits/component,
-     * or 12 bits/component at any chroma subsampling.
-     */
-    uint8_t profile;
+    uint8_t /*enum Dav2dProfile*/ profile;
     uint8_t reduced_still_picture_header;
     uint8_t level;
     uint8_t tier;
