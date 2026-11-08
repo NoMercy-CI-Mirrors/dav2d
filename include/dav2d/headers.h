@@ -123,6 +123,12 @@ enum Dav2dTipFrameMode {
     DAV2D_TIP_FRAME_AS_OUTPUT = 2, ///< TIP frame is the output (TIP OBU)
 };
 
+enum Dav2dSuperblockSize {
+    DAV2D_SB_SIZE_64 = 0,
+    DAV2D_SB_SIZE_128 = 1,
+    DAV2D_SB_SIZE_256 = 2,
+};
+
 enum Dav2dTxfmMode {
     DAV2D_TX_4X4_ONLY,
     DAV2D_TX_LARGEST,
@@ -401,7 +407,7 @@ typedef struct Dav2dSequenceHeader {
     uint8_t tlayer_dependency_present, mlayer_dependency_present;
     uint8_t tlayer_dependencies[8], mlayer_dependencies[8];
 
-    uint8_t sb128; // 2: 256x256, 1: 128x128, 0: 64x64
+    uint8_t /*enum Dav2dSuperblockSize*/ sb128;
 
     // partition flags
     uint8_t sdp, ext_sdp;
@@ -546,7 +552,8 @@ typedef struct Dav2dFrameHeader {
         uint8_t subpel_filter;
         int8_t ref[2];
     } tip;
-    uint8_t sb128; // not literally coded, but derived from seqhdr/frame_type
+    // not literally coded, but derived from seqhdr/frame_type
+    uint8_t /*enum Dav2dSuperblockSize*/ sb128;
     struct {
         Dav2dTileInfo t;
         uint8_t n_bytes;

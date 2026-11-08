@@ -361,7 +361,8 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
            dav2d_get_bits_pos(gb) - init_bit_pos);
 #endif
 
-    hdr->sb128 = dav2d_get_bit(gb) ? 2 : dav2d_get_bit(gb);
+    hdr->sb128 = dav2d_get_bit(gb) ? DAV2D_SB_SIZE_256 :
+                 dav2d_get_bit(gb) ? DAV2D_SB_SIZE_128 : DAV2D_SB_SIZE_64;
 #if DEBUG_SEQ_HDR
     printf("SEQHDR: post-sbsz[%dx%d]: off=%u\n",
            64 << hdr->sb128, 64 << hdr->sb128,
@@ -1005,7 +1006,8 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
     {
         hdr->tiling.t = seqhdr->tiling.t;
         sbmul = 1 + (hdr->sb128 != seqhdr->sb128);
-        assert(sbmul == 1 || (hdr->sb128 == 1 && seqhdr->sb128 == 2 &&
+        assert(sbmul == 1 || (hdr->sb128 == DAV2D_SB_SIZE_128 &&
+                              seqhdr->sb128 == DAV2D_SB_SIZE_256 &&
                               IS_KEY_OR_INTRA(hdr)));
         if (hdr->tiling.t.uniform) {
             // only the number of tiles is reused; the tile distribution is
@@ -1024,7 +1026,7 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
                 hdr->tiling.t.col_start_sb[n] *= 2;
         }
     } else {
-        sbmul = seqhdr->sb128 == 2 && IS_KEY_OR_INTRA(hdr) ? 2 : 1;
+        sbmul = seqhdr->sb128 == DAV2D_SB_SIZE_256 && IS_KEY_OR_INTRA(hdr) ? 2 : 1;
         parse_tile_info(&hdr->tiling.t, gb, sbmul, hdr->sb128, seqhdr->sb128,
                         hdr->width, hdr->height, seqhdr->level, seqhdr->tier);
     }
@@ -1815,7 +1817,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         if (hdr->restoration.p[0].type) {
             if (dav2d_get_bit(gb)) {
                 hdr->restoration.unit_size[0]--;
-            } else if (hdr->sb128 < 2 && !dav2d_get_bit(gb)) {
+            } else if (hdr->sb128 < DAV2D_SB_SIZE_256 && !dav2d_get_bit(gb)) {
                 hdr->restoration.unit_size[0] -=
                     2 + (!hdr->sb128 && !dav2d_get_bit(gb));
             }
@@ -1827,7 +1829,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         if (hdr->restoration.p[1].type || hdr->restoration.p[2].type) {
             if (dav2d_get_bit(gb)) {
                 hdr->restoration.unit_size[1]--;
-            } else if (hdr->sb128 < 2 && !dav2d_get_bit(gb)) {
+            } else if (hdr->sb128 < DAV2D_SB_SIZE_256 && !dav2d_get_bit(gb)) {
                 hdr->restoration.unit_size[1] -=
                     2 + (!hdr->sb128 && !dav2d_get_bit(gb));
             }
@@ -2049,7 +2051,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 #endif
     }
     hdr->ccso.b64size = 1 << (seqhdr->ccso_unit_matches_sbsz ? hdr->sb128 : 2);
-    if (!seqhdr->ccso_unit_matches_sbsz && hdr->sb128 < 2) {
+    if (!seqhdr->ccso_unit_matches_sbsz && hdr->sb128 < DAV2D_SB_SIZE_256) {
         int mask = 0;
         for (int t = 1; t < hdr->tiling.t.cols; t++)
             mask |= hdr->tiling.t.col_start_sb[t];
