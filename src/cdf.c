@@ -676,25 +676,13 @@ static const CdfDefaultContext default_cdf = {
             {
                 { CDF1( 9272),  32 << 8 },
                 { CDF1(17175),  62 << 8 },
-                { CDF1(16384),   0 << 8 },
-                { CDF1(16384),   0 << 8 },
-                { CDF1(16384),   0 << 8 },
-                { CDF1(16384),   0 << 8 },
             }, {
                 { CDF1( 1385),   0 << 8 },
                 { CDF1( 4439),  31 << 8 },
-                { CDF1(16384),   0 << 8 },
-                { CDF1(16384),   0 << 8 },
-                { CDF1(16384),   0 << 8 },
-                { CDF1(16384),   0 << 8 },
             }, {
                 { CDF1(  521),   0 << 8 },
                 { CDF1( 1854),  25 << 8 },
-                { CDF1(16384),   0 << 8 },
-                { CDF1(16384),   0 << 8 },
-                { CDF1(16384),   0 << 8 },
-                { CDF1(16384),   0 << 8 },
-            },
+            }
         }, .comp1_ref = {
             {
                 {
@@ -6295,7 +6283,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_2d(3, 1, m, tip, op); \
     update_cdf_2d(5, 1, m, comp, op); \
     update_cdf_3d(3, 6, 1, m, single_ref, op); \
-    update_cdf_3d(3, 6, 1, m, comp0_ref, op); \
+    update_cdf_3d(3, 2, 1, m, comp0_ref, op); \
     update_cdf_4d(3, 2, 6, 1, m, comp1_ref, op); \
     update_cdf_1d(1, m, tip_mode, op); \
     update_cdf_2d(5, 1, m, warp, op); \

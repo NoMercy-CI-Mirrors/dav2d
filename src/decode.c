@@ -2598,6 +2598,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         bit = 1;
                     } else {
                         const int ctx = iclip(cnt_cur - cnt_rem + 1, 0, 2);
+                        assert(n || i < 2);
                         uint16_t *const cdf =
                             n == 0 ? ts->cdf.m.comp0_ref[ctx][i] :
                             ts->cdf.m.comp1_ref[ctx][dir ^ f->refdir[i]][i];

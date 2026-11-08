@@ -110,7 +110,7 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t tip[3][2], 4);
     ALIGN(uint16_t comp[5][2], 4);
     ALIGN(uint16_t single_ref[3][6][2], 4);
-    ALIGN(uint16_t comp0_ref[3][6][2], 4);
+    ALIGN(uint16_t comp0_ref[3][2][2], 4);
     ALIGN(uint16_t comp1_ref[3][2][6][2], 4);
     ALIGN(uint16_t tip_mode[2], 4);
     ALIGN(uint16_t warp[5][2], 4);
