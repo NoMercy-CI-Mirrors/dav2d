@@ -3344,8 +3344,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 imin(bw4, bh4) >= 2 && imax(bw4, bh4) <= 16)
             {
                 const int ctx = size_group_lookup[bs];
+                assert(ctx > 0);
                 if (dav2d_msac_decode_bool_adapt(&ts->msac,
-                                                 ts->cdf.m.warp_interintra[ctx]))
+                                                 ts->cdf.m.warp_interintra[ctx - 1]))
                 {
                     b->warp_ii = 1;
                     b->interintra_mode = dav2d_msac_decode_symbol_adapt4(&ts->msac,

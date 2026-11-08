@@ -142,7 +142,7 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t warp_delta_prec[22][2], 4);
     ALIGN(uint16_t warp_delta_param[2][2][8], 16);
     ALIGN(uint16_t warp_delta_sign[2], 4);
-    ALIGN(uint16_t warp_interintra[4][2], 4);
+    ALIGN(uint16_t warp_interintra[3][2], 4);
     ALIGN(uint16_t comp_mode_sameref[5][4], 8);
     ALIGN(uint16_t comp_mode_joint[2][2], 4);
     ALIGN(uint16_t comp_mode[5][5+3], 16);

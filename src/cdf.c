@@ -915,7 +915,6 @@ static const CdfDefaultContext default_cdf = {
         }, .warp_delta_sign = {
             CDF1(14285),  93 << 8
         }, .warp_interintra = {
-            { CDF1(16384),   0 << 8 },
             { CDF1(27980),  56 << 8 },
             { CDF1(29163),  56 << 8 },
             { CDF1(30658),  62 << 8 },
@@ -6302,7 +6301,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_2d(22, 1, m, warp_delta_prec, op); \
     update_cdf_3d(2, 2, 7, m, warp_delta_param, op); \
     update_cdf_1d(1, m, warp_delta_sign, op); \
-    update_cdf_2d(4, 1, m, warp_interintra, op); \
+    update_cdf_2d(3, 1, m, warp_interintra, op); \
     update_cdf_2d(5, 3, m, comp_mode_sameref, op); \
     update_cdf_2d(2, 1, m, comp_mode_joint, op); \
     update_cdf_2d(5, 4, m, comp_mode, op); \
