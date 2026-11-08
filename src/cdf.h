@@ -147,7 +147,7 @@ typedef struct CdfModeContext {
     ALIGN(uint16_t comp_mode_joint[2][2], 4);
     ALIGN(uint16_t comp_mode[5][5+3], 16);
     ALIGN(uint16_t opfl[2][2], 4);
-    ALIGN(uint16_t refine_mv[11][2], 4);
+    ALIGN(uint16_t refine_mv[7][2], 4);
     ALIGN(uint16_t comp_type_masked[12][2], 4);
     ALIGN(uint16_t comp_type_weighted[2], 4);
     ALIGN(uint16_t cwp_idx[4][2], 4);

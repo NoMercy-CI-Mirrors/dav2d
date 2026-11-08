@@ -2903,12 +2903,28 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 {
                     b->refine_mv = 2; // implicitly enabled
                 } else {
-                    const int ctx = coded_mode - NEARMV_NEARMV;
+                    // NEARMV_NEARMV, OPFL_NEARMV_NEARMV and OPFL_JOINT_NEWMV
+                    // are implied (above) and GLOBALMV_GLOBALMV is excluded
+                    static const int8_t refine_mv_ctx[] = {
+                        [NEARMV_NEARMV      - NEARMV_NEARMV] = -1,
+                        [NEARMV_NEWMV       - NEARMV_NEARMV] =  0,
+                        [NEWMV_NEARMV       - NEARMV_NEARMV] =  1,
+                        [GLOBALMV_GLOBALMV  - NEARMV_NEARMV] = -1,
+                        [NEWMV_NEWMV        - NEARMV_NEARMV] =  2,
+                        [JOINT_NEWMV        - NEARMV_NEARMV] =  3,
+                        [OPFL_NEARMV_NEARMV - NEARMV_NEARMV] = -1,
+                        [OPFL_NEARMV_NEWMV  - NEARMV_NEARMV] =  4,
+                        [OPFL_NEWMV_NEARMV  - NEARMV_NEARMV] =  5,
+                        [OPFL_NEWMV_NEWMV   - NEARMV_NEARMV] =  6,
+                        [OPFL_JOINT_NEWMV   - NEARMV_NEARMV] = -1,
+                    };
+                    const int ctx = refine_mv_ctx[coded_mode - NEARMV_NEARMV];
+                    assert(ctx >= 0);
                     b->refine_mv = dav2d_msac_decode_bool_adapt(&ts->msac,
                                        ts->cdf.m.refine_mv[ctx]);
                     DEBUG_BLOCK_printf("%*sPost-refinemv[ctx=%d,%d]: r=%d\n",
-                                       depth, "", ctx + 1, b->refine_mv,
-                                       ts->msac.rng);
+                                       depth, "", coded_mode - NEARMV_NEARMV + 1,
+                                       b->refine_mv, ts->msac.rng);
                 }
             }
 

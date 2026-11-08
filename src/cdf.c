@@ -1123,13 +1123,9 @@ static const CdfDefaultContext default_cdf = {
             { CDF1(16384),   0 << 8 },
             { CDF1(16384),   0 << 8 },
             { CDF1(16384),   0 << 8 },
-            { CDF1(16384),   0 << 8 },
-            { CDF1(16384),   0 << 8 },
-            { CDF1(16384),   0 << 8 },
             { CDF1(20204),  25 << 8 },
             { CDF1(17614),  43 << 8 },
             { CDF1(24443),  32 << 8 },
-            { CDF1(16384),   0 << 8 },
         }, .comp_type_masked = {
             { CDF1(17510),  26 << 8 },
             { CDF1(10382),   0 << 8 },
@@ -6320,7 +6316,7 @@ static const CdfCoefContext default_coef_cdf[4] = {
     update_cdf_2d(2, 1, m, comp_mode_joint, op); \
     update_cdf_2d(5, 4, m, comp_mode, op); \
     update_cdf_2d(2, 1, m, opfl, op); \
-    update_cdf_2d(11, 1, m, refine_mv, op); \
+    update_cdf_2d(7, 1, m, refine_mv, op); \
     update_cdf_2d(12, 1, m, comp_type_masked, op); \
     update_cdf_1d(1, m, comp_type_weighted, op); \
     update_cdf_2d(4, 1, m, cwp_idx, op); \
