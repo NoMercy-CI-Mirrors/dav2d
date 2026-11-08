@@ -140,9 +140,11 @@ static NOINLINE void parse_tile_info(Dav2dTileInfo *const thdr,
     const int sbw = (w + sbsz_min1) >> sbsz_log2;
     const int sbh = (h + sbsz_min1) >> sbsz_log2;
     const int w_adj = (level >= 18) + (level >= 14 && tier);
-    const int max_tile_width_sb = 4096 >> (sbsz_log2 - w_adj);
     const int sz_adj = (level >= 14) + (level >= 18) + (level >= 14 && tier);
-    const int max_tile_area_sb = 4096 * 2304 >> (2 * sbsz_log2 - sz_adj);
+    // seq_level_idx 31 (maximum parameters) has no tile size limits
+    const int max_tile_width_sb = level == 31 ? sbw : 4096 >> (sbsz_log2 - w_adj);
+    const int max_tile_area_sb = level == 31 ? sbw * sbh :
+                                 4096 * 2304 >> (2 * sbsz_log2 - sz_adj);
     thdr->min_log2_cols = tile_log2(max_tile_width_sb, sbw);
     thdr->max_log2_cols = tile_log2(1, imin(sbw, DAV2D_MAX_TILE_COLS));
     thdr->max_log2_rows = tile_log2(1, imin(sbh, DAV2D_MAX_TILE_ROWS));
