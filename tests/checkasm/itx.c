@@ -262,7 +262,7 @@ static void check_itxfm_add(const Dav2dInvTxfmDSPContext *const c,
                         break;
                     }
                 }
-                if ((hor1d <= ADST && ver1d <= ADST) || txtp == WHT_WHT) {
+                if ((hor1d <= ADST && ver1d <= ADST && !is_inv) || txtp == WHT_WHT) {
                     /* Only benchmark with coef_bits_min */
                     int max_eob;
                     generate_coefs(coeff[0], tx, txtp, sw, sh, subsh, &max_eob,
