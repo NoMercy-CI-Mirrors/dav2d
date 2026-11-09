@@ -94,11 +94,6 @@ if is_asm_enabled
         libdav2d_sources += files(
             'arm/cpu.c',
         )
-        if get_option('asm_debug')
-            libdav2d_sources += files(
-                'arm/asm_debug.c',
-            )
-        endif
         if (host_machine.cpu_family() == 'aarch64' or
             host_machine.cpu() == 'arm64')
             libdav2d_sources_asm = files(
@@ -130,6 +125,12 @@ if is_asm_enabled
                     'arm/64/mc16_sve.S',
                 )
             endif
+
+            if get_option('asm_debug')
+                libdav2d_sources += files(
+                    'arm/64/asm_debug.c',
+                )
+            endif
         elif host_machine.cpu_family().startswith('arm')
             libdav2d_sources_asm = files(
                 'arm/32/msac.S',
@@ -150,6 +151,12 @@ if is_asm_enabled
                     'arm/32/filmgrain16.S',
                     'arm/32/ipred16.S',
                     'arm/32/mc16.S',
+                )
+            endif
+
+            if get_option('asm_debug')
+                libdav2d_sources += files(
+                    'arm/32/asm_debug.c',
                 )
             endif
         endif
