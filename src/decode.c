@@ -5092,40 +5092,47 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         }
     }
 
-    size_t prefilter_data_size_y, prefilter_data_size_uv;
+    int prefilter_rows_y, prefilter_rows_uv;
     if (c->n_tc == 1) {
-        prefilter_data_size_y = prefilter_data_size_uv = 0;
+        prefilter_rows_y = prefilter_rows_uv = 0;
         f->prefilter_data_full_frame = 1;
     } else if (f->frame_hdr->allow_intrabc) {
         const int bh_align7 = (f->bh + 15) & ~15;
-        prefilter_data_size_y = f->cur.p.stride[0] * bh_align7 * 4;
+        prefilter_rows_y = bh_align7 * 4;
         const int bh_align15 = (f->bh + 31) & ~31;
-        prefilter_data_size_uv = f->cur.p.stride[1] * bh_align15 * 4 >> f->ss_ver;
+        prefilter_rows_uv = bh_align15 * 4 >> f->ss_ver;
         f->prefilter_data_full_frame = 1;
     } else {
-        prefilter_data_size_y = f->cur.p.stride[0] * f->frame_hdr->tiling.t.rows;
-        prefilter_data_size_uv = f->cur.p.stride[1] * f->frame_hdr->tiling.t.rows;
+        prefilter_rows_y = prefilter_rows_uv = f->frame_hdr->tiling.t.rows;
         f->prefilter_data_full_frame = 0;
     }
+    const size_t prefilter_data_size_y = (size_t)llabs(y_stride) * prefilter_rows_y;
+    const size_t prefilter_data_size_uv = (size_t)llabs(uv_stride) * prefilter_rows_uv;
     const size_t prefilter_data_sz = prefilter_data_size_y + 2 * prefilter_data_size_uv;
     if (prefilter_data_sz > f->prefilter_data_sz) {
         if (f->prefilter_data_sz) // otherwise it's a pointer into f->cur
-            dav2d_free_aligned(f->prefilter_data[0]);
+            dav2d_free_aligned(f->prefilter_data_buf);
         if (prefilter_data_sz) {
-            uint8_t *ptr = f->prefilter_data[0] =
-                dav2d_alloc_aligned(ALLOC_IPRED, prefilter_data_sz, 64);
-            if (!ptr) {
+            f->prefilter_data_buf = dav2d_alloc_aligned(ALLOC_IPRED, prefilter_data_sz, 64);
+            if (!f->prefilter_data_buf) {
                 f->prefilter_data_sz = 0;
                 goto error;
             }
-            if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
-                ptr += prefilter_data_size_y;
-                f->prefilter_data[1] = ptr;
-                ptr += prefilter_data_size_uv;
-                f->prefilter_data[2] = ptr;
-            }
         }
         f->prefilter_data_sz = prefilter_data_sz;
+    }
+    if (prefilter_data_sz) {
+        uint8_t *ptr = f->prefilter_data_buf;
+        f->prefilter_data[0] = (pixel *) (y_stride < 0 ?
+            ptr - y_stride * (prefilter_rows_y - 1) : ptr);
+        if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
+            for (int pl = 1; pl <= 2; pl++) {
+                ptr = f->prefilter_data_buf + prefilter_data_size_y +
+                      (pl - 1) * prefilter_data_size_uv;
+                f->prefilter_data[pl] = (pixel *) (uv_stride < 0 ?
+                    ptr - uv_stride * (prefilter_rows_uv - 1) : ptr);
+            }
+        }
     }
 
     const int re_sz = f->sb256h * f->frame_hdr->tiling.t.cols;

@@ -303,6 +303,7 @@ struct Dav2dFrameContext {
     } bd_fn;
 
     size_t prefilter_data_sz;
+    uint8_t *prefilter_data_buf;
     pixel *prefilter_data[3];
     int prefilter_data_full_frame;
     ptrdiff_t b4_stride;
