@@ -2375,7 +2375,8 @@ static int opfl_pred(Dav2dTaskContext *const t,
     const int bs = 2 - (b->bs == BS_8x8 /* FIXME not tip */);
     union OpflMvDeltaBlock dd[2 * 2];
 
-    union mv (*rmv_line)[2][2] = &t->rmv[((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1)];
+    const int rmv_base = ((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1);
+    union mv (*rmv_line)[2][2] = &t->rmv[rmv_base];
     const ptrdiff_t t_stride = f->rf.rp_stride;
     refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * (t_stride >> 5) +
                                              (t->bx >> 6)];
@@ -2484,12 +2485,13 @@ static int opfl_pred(Dav2dTaskContext *const t,
                 for (int bx = 0, xx = 0; bx < w4; bx += bs, r++, xx++) {
                     const ptrdiff_t off_x8 = (bx4 + bx) >> 1;
                     opfl_mv_adj(r, ddl, d);
-                    union mv mv_8x8[2];
-                    // for 8x8, the opfl blocksize is 4x4; for inter, we
-                    // only need to store the first (top/left) one, and
-                    // the rest can be discarded. (Not sure if this is
-                    // true for 422/444, but it's definitely true for 420.)
-                    union mv *const mv = bs == 1 && (bx || by) ? mv_8x8 :
+                    // for 8x8, the opfl blocksize is 4x4; 4:2:0 chroma only
+                    // uses the first (top/left) one, 4:2:2 chroma uses the
+                    // left ones, and 4:4:4 chroma uses all of them. rmv[] is
+                    // per-block scratch, so store these in the 8x8 entries
+                    // around the block's own, using xor to stay within rmv[].
+                    union mv *const mv = bs == 1 ?
+                                         t->rmv[rmv_base ^ (by * 16 + bx)][0] :
                                          rmv_line[!!by * 16 + xx][0];
                     mv[0].y = b->mv[0].y * 2 + ddl->d[0].y;
                     mv[0].x = b->mv[0].x * 2 + ddl->d[0].x;
@@ -2558,7 +2560,8 @@ static int rmv_uvpred(Dav2dTaskContext *const t,
     const int tip = b->ref.ref[0] == TIP_FRAME;
     const union refpair ref = tip ? f->rf.tip.ref : b->ref;
     int16_t (*const tmp)[64 * 64] = t->scratch.compinter;
-    union mv (*rmv_line)[2][2] = &t->rmv[((t->cby & 31) >> 1) * 16 + ((t->cbx & 31) >> 1)];
+    const int rmv_base = ((t->cby & 31) >> 1) * 16 + ((t->cbx & 31) >> 1);
+    union mv (*rmv_line)[2][2] = &t->rmv[rmv_base];
     ptrdiff_t uvoff = 0;
     const int is_bidir = b->cwp_idx != 16;
 
@@ -2568,28 +2571,41 @@ static int rmv_uvpred(Dav2dTaskContext *const t,
     int have_bacp = 0;
 
     const int w = f->bw * 4 >> ss_hor, h = f->bh * 4 >> ss_ver;
-    const int rw4 = imin(bw4, r_step), rh4 = imin(bh4, r_step);
-    const int ow4 = imin(bw4, o_step), oh4 = imin(bh4, o_step);
+    // without vertical subsampling, the 4x4 opfl subblocks of 8x8 blocks are
+    // visible in chroma, and each has its own refined mv and reference window
+    const int opfl_8x8 = !tip && !ss_ver && b->bs == BS_8x8 &&
+                         b->inter_mode >= OPFL_NEARMV_NEARMV;
+    const int rw4 = opfl_8x8 ? 1 << ss_hor : imin(bw4, r_step);
+    const int rh4 = opfl_8x8 ? 1 : imin(bh4, r_step);
+    const int ow4 = opfl_8x8 ? rw4 : imin(bw4, o_step);
+    const int oh4 = opfl_8x8 ? rh4 : imin(bh4, o_step);
     const int hhtaps = 2 + 2 * (rw4 > 1 + ss_hor);
     const int hvtaps = 2 + 2 * (rh4 > 1 + ss_ver);
     const int h4 = imin(bh4, f->bh - t->cby);
     const int w4 = imin(bw4, f->bw - t->cbx);
-    for (int y = 0; y < h4; y += rh4, rmv_line += 16 * r_step >> 1) {
+    union mv bmv[2];
+    if (!tip) {
+        bmv[0] = b->mv[0];
+        bmv[1] = b->mv[1];
+        scaleup_8pel_mv_for_chroma(bmv, f->cur.p.p.layout);
+    }
+    for (int y = 0; y < h4; y += rh4, rmv_line += opfl_8x8 ? 0 : 16 * r_step >> 1) {
         for (int x = 0; x < w4; x += rw4) {
             union mv (*const rmv)[2] = rmv_line[x >> 1];
             if (!is_bidir) {
+                const union mv mv = { .y = rmv[0][0].y >> !ss_ver,
+                                      .x = rmv[0][0].x >> !ss_hor };
                 mc(t, &dst[x * 4 >> ss_hor], NULL, stride,
                    rw4, rh4, t->cbx + x, t->cby + y,
-                   1 + plane, rmv[0][0], &f->refp[ref.ref[0]], ref.ref[0],
+                   1 + plane, mv, &f->refp[ref.ref[0]], ref.ref[0],
                    b->filter, 0, f->bw * 4 >> ss_hor, 0, f->bh * 4 >> ss_ver);
                 continue;
             }
+            const union mv *const wmv = tip ? rmv[1] : bmv;
             int top[2], left[2], bottom[2], right[2];
             for (int i = 0; i < 2; i++) {
-                top[i] = ((t->cby + y) * 4 >> ss_ver) +
-                          ((tip ? rmv[1][i].y : b->mv[i].y) >> 4);
-                left[i] = ((t->cbx + x) * 4 >> ss_hor) +
-                           ((tip ? rmv[1][i].x : b->mv[i].x) >> 4);
+                top[i] = ((t->cby + y) * 4 >> ss_ver) + (wmv[i].y >> 4);
+                left[i] = ((t->cbx + x) * 4 >> ss_hor) + (wmv[i].x >> 4);
                 bottom[i] = iclip(top[i] + (4 * rh4 >> ss_ver) + hvtaps, 1, h);
                 right[i] = iclip(left[i] + (4 * rw4 >> ss_hor) + hhtaps, 1, w);
                 top[i] = iclip(top[i] + 1 - hvtaps, 0, h - 1);
@@ -2598,7 +2614,9 @@ static int rmv_uvpred(Dav2dTaskContext *const t,
             ptrdiff_t uvoffi = uvoff;
             for (int by = 0; by < rh4; by += oh4) {
                 for (int bx = 0; bx < rw4; bx += ow4) {
-                    union mv (*const rmv)[2] = rmv_line[!!by * 16 + ((x + bx) >> 1)];
+                    union mv (*const rmv)[2] = opfl_8x8 ?
+                        t->rmv[rmv_base ^ (y * 16 + x)] :
+                        rmv_line[!!by * 16 + ((x + bx) >> 1)];
                     for (int i = 0; i < 2; i++)
                         mc_opfl(t, &tmp[i][uvoffi + ((x + bx) * 4 >> ss_hor)], stride,
                                 ow4 >> ss_hor, oh4 >> ss_ver,
