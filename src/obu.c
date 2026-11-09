@@ -1698,13 +1698,27 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
+    hdr->gdf.b64size = 1 << imax(!seqhdr->gdf_unit_matches_sbsz, hdr->sb128);
+    if (!seqhdr->gdf_unit_matches_sbsz && !hdr->sb128) {
+        int mask = 0;
+        for (int t = 1; t < hdr->tiling.t.cols; t++)
+            mask |= hdr->tiling.t.col_start_sb[t];
+        for (int t = 1; t < hdr->tiling.t.rows; t++)
+            mask |= hdr->tiling.t.row_start_sb[t];
+        if (mask & 1) hdr->gdf.b64size = 1;
+    }
+
     if (!hdr->all_lossless && seqhdr->gdf /* && not large-scale tiles */) {
-        const int gdf_bs = 128 << (hdr->sb128 == 2);
+        const int gdf_bs = 64 * hdr->gdf.b64size;
         hdr->gdf.enabled = seqhdr->reduced_still_picture_header ||
                            dav2d_get_bit(gb);
         if (hdr->gdf.enabled) {
-            if (imax(hdr->width, hdr->height) > gdf_bs)
+            if (imax(hdr->width, hdr->height) > gdf_bs ||
+                (seqhdr->disable_loopfilters_across_tiles &&
+                 (hdr->tiling.t.cols > 1 || hdr->tiling.t.rows > 1)))
+            {
                 hdr->gdf.enabled += dav2d_get_bit(gb);
+            }
             const int qp_base = IS_KEY_OR_INTRA(hdr) ? 85 : 110;
             const int qp_diff = hdr->quant.yac - qp_base - 48 * seqhdr->hbd;
             const int qp_idx_offset = dav2d_get_bits(gb, 2);
@@ -1717,16 +1731,6 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     }
-    hdr->gdf.b64size = 1 << imax(!seqhdr->gdf_unit_matches_sbsz, hdr->sb128);
-    if (!seqhdr->gdf_unit_matches_sbsz && !hdr->sb128) {
-        int mask = 0;
-        for (int t = 1; t < hdr->tiling.t.cols; t++)
-            mask |= hdr->tiling.t.col_start_sb[t];
-        for (int t = 1; t < hdr->tiling.t.rows; t++)
-            mask |= hdr->tiling.t.row_start_sb[t];
-        if (mask & 1) hdr->gdf.b64size = 1;
-    }
-
     // cdef
     if (!hdr->all_lossless && seqhdr->cdef) {
         hdr->cdef.enabled = seqhdr->reduced_still_picture_header ||

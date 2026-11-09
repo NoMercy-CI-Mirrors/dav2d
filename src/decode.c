@@ -1869,9 +1869,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (!((t->bx | t->by) & (16 * gdf_bs - 1))) {
             int idx = ((t->by & 48) >> 2) + ((t->bx & 48) >> 4);
             int flag;
-            if (f->frame_hdr->gdf.enabled == DAV2D_ADAPTIVE &&
-                imax(f->cur.p.p.w, f->cur.p.p.h) > 64 * gdf_bs)
-            {
+            if (f->frame_hdr->gdf.enabled == DAV2D_ADAPTIVE) {
                 flag = dav2d_msac_decode_bool_adapt(&ts->msac, ts->cdf.m.gdf);
                 DEBUG_BLOCK_printf("%*sPost-gdf[y=%d,x=%d,gdf=%d]: r=%d\n",
                                    depth, "", t->by, t->bx,
