@@ -1290,30 +1290,30 @@ cfl_mh_gen_y_444_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
     // tl+t+tr
     if (has_t) {
         const pixel *top = (top_sb_edge ? top_sb_edge :
-            src - n_top_rows * src_stride) - n_left_cols;
+            src - n_top_rows * PXSTRIDE(src_stride)) - n_left_cols;
         const int start = !has_l && dir == CFL_DIR_CENTER;
         for (int y = 0; y < n_top_rows; y++) {
             memcpy(dst, top + start, needed_top_cols * sizeof(pixel));
-            top += !top_sb_edge * src_stride;
+            top += !top_sb_edge * PXSTRIDE(src_stride);
             dst += CFL_MH_TOP_STRIDE;
         }
     }
 
     // l+bl
     const int ystart = !has_t && dir == CFL_DIR_CENTER;
-    const pixel *src_left = src + ystart * src_stride - n_left_cols;
+    const pixel *src_left = src + ystart * PXSTRIDE(src_stride) - n_left_cols;
     pixel *dst_left = dst + 32 * 32;
     for (int y = ystart; y < ystart + needed_left_rows; y++) {
         for (int x = 0; x < n_left_cols; x++)
             dst_left[x] = src_left[x];
-        src_left += src_stride;
+        src_left += PXSTRIDE(src_stride);
         dst_left += n_left_cols;
     }
 
     // blk
     for (int y = 0; y < h; y++) {
         memcpy(dst, src, w * sizeof(pixel));
-        src += src_stride;
+        src += PXSTRIDE(src_stride);
         dst += w;
     }
 }
