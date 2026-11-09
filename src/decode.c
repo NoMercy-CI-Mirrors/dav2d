@@ -5011,11 +5011,18 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
             f->lf.lr_db_line[2] = ptr + uv_stride * num_lines;
         }
         ptr += llabs(uv_stride) * num_lines * 2;
-        // FIXME make the below work with negative stride
-        f->lf.lr_cdef_line[0] = ptr;
+        if (y_stride < 0)
+            f->lf.lr_cdef_line[0] = ptr - y_stride * (n_tile_rows_m1 * 6 - 1);
+        else
+            f->lf.lr_cdef_line[0] = ptr;
         ptr += llabs(y_stride) * n_tile_rows_m1 * 6;
-        f->lf.lr_cdef_line[1] = ptr;
-        f->lf.lr_cdef_line[2] = ptr + llabs(uv_stride) * n_tile_rows_m1 * 2;
+        if (uv_stride < 0) {
+            f->lf.lr_cdef_line[1] = ptr - uv_stride * (n_tile_rows_m1 * 2 - 1);
+            f->lf.lr_cdef_line[2] = ptr - uv_stride * (n_tile_rows_m1 * 4 - 1);
+        } else {
+            f->lf.lr_cdef_line[1] = ptr;
+            f->lf.lr_cdef_line[2] = ptr + uv_stride * n_tile_rows_m1 * 2;
+        }
 
         f->lf.lr_buf_plane_sz[0] = (int) y_stride * num_lines;
         f->lf.lr_buf_plane_sz[1] = (int) uv_stride * num_lines * 2;

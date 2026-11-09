@@ -398,7 +398,12 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *const p[3],
 static inline void copyNlines(pixel *dst, const pixel *src, const ptrdiff_t stride,
                               const int n)
 {
-    memcpy(dst, src, stride * n);
+    if (stride < 0) {
+        const ptrdiff_t off = (n - 1) * PXSTRIDE(stride);
+        memcpy(dst + off, src + off, -stride * n);
+    } else {
+        memcpy(dst, src, stride * n);
+    }
 }
 
 void bytefn(dav2d_lr_slice)(Dav2dFrameContext *const f, pixel *const dst[3],
