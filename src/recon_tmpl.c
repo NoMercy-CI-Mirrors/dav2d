@@ -4201,20 +4201,25 @@ void bytefn(dav2d_filter_slice_cdef)(Dav2dTaskContext *const tc, const int by64)
     const Dav2dFrameContext *const f = tc->f;
     if (!(f->c->inloop_filters & (DAV2D_INLOOPFILTER_CDEF | DAV2D_INLOOPFILTER_CCSO))) return;
 
-    const size_t cdef_bak_sz = 64 + f->cur.p.stride[0] * 4 + f->cur.p.stride[1] * 8;
+    const ptrdiff_t y_stride = f->cur.p.stride[0], uv_stride = f->cur.p.stride[1];
+    const size_t y_stride_abs = (size_t)llabs(y_stride);
+    const size_t uv_stride_abs = (size_t)llabs(uv_stride);
+    const size_t cdef_bak_sz = 64 + y_stride_abs * 4 + uv_stride_abs * 8;
     if (cdef_bak_sz > tc->lf.cdef_line_sz) {
         dav2d_free_aligned(tc->lf.cdef_line_buf);
         tc->lf.cdef_line_buf = dav2d_alloc_aligned(ALLOC_CDEF, cdef_bak_sz, 32);
-        uint8_t *ptr = (uint8_t *) tc->lf.cdef_line_buf + 32;
-        tc->lf.cdef_line[0][0] = (pixel *) ptr;
-        tc->lf.cdef_line[1][0] = (pixel *) (ptr + f->cur.p.stride[0] * 2);
-        ptr += f->cur.p.stride[0] * 4;
-        tc->lf.cdef_line[0][1] = (pixel *) ptr;
-        tc->lf.cdef_line[1][1] = (pixel *) (ptr + f->cur.p.stride[1] * 2);
-        tc->lf.cdef_line[0][2] = (pixel *) (ptr + f->cur.p.stride[1] * 4);
-        tc->lf.cdef_line[1][2] = (pixel *) (ptr + f->cur.p.stride[1] * 6);
         tc->lf.cdef_line_sz = cdef_bak_sz;
     }
+    uint8_t *ptr = (uint8_t *) tc->lf.cdef_line_buf + 32;
+    const size_t y_off = y_stride < 0 ? y_stride_abs : 0;
+    const size_t uv_off = uv_stride < 0 ? uv_stride_abs : 0;
+    tc->lf.cdef_line[0][0] = (pixel *) (ptr + y_off);
+    tc->lf.cdef_line[1][0] = (pixel *) (ptr + y_stride_abs * 2 + y_off);
+    ptr += y_stride_abs * 4;
+    tc->lf.cdef_line[0][1] = (pixel *) (ptr + uv_off);
+    tc->lf.cdef_line[1][1] = (pixel *) (ptr + uv_stride_abs * 2 + uv_off);
+    tc->lf.cdef_line[0][2] = (pixel *) (ptr + uv_stride_abs * 4 + uv_off);
+    tc->lf.cdef_line[1][2] = (pixel *) (ptr + uv_stride_abs * 6 + uv_off);
 
     const int y = by64 * 64 - 8 * !!by64;
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
