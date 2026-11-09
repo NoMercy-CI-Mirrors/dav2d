@@ -2166,10 +2166,10 @@ static ALWAYS_INLINE void
 scaleup_8pel_mv_for_chroma(union mv *const mv, const enum Dav2dPixelLayout layout) {
     switch (layout) {
     case DAV2D_PIXEL_LAYOUT_I444:
-        for (int i = 0; i < 2; i++) mv[i].x <<= 1;
+        for (int i = 0; i < 2; i++) mv[i].x *= 2;
         // fall-through
     case DAV2D_PIXEL_LAYOUT_I422:
-        for (int i = 0; i < 2; i++) mv[i].y <<= 1;
+        for (int i = 0; i < 2; i++) mv[i].y *= 2;
         break;
     default: break;
     }
