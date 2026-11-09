@@ -93,6 +93,10 @@ style-check:
                   echo "Malformed commit message in $i, trailing period in subject line";
                   exit 1;
               fi;
+              if echo "$msg" | grep -qiE '^[a-z-]+-by:.*(claude|anthropic|openai|chatgpt|copilot|gemini|codex)|generated (with|by) .*(claude|chatgpt|copilot|gemini|codex)'; then
+                  echo "Commit message of $i advertises an LLM, which the VideoLAN AI policy does not allow";
+                  exit 1;
+              fi;
           done
 
 build-debian:
