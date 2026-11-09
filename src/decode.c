@@ -2541,6 +2541,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         b->amvd = 0;
         b->motion_mode = MM_TRANSLATION;
         b->refine_mv = 0;
+        b->bawp[0] = b->bawp[1] = 0;
+        b->warp_ii = 0;
         if (b->skip_mode) {
             const int max_drl_bits = f->frame_hdr->max_drl_bits;
             b->drl_idx[0] = 0;
@@ -3084,7 +3086,6 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
             b->warp_ref_idx = 0;
             b->warpmv_with_mvd = 0;
-            b->bawp[0] = b->bawp[1] = 0;
             if (is_tip) {
                 /* do nothing */
             } else if (b->inter_mode <= NEWMV) {
@@ -3322,7 +3323,6 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 memset(b->matrix, 0, sizeof(b->matrix));
             }
 
-            b->warp_ii = 0;
             if (b->inter_mode == WARPMV &&
                 imin(bw4, bh4) >= 2 && imax(bw4, bh4) <= 16)
             {

@@ -3854,8 +3854,10 @@ chroma: {}
                 hex_dump(((pixel *) f->cur.p.data[1 + pl]) + uvdstoff,
                          stride, cw4 * 4 >> ss_hor, ch4 * 4 >> ss_ver,
                          pl ? "v-pred" : "u-pred");
-    } else if (b->ref.ref[1] == -1 && (b->ref.ref[0] != TIP_FRAME ||
-                                       b->cwp_idx == 16))
+    } else if ((b->ref.ref[1] == -1 && (b->ref.ref[0] != TIP_FRAME ||
+                                        b->cwp_idx == 16)) ||
+               // compound 4xN/Nx4 blocks use single-reference chroma prediction
+               (b->ref.ref[1] != -1 && imin(bw4, bh4) == 1))
     {
         const Dav2dThreadPicture *const refp = &f->refp[b->ref.ref[0]];
         for (int pl = 0; pl < 2; pl++) {
