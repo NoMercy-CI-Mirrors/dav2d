@@ -37,8 +37,8 @@ static ALWAYS_INLINE void itx_dsp_init_x86(Dav2dInvTxfmDSPContext *const c)
     if (!(flags & DAV2D_X86_CPU_FLAG_AVX2)) return;
 
     c->cctx = BF(dav2d_cctx, avx2);
-#if BITDEPTH == 8
     assign_itx_fn( ,  4,  4, avx2);
+#if BITDEPTH == 8
     assign_itx_fn(R,  4,  8, avx2);
     assign_itx_fn(R,  4, 16, avx2);
     assign_itx_fn(R,  4, 32, avx2);
