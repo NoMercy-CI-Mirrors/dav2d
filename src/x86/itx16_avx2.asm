@@ -69,10 +69,12 @@ coef_min:       dd 0xfffe0000, 0xfff80000
 coef_max:       dd 0x0001ffff, 0x0007ffff
 pd_4:           dd 4
 pd_17:          dd 17
+pd_33:          dd 33
 pd_64:          dd 64
 pd_128:         dd 128
 pd_181:         dd 181
 pd_512:         dd 512
+pd_1024:        dd 1024
 
 %define pd_18  (adst4_mat+4*0)
 %define pd_50  (adst4_mat+4*1)
@@ -115,6 +117,7 @@ pd_512:         dd 512
 ITX_JMP_TABLE  4,  4
 ITX_JMP_TABLE  4,  8
 ITX_JMP_TABLE  8,  4
+ITX_JMP_TABLE  8,  8
 
 SECTION .text
 
@@ -863,6 +866,12 @@ INV_TXFM_FN 8, 4
 .pass2_end4:
     REPX {mova [cfq+32*x], m12}, 0, 1, 2, 3
     RET
+.write_8x8_hdpcm:
+    call m(inv_txfm_add_8x4_16bpc).write_8x4_hdpcm
+    mova                 m0, m4
+    mova                 m1, m5
+    mova                 m2, m6
+    mova                 m3, m7
 .write_8x4_hdpcm:
     pslldq               m8, m0, 4
     pslldq               m9, m1, 4
@@ -890,6 +899,7 @@ INV_TXFM_FN 8, 4
     paddd                m1, m9
     paddd                m2, m10
     paddd                m3, m11
+.write_8x4_pack:
     packssdw             m0, m1
     packssdw             m1, m2, m3
 .write_8x4:
@@ -911,6 +921,11 @@ INV_TXFM_FN 8, 4
     vextracti128 [dstq+r3   ], m1, 1
     lea                dstq, [dstq+dsq*4]
     ret
+.write_8x8:
+    call m(inv_txfm_add_8x4_16bpc).write_8x4_pack
+    packssdw             m0, m4, m5
+    packssdw             m1, m6, m7
+    jmp m(inv_txfm_add_8x4_16bpc).write_8x4
 ALIGN function_align
 .dct4:
     IDCT4_1D m9
@@ -1011,3 +1026,223 @@ ALIGN function_align
 ALIGN function_align
 .dst4:
     IDST4_1D
+
+INV_TXFM_FN 8, 8
+    WIN64_SPILL_XMM      15, 16
+    mova                 m0, [cfq+32*0]
+    mova                 m1, [cfq+32*1]
+    mova                 m2, [cfq+32*2]
+    mova                 m3, [cfq+32*3]
+    add                 cfq, 32*4
+    mova                 m4, [cfq+32*0]
+    mova                 m5, [cfq+32*1]
+    mova                 m6, [cfq+32*2]
+    mova                 m7, [cfq+32*3]
+    jmp                tx1q
+
+.pass1_dct:
+    vpbroadcastd        m11, [o(pd_64)]
+    call .dct8
+    jmp .pass1_end2
+.pass2_dct:
+    vpbroadcastd        m11, [o(pd_1024)]
+    call .dct8
+    REPX     {psrad  x, 11}, m0, m1, m2, m3, m4, m5, m6, m7
+    jmp .pass2_end
+ALIGN function_align
+.dct8:
+    IDCT8_1D
+    psubd                m3, m0, m8  ; a3
+    paddd                m0, m8      ; a0
+    paddd                m1, m2, m9  ; a1
+    psubd                m2, m9      ; a2
+    psubd                m7, m0, m6  ; out7
+    paddd                m0, m6      ; out0
+    psubd                m6, m1, m5  ; out6
+    paddd                m1, m5      ; out1
+    psubd                m5, m2, m4  ; out5
+    paddd                m2, m4      ; out2
+    psubd                m4, m3, m10 ; out4
+    paddd                m3, m10     ; out3
+    ret
+
+.dconly:
+    movd                xm2, [o(pd_33)]
+    paddd               xm2, [cfq]
+    mov               [cfq], r4d
+    or                  r4d, 2
+    psrad               xm2, 6
+    jmp m(inv_txfm_add_8x4_16bpc).dconly2
+
+.pass1_identity:
+    call .identity8
+    jmp .pass1_end
+.pass2_identity:
+    call .identity8
+    vpbroadcastd         m8, [o(pd_1024)]
+    REPX     {paddd  x, m8}, m0, m1, m2, m3, m4, m5, m6, m7
+    REPX     {psrad  x, 11}, m0, m1, m2, m3, m4, m5, m6, m7
+    test               eobd, 0x300
+    jz .pass2_end
+    test               eobd, 0x200
+    jnz .vdpcm
+.hdpcm:
+    vpbroadcastd        m13, [o(pixel_max)+bdmaxq*4]
+    lea                  r3, [dsq*3]
+    pxor               xm12, xm12
+    call m(inv_txfm_add_8x4_16bpc).write_8x8_hdpcm
+    jmp .pass2_end2
+.vdpcm:
+    paddd                m1, m0
+    paddd                m2, m1
+    paddd                m3, m2
+    paddd                m4, m3
+    paddd                m5, m4
+    paddd                m6, m5
+    paddd                m7, m6
+.pass2_end:
+    vpbroadcastd        m13, [o(pixel_max)+bdmaxq*4]
+    lea                  r3, [dsq*3]
+    pxor               xm12, xm12
+    call m(inv_txfm_add_8x4_16bpc).write_8x8
+.pass2_end2:
+    REPX {mova [cfq+32*x], m12}, -4, -3, -2, -1
+    jmp m(inv_txfm_add_8x4_16bpc).pass2_end4
+ALIGN function_align
+.identity8:
+    vpbroadcastd         m8, [o(pd_181)]
+    REPX     {pmulld x, m8}, m0, m1, m2, m3, m4, m5, m6, m7
+    ret
+
+.pass1_flipddt:
+    lea                  r3, [o(flipddt8_mat+128)]
+    jmp .pass1_dst
+.pass1_ddt:
+    lea                  r3, [o(ddt8_mat+128)]
+    jmp .pass1_dst
+.pass1_flipadst:
+    lea                  r3, [o(flipadst8_mat+128)]
+    jmp .pass1_dst
+.pass1_adst:
+    lea                  r3, [o(adst8_mat+128)]
+.pass1_dst:
+%if WIN64
+    movaps            [cfq], xm15
+%endif
+    call .dst8
+%if WIN64
+    movaps             xm15, [cfq]
+%endif
+.pass1_end:
+    vpbroadcastd         m8, [o(pd_64)]
+    REPX     {paddd x,  m8}, m0, m1, m2, m3, m4, m5, m6, m7
+.pass1_end2:
+    REPX     {psrad  x, 7 }, m0, m1, m2, m3, m4, m5, m6, m7
+    call .transpose_8x8_clip
+    jmp                tx2q
+.pass2_flipddt:
+    lea                  r3, [o(flipddt8_mat+128)]
+    jmp .pass2_dst
+.pass2_ddt:
+    lea                  r3, [o(ddt8_mat+128)]
+    jmp .pass2_dst
+.pass2_flipadst:
+    lea                  r3, [o(flipadst8_mat+128)]
+    jmp .pass2_dst
+.pass2_adst:
+    lea                  r3, [o(adst8_mat+128)]
+.pass2_dst:
+%if WIN64
+    movaps            [cfq], xm15
+%endif
+    call .dst8
+%if WIN64
+    movaps             xm15, [cfq]
+%endif
+    vpbroadcastd         m8, [o(pd_1024)]
+    REPX     {paddd  x, m8}, m0, m1, m2, m3, m4, m5, m6, m7
+    REPX     {psrad  x, 11}, m0, m1, m2, m3, m4, m5, m6, m7
+    jmp .pass2_end
+ALIGN function_align
+.dst8:
+    vpbroadcastd         m8, [r3-4*32]
+    vpbroadcastd         m9, [r3-4*24]
+    vpbroadcastd        m10, [r3-4*16]
+    vpbroadcastd        m11, [r3-4* 8]
+    vpbroadcastd        m12, [r3+4* 0]
+    vpbroadcastd        m13, [r3+4* 8]
+    vpbroadcastd        m14, [r3+4*16]
+    vpbroadcastd        m15, [r3+4*24]
+    REPX     {pmulld x, m0}, m8, m9, m10, m11, m12, m13, m14, m15
+%macro IDST8_MUL_ACCUM 1 ; src
+%assign %%i 8
+%rep 8
+    vpbroadcastd         m0, [r3+4*(%1+%%i*8-96)]
+    pmulld               m0, m%1
+    paddd          m %+ %%i, m0
+%assign %%i %%i + 1
+%endrep
+%endmacro
+    IDST8_MUL_ACCUM       1
+    IDST8_MUL_ACCUM       2
+    IDST8_MUL_ACCUM       3
+    IDST8_MUL_ACCUM       4
+    IDST8_MUL_ACCUM       5
+    IDST8_MUL_ACCUM       6
+    vpbroadcastd         m0, [r3-4*25]
+    pmulld               m0, m7
+    paddd                m0, m8
+    vpbroadcastd         m1, [r3-4*17]
+    pmulld               m1, m7
+    paddd                m1, m9
+    vpbroadcastd         m2, [r3-4* 9]
+    pmulld               m2, m7
+    paddd                m2, m10
+    vpbroadcastd         m3, [r3-4* 1]
+    pmulld               m3, m7
+    paddd                m3, m11
+    vpbroadcastd         m4, [r3+4* 7]
+    pmulld               m4, m7
+    paddd                m4, m12
+    vpbroadcastd         m5, [r3+4*15]
+    pmulld               m5, m7
+    paddd                m5, m13
+    vpbroadcastd         m6, [r3+4*23]
+    pmulld               m6, m7
+    paddd                m6, m14
+    vpbroadcastd         m8, [r3+4*31]
+    pmulld               m7, m8
+    paddd                m7, m15
+    ret
+ALIGN function_align
+.transpose_8x8_clip:
+    vpbroadcastd         m8, [o(coef_min)+bdmaxq*4]
+    vpbroadcastd         m9, [o(coef_max)+bdmaxq*4]
+    REPX     {pmaxsd x, m8}, m0, m1, m2, m3, m4, m5, m6, m7
+    REPX     {pminsd x, m9}, m0, m1, m2, m3, m4, m5, m6, m7
+.transpose_8x8:
+    punpckhdq            m8, m4, m5
+    punpckldq            m4, m5
+    punpckhdq            m5, m2, m3
+    punpckldq            m2, m3
+    punpckhdq            m3, m0, m1
+    punpckldq            m0, m1
+    punpckhdq            m1, m6, m7
+    punpckldq            m6, m7
+    punpcklqdq           m7, m4, m6
+    punpckhqdq           m4, m6
+    punpckhqdq           m6, m8, m1
+    punpcklqdq           m8, m1
+    punpckhqdq           m1, m0, m2
+    punpcklqdq           m0, m2
+    punpcklqdq           m2, m3, m5
+    punpckhqdq           m3, m5
+    vperm2i128           m5, m1, m4, 0x31
+    vinserti128          m1, xm4, 1
+    vperm2i128           m4, m0, m7, 0x31
+    vinserti128          m0, xm7, 1
+    vperm2i128           m7, m3, m6, 0x31
+    vinserti128          m3, xm6, 1
+    vperm2i128           m6, m2, m8, 0x31
+    vinserti128          m2, xm8, 1
+    ret
