@@ -55,7 +55,7 @@ index 9af694416..699c7c3b2 100644
      }
 +#if DEBUG_BLOCK_INFO
 +    if (print) {
-+      coef_dump(buf0, 8, 8, 3, "dq");
++      coef_dump(buf0, sb_size, sb_size, 3, "dq");
 +    }
 +#endif
 +

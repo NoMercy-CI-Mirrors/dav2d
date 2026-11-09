@@ -2815,7 +2815,8 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
         if (stx) {
             if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
-                coef_dump(cf, 8, 8, 3, "dq");
+                const int sz = tw >= 8 && th >= 8 ? 8 : 4;
+                coef_dump(cf, sz, sz, 3, "dq");
             }
             const int mask = (1 << HOR_PRED)       | (1 << HOR_DOWN_PRED) |
                              (1 << VERT_LEFT_PRED) | (1 << SMOOTH_H_PRED);
