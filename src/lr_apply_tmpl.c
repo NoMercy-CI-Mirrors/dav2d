@@ -410,8 +410,8 @@ void bytefn(dav2d_lr_slice)(Dav2dFrameContext *const f, pixel *const dst[3],
     const ptrdiff_t *const dst_stride = f->cur.p.stride;
     const int restore_planes = f->lf.restore_planes;
     const int not_last = by64 + 1 < f->sb64h;
-    const int sb128 = f->frame_hdr->sb128, sb64sz = 1 << sb128;
-    int first_sby_in_tile_row = f->lf.start_of_tile_row[by64 >> sb128];
+    const int sbsz = f->frame_hdr->sbsz, sb64sz = 1 << sbsz;
+    int first_sby_in_tile_row = f->lf.start_of_tile_row[by64 >> sbsz];
     const int tile_row = first_sby_in_tile_row >> 1;
     first_sby_in_tile_row &= !(by64 & (sb64sz - 1));
     const int next_row_y = (by64 + 1) << 6;

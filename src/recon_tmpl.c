@@ -4169,8 +4169,8 @@ void bytefn(dav2d_filter_slice_deblock_cols)(Dav2dFrameContext *const f, const i
         f->lf.p[2] + (y * PXSTRIDE(f->cur.p.stride[1]) >> ss_ver)
     };
     Av2Filter *mask = f->lf.mask + (by64 >> 2) * f->sb256w;
-    const int sb128 = f->frame_hdr->sb128, sb64sz = 1 << sb128;
-    const int start_of_tile_row = f->lf.start_of_tile_row[by64 >> sb128];
+    const int sbsz = f->frame_hdr->sbsz, sb64sz = 1 << sbsz;
+    const int start_of_tile_row = f->lf.start_of_tile_row[by64 >> sbsz];
     bytefn(dav2d_deblock_slice_cols)(f, p, mask, by64,
                                      start_of_tile_row & 1 && !(by64 & (sb64sz - 1)) ?
                                      start_of_tile_row >> 1 : 0);

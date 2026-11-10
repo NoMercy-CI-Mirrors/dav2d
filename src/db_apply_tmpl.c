@@ -293,9 +293,9 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
                                       int y64, const int start_of_tile_row)
 {
     int x64, have_left;
-    const int sb128 = f->frame_hdr->sb128;
+    const int sbsz = f->frame_hdr->sbsz;
     const int starty4 = (y64 * 16) & 0x30;
-    const int sbl2 = 4 + f->frame_hdr->sb128;
+    const int sbl2 = 4 + f->frame_hdr->sbsz;
     const int halign = (f->bh + 63) & ~63;
     const int ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     const int ss_hor = f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I444;
@@ -317,7 +317,7 @@ void bytefn(dav2d_deblock_slice_cols)(const Dav2dFrameContext *const f,
             const int sbx = f->frame_hdr->tiling.t.col_start_sb[tile_col];
             if ((sbx << sbl2) >= f->bw) break;
             const int bx4 = (sbx << sbl2) & 0x30, cbx4 = bx4 >> ss_hor;
-            const int x256 = sbx >> (2 - sb128);
+            const int x256 = sbx >> (2 - sbsz);
 
             uint16_t (*const y_hmask)[4] = lflvl[x256].filter_y[0][bx4];
             int sidx = y64 & 3;

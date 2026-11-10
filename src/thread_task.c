@@ -413,10 +413,10 @@ static inline int check_tile(Dav2dTask *const t, Dav2dFrameContext *const f) {
     {
         // check reference state
         const Dav2dThreadPicture *p = &f->cur;
-        const int sb128 = f->frame_hdr->sb128, sb64sz = 1 << sb128;
+        const int sbsz = f->frame_hdr->sbsz, sb64sz = 1 << sbsz;
         const int ss_ver = p->p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
         const unsigned p_b = (t->by64 + sb64sz) << 6;
-        const int tile_sby = (t->by64 >> f->frame_hdr->sb128) -
+        const int tile_sby = (t->by64 >> f->frame_hdr->sbsz) -
                              (ts->tiling.row_start >> f->sb_shift);
         const int (*const lowest_px)[2] = ts->lowest_pixel[tile_sby];
         for (int n = t->deps_skip; n < f->frame_hdr->n_ref_frames;
@@ -658,8 +658,8 @@ void *dav2d_worker_task(void *data) {
                         if (p2 < t->recon_progress) goto next;
                         atomic_fetch_or(&f->task_thread.error, p2 == TILE_ERROR);
                     }
-                    const int sb128 = f->frame_hdr->sb128;
-                    const int inc = p ? 1 << sb128 : 1;
+                    const int sbsz = f->frame_hdr->sbsz;
+                    const int inc = p ? 1 << sbsz : 1;
                     if (t->type != DAV2D_TASK_TYPE_ENTROPY_PROGRESS && c->n_fc > 1) {
                         atomic_store(&f->cur.progress[1],
                                      atomic_load(&f->task_thread.error) ?
@@ -674,7 +674,7 @@ void *dav2d_worker_task(void *data) {
                         *next_t = *t;
                         next_t->by64 += inc;
                         const int ntr = f->frame_thread.next_tile_row[p] + 1;
-                        const int start = f->frame_hdr->tiling.t.row_start_sb[ntr] << sb128;
+                        const int start = f->frame_hdr->tiling.t.row_start_sb[ntr] << sbsz;
                         if (next_t->by64 == start)
                             f->frame_thread.next_tile_row[p] = ntr;
                         next_t->recon_progress = next_t->by64 + inc;
@@ -734,7 +734,7 @@ void *dav2d_worker_task(void *data) {
         // run it
         tc->f = f;
         int by64 = t->by64;
-        const int sb128 = f->frame_hdr->sb128, sb64sz = 1 << sb128;
+        const int sbsz = f->frame_hdr->sbsz, sb64sz = 1 << sbsz;
         switch (t->type) {
         case DAV2D_TASK_TYPE_INIT: {
             assert(c->n_fc > 1);

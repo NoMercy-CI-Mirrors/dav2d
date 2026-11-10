@@ -1038,7 +1038,7 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         if (!b->mv[0].n) {
             // I don't know if this can actually happen, but AVM has code here
             // to force the refmv to a nonzero value
-            const int sbsz = 64 << f->frame_hdr->sb128;
+            const int sbsz = 64 << f->frame_hdr->sbsz;
             if (t->by - f->sb_step < ts->tiling.row_start) {
                 b->mv[0].x = -(8 * (sbsz + 256));
             } else {
@@ -1080,9 +1080,9 @@ static int recon_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             src_top    += border_top - src_top;
         }
 
-        const int sbx = (t->bx >> (4 + f->frame_hdr->sb128)) << (6 + f->frame_hdr->sb128);
-        const int sby = (t->by >> (4 + f->frame_hdr->sb128)) << (6 + f->frame_hdr->sb128);
-        const int sb_size = 1 << (6 + f->frame_hdr->sb128);
+        const int sbx = (t->bx >> (4 + f->frame_hdr->sbsz)) << (6 + f->frame_hdr->sbsz);
+        const int sby = (t->by >> (4 + f->frame_hdr->sbsz)) << (6 + f->frame_hdr->sbsz);
+        const int sb_size = 1 << (6 + f->frame_hdr->sbsz);
         // check for overlap with current superblock
         if (src_bottom > sby && src_right > sbx) {
             if (src_top - border_top >= src_bottom - sby) {
@@ -1975,7 +1975,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
     }
 
     // delta-q/lf
-    if (has_luma && !((t->bx | t->by) & (63 >> (2 - f->frame_hdr->sb128)))) {
+    if (has_luma && !((t->bx | t->by) & (63 >> (2 - f->frame_hdr->sbsz)))) {
         const int prev_qidx = ts->last_qidx;
         const int have_delta_q = f->frame_hdr->delta.q.present &&
                                  (bs != f->root_bs || !b->skip_txfm);
@@ -2012,7 +2012,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         }
 
         uint16_t *qidx_ptr = &t->lf_mask->qidx[(bx4 >> 4) + ((by4 & 0x30) >> 2)];
-        const int sbsz64 = 1 << f->frame_hdr->sb128;
+        const int sbsz64 = 1 << f->frame_hdr->sbsz;
         for (int y64 = 0; y64 < sbsz64; y64++) {
             for (int x64 = 0; x64 < sbsz64; x64++)
                 qidx_ptr[x64] = new_qidx;
@@ -5307,13 +5307,13 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
         reset_context(&f->a[n], IS_KEY_OR_INTRA(f->frame_hdr),
                       f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT);
 
-    const int sb128 = f->frame_hdr->sb128;
+    const int sbsz = f->frame_hdr->sbsz;
     for (int tile_row = 0; tile_row < f->frame_hdr->tiling.t.rows; tile_row++) {
         const int sby_start = f->frame_hdr->tiling.t.row_start_sb[tile_row];
         const int sbh_end =
             imin(f->frame_hdr->tiling.t.row_start_sb[tile_row + 1], f->sbh);
         for (int sby = sby_start; sby < sbh_end; sby++) {
-            t->by = sby << (4 + f->frame_hdr->sb128);
+            t->by = sby << (4 + f->frame_hdr->sbsz);
             const int by_end = (t->by + f->sb_step) >> 1;
             if (f->frame_hdr->use_ref_frame_mvs) {
                 dav2d_refmvs_load_tmvs(&f->c->refmvs_dsp, &f->rf, tile_row,
@@ -5327,8 +5327,8 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
         // post filters (deblock + cdef + ccso + ...)
         // do this after completing full tiles, so that intra bc works correctly
         const int sb64h_end =
-            imin(f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] << sb128, f->sb64h);
-        for (int by64 = sby_start << sb128; by64 < sb64h_end; by64++) {
+            imin(f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] << sbsz, f->sb64h);
+        for (int by64 = sby_start << sbsz; by64 < sb64h_end; by64++) {
             f->bd_fn.filter_slice(f, by64);
         }
     }
@@ -5666,14 +5666,14 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     f->ss_ver = f->cur.p.p.layout == DAV2D_PIXEL_LAYOUT_I420;
     f->ss_hor = f->cur.p.p.layout - 1 < (unsigned) DAV2D_PIXEL_LAYOUT_I444 - 1;
     f->root_bs = (const uint8_t[]) { BS_64x64, BS_128x128,
-                                     BS_256x256 }[f->frame_hdr->sb128];
+                                     BS_256x256 }[f->frame_hdr->sbsz];
     f->bw = ((f->frame_hdr->width + 7) >> 3) << 1;
     f->bh = ((f->frame_hdr->height + 7) >> 3) << 1;
     f->sb256w = (f->bw + 63) >> 6;
     f->sb256h = (f->bh + 63) >> 6;
     f->sb64h = (f->bh + 15) >> 4;
-    f->sb_shift = 4 + f->frame_hdr->sb128;
-    f->sb_step = 16 << f->frame_hdr->sb128;
+    f->sb_shift = 4 + f->frame_hdr->sbsz;
+    f->sb_step = 16 << f->frame_hdr->sbsz;
     f->sbh = (f->bh + f->sb_step - 1) >> f->sb_shift;
     f->b4_stride = (f->bw + 63) & ~63;
     f->bitdepth_max = (1 << f->cur.p.p.bpc) - 1;

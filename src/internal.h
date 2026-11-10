@@ -233,7 +233,7 @@ struct Dav2dContext {
 struct Dav2dTask {
     unsigned frame_idx;         // frame thread id
     enum TaskType type;         // task work
-    int by64;                   // sby can be derived using by64 >> sb128
+    int by64;                   // sby can be derived using by64 >> sbsz
 
     // task dependencies
     int recon_progress, deblock_progress;
@@ -347,7 +347,7 @@ struct Dav2dFrameContext {
         uint8_t *segmap_uv;
         int mask_sz /* w*h */;
         ptrdiff_t uv_segmap_stride;
-        /* 0-1: (stride*sbh*4) << sb128 if n_tc > 1, else stride*4;
+        /* 0-1: (stride*sbh*4) << sbsz if n_tc > 1, else stride*4;
          * 2-3: stride*(n_tile_rows-1)*4 if n_tc==1, double that otherwise */
         int lr_buf_plane_sz[4];
         int re_sz /* h */;

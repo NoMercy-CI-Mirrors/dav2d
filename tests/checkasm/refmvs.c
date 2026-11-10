@@ -466,8 +466,8 @@ static void check_tip_projection_fn(const Dav2dRefmvsDSPContext *const c) {
 
     for (int sample_step = 1; sample_step <= 2; sample_step++)
         if (check_func(c->tip_projection, "tip_projection_ss%d", sample_step)) {
-            const int sb128 = sample_step == 1 ? rnd() % 3 : 1 + (rnd() & 1);
-            const int sbsz8 = 8 << sb128;
+            const int sbsz = sample_step == 1 ? rnd() % 3 : 1 + (rnd() & 1);
+            const int sbsz8 = 8 << sbsz;
             const int tip_delta = 1 + (rnd() % 31);
             const ptrdiff_t stride = 256;
 
@@ -523,8 +523,8 @@ static void check_tip_fn(const tip_fn fn, const char *const name) {
 
     for (int sample_step = 1; sample_step <= 2; sample_step++)
         if (check_func(fn, "%s_ss%d", name, sample_step)) {
-            const int sb128 = sample_step == 1 ? rnd() % 3 : 1 + (rnd() & 1);
-            const int sbsz8 = 8 << sb128;
+            const int sbsz = sample_step == 1 ? rnd() % 3 : 1 + (rnd() & 1);
+            const int sbsz8 = 8 << sbsz;
             const int tip_delta = 1 + (rnd() % 31);
             const ptrdiff_t stride = 256;
 
@@ -576,8 +576,8 @@ static void check_fill_gap_proj_fn(const Dav2dRefmvsDSPContext *const c) {
                  int col_start8, int col_end8, int h8);
 
     if (check_func(c->fill_gap_proj, "fill_gap_proj")) {
-        const int sb128 = 1 + (rnd() & 1);
-        const int sbsz8 = 8 << sb128;
+        const int sbsz = 1 + (rnd() & 1);
+        const int sbsz8 = 8 << sbsz;
         const int sample_step = 2;
         const ptrdiff_t stride = 256;
 
@@ -661,8 +661,8 @@ static void check_fill_gap_traj_fn(const Dav2dRefmvsDSPContext *const c) {
                  int col_start8, int col_end8, int h8);
 
     if (check_func(c->fill_gap_traj, "fill_gap_traj")) {
-        const int sb128 = 1 + (rnd() & 1);
-        const int sbsz8 = 8 << sb128;
+        const int sbsz = 1 + (rnd() & 1);
+        const int sbsz8 = 8 << sbsz;
         const int sample_step = 2;
         const ptrdiff_t stride = 256;
 
@@ -768,11 +768,11 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
                                "load_tmvs_refs_traj%d_mfmv%d_ss%d",
                                traj, mfmv, sample_step))
                 {
-                    const int sb128 = sample_step == 1 ? rnd() % 3 : 1 + (rnd() & 1);
-                    const int sbsz8 = 8 << sb128;
+                    const int sbsz = sample_step == 1 ? rnd() % 3 : 1 + (rnd() & 1);
+                    const int sbsz8 = 8 << sbsz;
                     frm_hdr.tmvp_sample_step = sample_step;
-                    const int mfmv_sb128 = sb128 && sample_step > 1;
-                    const int mfmv_sbsz8 = rf.mfmv_sbsz8 = 8 << mfmv_sb128;
+                    const int mfmv_sbsz = sbsz && sample_step > 1;
+                    const int mfmv_sbsz8 = rf.mfmv_sbsz8 = 8 << mfmv_sbsz;
                     const ptrdiff_t stride = rf.rp_stride = 256;
 
                     for (int n = 0; n < 7; n++) {
@@ -788,7 +788,7 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
                     seq_hdr.mv_traj = traj;
                     rf.mfmv_edge = mfmv_sbsz8 >> (sample_step == 1);
                     rf.sbsz = sbsz8 << 1;
-                    rf.mfmv_k_shift = 3 + mfmv_sb128;
+                    rf.mfmv_k_shift = 3 + mfmv_sbsz;
                     refmvs_temporal_block *rp_ref[7];
                     rf.rp_ref = rp_ref;
 

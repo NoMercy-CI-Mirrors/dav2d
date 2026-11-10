@@ -1097,7 +1097,7 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
         DEBUG_REFMV_printf("Intrabc defaults [%d|%d]\n", *cnt, warp ? cnt[1] : 0);
 
         if (n_refmvs < rt->rf->frm_hdr->max_bvp_drl_bits + 1) {
-            const int sbsz = 64 << rt->rf->frm_hdr->sb128;
+            const int sbsz = 64 << rt->rf->frm_hdr->sbsz;
             mvstack[n_refmvs].mv[0].x = 0;
             mvstack[n_refmvs].mv[0].y = -(sbsz * 8);
             mvstack[n_refmvs].weight = 0;
@@ -1165,7 +1165,7 @@ void dav2d_refmvs_bank_update(refmvs_tile *const rt, const enum BlockSize bs,
                               const int by4, const int bx4)
 {
     const refmvs_frame *const rf = rt->rf;
-    const int bsh = 1 + rf->frm_hdr->sb128, bsz = 1 << bsh;
+    const int bsh = 1 + rf->frm_hdr->sbsz, bsz = 1 << bsh;
     if (!((by4 | bx4) & (rf->sbsz - 1))) {
         const uint8_t *const b_dim = dav2d_block_dimensions[bs];
         const int w = imax(1, b_dim[0] >> bsh) * imax(1, b_dim[1] >> bsh);
@@ -2136,10 +2136,10 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     const int n_tile_rows = have_threading ? frm_hdr->tiling.t.rows : 1;
     const int n_blocks = rp_stride * n_tile_rows;
 
-    rf->sbsz = 16 << frm_hdr->sb128;
-    const int mfmv_sb128 = frm_hdr->sb128 && frm_hdr->tmvp_sample_step > 1;
-    rf->mfmv_k_shift = 3 + mfmv_sb128;
-    rf->mfmv_sbsz8 = 8 << mfmv_sb128;
+    rf->sbsz = 16 << frm_hdr->sbsz;
+    const int mfmv_sbsz = frm_hdr->sbsz && frm_hdr->tmvp_sample_step > 1;
+    rf->mfmv_k_shift = 3 + mfmv_sbsz;
+    rf->mfmv_sbsz8 = 8 << mfmv_sbsz;
     rf->mfmv_edge = rf->mfmv_sbsz8 >> (frm_hdr->tmvp_sample_step == 1);
     rf->seq_hdr = seq_hdr;
     rf->frm_hdr = frm_hdr;

@@ -407,7 +407,7 @@ typedef struct Dav2dSequenceHeader {
     uint8_t tlayer_dependency_present, mlayer_dependency_present;
     uint8_t tlayer_dependencies[8], mlayer_dependencies[8];
 
-    uint8_t /*enum Dav2dSuperblockSize*/ sb128;
+    uint8_t /*enum Dav2dSuperblockSize*/ sbsz;
 
     // partition flags
     uint8_t sdp, ext_sdp;
@@ -553,7 +553,7 @@ typedef struct Dav2dFrameHeader {
         int8_t ref[2];
     } tip;
     // not literally coded, but derived from seqhdr/frame_type
-    uint8_t /*enum Dav2dSuperblockSize*/ sb128;
+    uint8_t /*enum Dav2dSuperblockSize*/ sbsz;
     struct {
         Dav2dTileInfo t;
         uint8_t n_bytes;
