@@ -142,8 +142,9 @@ static void backup_row_luma(pixel *dst, const pixel *src,
 {
     if (!ss_ver) {
         if (edges & LR_HAVE_LEFT) {
+            const pixel *const left1 = left ? left[0] + 8 : src;
             for (int x = -(4 >> ss_hor); x < 0; x++)
-                dst[x] = src[x * (1 << ss_hor)];
+                dst[x] = left1[x * (1 << ss_hor)];
         } else {
             for (int x = -(4 >> ss_hor); x < 0; x++)
                 dst[x] = src[0];
@@ -358,8 +359,8 @@ wiener_uv_luma_c(coef *dst, const pixel *luma, const ptrdiff_t stride,
         backup_row_luma(bak_rows[0], top, 0, NULL, w, edges, ss_hor, ss_ver,
                         ds_flt);
         ptrs[0] = bak_rows[0];
-        backup_row_luma(bak_rows[1], top, stride, NULL, w, edges, ss_hor, ss_ver,
-                        ds_flt);
+        backup_row_luma(bak_rows[1], top + !ss_ver * PXSTRIDE(stride), stride,
+                        NULL, w, edges, ss_hor, ss_ver, ds_flt);
         ptrs[1] = bak_rows[1];
     } else {
         ptrs[0] = ptrs[1] = ptrs[2];
