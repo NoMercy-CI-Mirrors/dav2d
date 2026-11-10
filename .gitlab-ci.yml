@@ -420,6 +420,9 @@ test-debian:
         - ninja coverage-xml
         - grep -Eo 'line-rate="[^"]+"' meson-logs/coverage.xml | head -n 1 |
           grep -Eo '[0-9.]+' | awk '{ print "coverage:", $1 * 100 } '
+        - time meson test -v --suite testdata_seek-stress --test-args "--threads 2 --framedelay 1"
+        - time meson test -v --suite testdata_seek-stress --test-args "--threads 2 --framedelay 2"
+        - time meson test -v --suite testdata --test-args "--threads=1 --negstride"
     coverage: '/^coverage: (\d+.\d+)$/'
     artifacts:
         expose_as: 'Coverage HTML report'
@@ -596,6 +599,7 @@ test-debian-tsan:
         - exit_code=0
         - time meson test -v --setup=sanitizer --suite testdata --test-args "--threads 2 --framedelay 1"             || exit_code=$((exit_code + $?))
         - time meson test -v --setup=sanitizer --suite testdata --test-args "--threads 2 --framedelay 2"             || exit_code=$((exit_code + $?))
+        - time meson test -v --setup=sanitizer --suite testdata --test-args "--threads 2 --framedelay 2 --negstride" || exit_code=$((exit_code + $?))
         - if [ $exit_code -ne 0 ]; then exit $exit_code; fi
 
 test-win64:
