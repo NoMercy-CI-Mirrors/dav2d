@@ -192,27 +192,44 @@ static void lr_stripe(const Dav2dFrameContext *const f, pixel *const p[3],
                       LR_HAVE_BOTTOM_INTEGRATED)) == LR_HAVE_TOP &&
             y + 8 < f->bh * 4 ? 8 : 0;
         const int sb256_idx = f->sb256w * ((y + inc) >> 8) + sb256x;
-        const int y4 = (y & 255) >> 2;
         const int gdf = (f->c->inloop_filters & DAV2D_INLOOPFILTER_GDF) &&
                         f->lf.mask[sb256_idx].gdf[(((y + inc) >> 4) & 12) +
                                                   sb64x_idx];
-        const uint16_t (*ll_mask_y)[4] = (const uint16_t(*)[4])
-                &f->lf.mask[sb256_idx].lossless_mask_y[y4][sb64x_idx];
+        const uint16_t (*ll_mask_y)[4], (*ll_mask_uv)[4];
+        uint16_t ll_mask_mem[2][16][4];
+        if (!f->frame_hdr->any_lossless) {
+            // without lossless segments, the lossless masks are all zero
+            ll_mask_y = f->lf.mask[0].lossless_mask_y;
+            ll_mask_uv = f->lf.mask[0].lossless_mask_uv;
+        } else {
+            const int y4 = y >> 2, h4 = stripe_h >> 2;
+            const int uv_y4 = y4 >> ss_ver, uv_sb_mask = (64 >> ss_ver) - 1;
+            const Av2Filter *const m = &f->lf.mask[f->sb256w * (y4 >> 6) + sb256x];
+            if (((y4 + h4 - 1) >> 6) == (y4 >> 6)) {
+                ll_mask_y = (const uint16_t(*)[4])
+                    &m->lossless_mask_y[y4 & 63][sb64x_idx];
+                ll_mask_uv = (const uint16_t(*)[4])
+                    &m->lossless_mask_uv[uv_y4 & uv_sb_mask][sb64x_idx];
+            } else {
+                // stripes are offset by 8 luma rows, so they can cross a sb256
+                // boundary, in which case the rows come from two sb256 entries
+                for (int yy = 0; yy < h4; yy++) {
+                    const Av2Filter *const mm =
+                        ((y4 + yy) ^ y4) & ~63 ? m + f->sb256w : m;
+                    ll_mask_mem[0][yy][0] = mm->lossless_mask_y[(y4 + yy) & 63][sb64x_idx];
+                }
+                for (int yy = 0; yy < h4 >> ss_ver; yy++) {
+                    const Av2Filter *const mm =
+                        ((uv_y4 + yy) ^ uv_y4) & ~uv_sb_mask ? m + f->sb256w : m;
+                    ll_mask_mem[1][yy][0] =
+                        mm->lossless_mask_uv[(uv_y4 + yy) & uv_sb_mask][sb64x_idx];
+                }
+                ll_mask_y = ll_mask_mem[0];
+                ll_mask_uv = ll_mask_mem[1];
+            }
+        }
 
         if (layout != DAV2D_PIXEL_LAYOUT_I400) {
-            const uint16_t (*ll_mask_uv)[4];
-            uint16_t ll_uv_mask_mem[16][4];
-            if (!ss_hor) {
-                ll_mask_uv = (const uint16_t(*)[4])
-                    &f->lf.mask[sb256_idx].lossless_mask_uv[y4][sb64x_idx];
-            } else {
-                ll_mask_uv = (const uint16_t(*)[4])
-                    &f->lf.mask[sb256_idx].lossless_mask_uv[y4 >> ss_ver][sb64x_idx];
-                const int end_y = stripe_h >> 2 >> ss_ver;
-                for (int yy = 0; yy < end_y; yy++, ll_mask_uv++)
-                    ll_uv_mask_mem[yy][0] = ll_mask_uv[0][0] | (ll_mask_uv[0][1] << 8);
-                ll_mask_uv = ll_uv_mask_mem;
-            }
             for (int pl = 1; pl <= 2; pl++) {
                 if (uv_filter[pl - 1]) {
                     const pixel *top_ptr = top[0] ? top[0] : lpf[0];
