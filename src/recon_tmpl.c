@@ -1552,6 +1552,9 @@ chroma: {}
 
     Dav2dTileState *const ts = t->ts;
     enum TxfmType y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+    const int y_txtp_coloc = lbs == cbs &&
+        (!f->frame_hdr->segmentation.lossless[b->seg_id] ||
+         IS_INTER_OR_SWITCH(f->frame_hdr));
     align_cf_buffer(0, uv_t_dim);
     coef *cf[2] = { ts->frame_thread[0].cf };
     ts->frame_thread[0].cf += cbw4ss * cbh4ss * 16 * 2;
@@ -1563,7 +1566,7 @@ chroma: {}
             int x;
             for (x = 0; x < cw4ss; x += uv_t_dim->w) {
                 const ptrdiff_t i = y * cbw4ss + x;
-                if (lbs == cbs)
+                if (y_txtp_coloc)
                     y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
                 enum TxfmType uv_txtp = y_txtp;
                 uint8_t cf_ctx;
@@ -3782,6 +3785,9 @@ chroma: {}
             }
         } else {
             enum TxfmType y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
+            const int y_txtp_coloc = lbs == cbs_stage[0] &&
+                (!f->frame_hdr->segmentation.lossless[b->seg_id] ||
+                 IS_INTER_OR_SWITCH(f->frame_hdr));
             uint16_t /*enum TxfmType*/ (*const txtp)[2] = t->chroma_txtp;
             int16_t (*const uv_eob)[2] = t->chroma_eob;
             uint8_t cf_ctx[2];
@@ -3793,7 +3799,7 @@ chroma: {}
                     int x;
                     for (x = 0; x < cw4ss; x += uv_t_dim->w) {
                         const ptrdiff_t i = y * cbw4ss + x;
-                        if (lbs == cbs_stage[0])
+                        if (y_txtp_coloc)
                             y_txtp = t->txtp_map[(t->by & 15) * 16 + (t->bx & 15)];
                         enum TxfmType uv_txtp = y_txtp;
                         const int eob =
