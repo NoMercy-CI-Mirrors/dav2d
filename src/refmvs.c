@@ -2156,8 +2156,8 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
         const size_t rp_proj_sz = have_frame_threading ?
             sizeof(*rf->rp_proj) * ((rf->ih8 + 31) & ~31) * (rp_stride >> 5):
             sizeof(*rf->rp_proj) * (2 + sbsz8) * (n_blocks >> 5);
-        const size_t rp_traj_sz = sizeof(mv) * sbsz8 * n_blocks;
-        const size_t rp_map_sz = sizeof(**rf->rp_map) * sbsz8 * n_blocks;
+        const size_t rp_traj_sz = sizeof(**rf->rp_traj) * sbsz8 * n_blocks;
+        const size_t rp_map_sz = sizeof(***rf->rp_map) * sbsz8 * n_blocks;
         const size_t r_above_sz = sizeof(*rf->ra) * n_blocks;
         dav2d_free_aligned(rf->rp_proj);
         uint8_t *mem =
