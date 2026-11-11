@@ -2982,8 +2982,10 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     { 8, 12, 4, 10, 6 },
                     { 8, 12, 4, 20, -4 },
                 };
-                b->cwp_idx = cwp_weighting_factor[!(f->refdir[b->ref.ref[0]] ^
-                                                    f->refdir[b->ref.ref[1]])][n];
+                const int d0 = f->refdist[b->ref.ref[0]];
+                const int d1 = f->refdist[b->ref.ref[1]];
+                const int same_side = (d0 > 0 && d1 > 0) || (d0 < 0 && d1 < 0);
+                b->cwp_idx = cwp_weighting_factor[same_side][n];
                 if (coded_mode != b->inter_mode && b->cwp_idx != 8) {
                     assert(f->frame_hdr->opfl_refine_type == DAV2D_OPFL_REFINE_ALL);
                     b->inter_mode = coded_mode;
