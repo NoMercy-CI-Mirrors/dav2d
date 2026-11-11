@@ -2676,6 +2676,8 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
     case DAV2D_OBU_BRIDGE:
     case DAV2D_OBU_RAS: {
         if (!c->seq_hdr) goto error;
+        const int first_layer_in_tu = !c->seen_layer_in_tu;
+        c->seen_layer_in_tu = 1;
         const int hdr_only = type == DAV2D_OBU_SEF || type == DAV2D_OBU_LEADING_SEF ||
                              type == DAV2D_OBU_TIP || type == DAV2D_OBU_LEADING_TIP ||
                              type == DAV2D_OBU_BRIDGE /* || bru frame inactive */;
@@ -2701,6 +2703,20 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 goto error;
             }
             c->n_frame_hdr_bits = dav2d_get_bits_pos(&gb) - hdr_start;
+            // a closed-loop key frame that starts a temporal unit (but doesn't
+            // refresh all slots, because the sequence has multiple embedded
+            // layers) removes all references that it doesn't refresh
+            if (type == DAV2D_OBU_CLOSED_LOOP_KF && first_layer_in_tu) {
+                for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
+                    if (c->frame_hdr->refresh_frame_flags & (1 << i)) continue;
+                    if (c->refs[i].p.p.frame_hdr)
+                        dav2d_thread_picture_unref(&c->refs[i].p);
+                    dav2d_ref_dec(&c->refs[i].segmap);
+                    dav2d_ref_dec(&c->refs[i].refmvs);
+                    dav2d_ref_dec(&c->refs[i].ccsomap);
+                    dav2d_cdf_thread_unref(&c->cdf[i]);
+                }
+            }
             for (int n = 0; n < c->n_tile_data; n++)
                 dav2d_data_unref_internal(&c->tile[n].data);
             c->n_tile_data = 0;
@@ -2950,6 +2966,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
         c->frame_flags |= PICTURE_FLAG_NEW_TEMPORAL_UNIT;
 #endif
         memset(c->qm_protected, 0, sizeof(c->qm_protected));
+        c->seen_layer_in_tu = 0;
         break;
     case DAV2D_OBU_PADDING:
         // ignore OBUs we don't care about

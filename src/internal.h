@@ -205,6 +205,7 @@ struct Dav2dContext {
 
     Dav2dPicAllocator allocator;
     uint8_t qm_protected[15];
+    uint8_t seen_layer_in_tu;
     int apply_grain;
     int operating_point;
     unsigned operating_point_idc;
