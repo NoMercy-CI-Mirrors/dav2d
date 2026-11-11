@@ -131,7 +131,7 @@ struct Dav2dContext {
         int res;
         // FIXME event/frame_flags
     } *dpb; // output buffer management
-    int dpb_in, dpb_out, dpb_sz, dpb_poc, drain;
+    int dpb_in, dpb_out, dpb_sz, dpb_poc, dpb_mlayer, drain;
     atomic_int flush_mem, *flush;
     struct {
         unsigned next;

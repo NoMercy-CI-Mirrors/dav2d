@@ -308,6 +308,14 @@ error:
     return DAV2D_ERR(ENOMEM);
 }
 
+static int get_output_order_diff(const Dav2dSequenceHeader *const seq_hdr,
+                                 const int poc_a, const int mlayer_a,
+                                 const int poc_b, const int mlayer_b)
+{
+    return get_poc_diff(seq_hdr->order_hint_n_bits, poc_a, poc_b) *
+               (seq_hdr->max_mlayer_id + 1) + mlayer_a - mlayer_b;
+}
+
 static struct OutputQueue *queue_append(Dav2dContext *const c,
                                         Dav2dThreadPicture *const p)
 {
@@ -317,30 +325,35 @@ static struct OutputQueue *queue_append(Dav2dContext *const c,
     if (c->dpb_in == c->dpb_sz) c->dpb_in = 0;
     assert(c->dpb_in != c->dpb_out);
     assert(c->output_invisible_frames || c->seq_hdr->monotonic || !c->dpb_poc ||
-           c->dpb_poc != p->p.frame_hdr->frame_offset);
+           c->dpb_poc != p->p.frame_hdr->frame_offset ||
+           c->dpb_mlayer != p->p.frame_hdr->mlayer_id);
     c->dpb_poc = p->p.frame_hdr->frame_offset;
+    c->dpb_mlayer = p->p.frame_hdr->mlayer_id;
     return q;
 }
 
 static void queue_flush(Dav2dContext *const c) {
     if (!c->seq_hdr) return;
 
-    const int nb = c->seq_hdr->order_hint_n_bits;
+    const Dav2dSequenceHeader *const seq_hdr = c->seq_hdr;
     int mask = 0;
     for (;;) {
-        int cand_n = -1, cand_poc;
+        int cand_n = -1, cand_poc, cand_mlayer;
         for (int n = 0, m = 1; n < DAV2D_NUM_REF_FRAMES; n++, m <<= 1) {
             if (mask & m) continue;
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
             assert(hdr);
             if (!hdr->show_implicit) continue;
-            const int ipoc = hdr->frame_offset;
-            if (get_poc_diff(nb, ipoc, c->dpb_poc) > 0 &&
-                (cand_n == -1 || get_poc_diff(nb, ipoc, cand_poc) < 0))
+            const int ipoc = hdr->frame_offset, imlayer = hdr->mlayer_id;
+            if (get_output_order_diff(seq_hdr, ipoc, imlayer,
+                                      c->dpb_poc, c->dpb_mlayer) > 0 &&
+                (cand_n == -1 || get_output_order_diff(seq_hdr, ipoc, imlayer,
+                                                       cand_poc, cand_mlayer) < 0))
             {
                 cand_n = n;
                 cand_poc = ipoc;
+                cand_mlayer = imlayer;
             }
         }
         if (cand_n == -1) break;
@@ -357,29 +370,35 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
 
     if (c->output_invisible_frames) return queue_append(c, p);
 
-    // FIXME the remainder of this code is not multi-layer-compatible yet
-    const int nb = c->seq_hdr->order_hint_n_bits;
+    const Dav2dSequenceHeader *const seq_hdr = c->seq_hdr;
     const int poc = p->p.frame_hdr->frame_offset;
+    const int mlayer = p->p.frame_hdr->mlayer_id;
     unsigned mask = 0;
 
     // non-monotonic output POCs must be unique (AVM errors out), so drop duplicates
-    if (!c->seq_hdr->monotonic && c->dpb_poc && poc == c->dpb_poc)
+    if (!seq_hdr->monotonic && c->dpb_poc && poc == c->dpb_poc &&
+        mlayer == c->dpb_mlayer)
+    {
         return NULL;
+    }
 
     for (;;) {
-        int cand_n = -1, cand_poc = poc;
+        int cand_n = -1, cand_poc = poc, cand_mlayer = mlayer;
         for (int n = 0, m = 1; n < DAV2D_NUM_REF_FRAMES; n++, m <<= 1) {
             if (mask & m) continue;
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
             assert(hdr);
             if (!hdr->show_implicit) continue;
-            const int ipoc = hdr->frame_offset;
-            if (get_poc_diff(nb, ipoc, c->dpb_poc) > 0 &&
-                get_poc_diff(nb, ipoc, cand_poc) < 0)
+            const int ipoc = hdr->frame_offset, imlayer = hdr->mlayer_id;
+            if (get_output_order_diff(seq_hdr, ipoc, imlayer,
+                                      c->dpb_poc, c->dpb_mlayer) > 0 &&
+                get_output_order_diff(seq_hdr, ipoc, imlayer,
+                                      cand_poc, cand_mlayer) < 0)
             {
                 cand_n = n;
                 cand_poc = ipoc;
+                cand_mlayer = imlayer;
             }
         }
         if (cand_n == -1) break;
@@ -408,8 +427,11 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
             assert(hdr);
             if (!hdr->show_implicit) continue;
-            const int ipoc = hdr->frame_offset;
-            if (get_poc_diff(nb, ipoc, c->dpb_poc) == 1) break;
+            if (get_output_order_diff(seq_hdr, hdr->frame_offset, hdr->mlayer_id,
+                                      c->dpb_poc, c->dpb_mlayer) == 1)
+            {
+                break;
+            }
         }
         if (n == DAV2D_NUM_REF_FRAMES) break;
         queue_append(c, &c->refs[n].p);
