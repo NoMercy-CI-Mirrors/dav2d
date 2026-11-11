@@ -212,6 +212,7 @@ if is_asm_enabled
 #                'x86/filmgrain16_avx512.asm',
                 'x86/ipred16_avx512.asm',
 #                'x86/mc16_avx512.asm',
+                'x86/stx16_avx512.asm',
                 'x86/cdef16_avx2.asm',
                 'x86/cfl16_avx2.asm',
                 'x86/filmgrain16_avx2.asm',
