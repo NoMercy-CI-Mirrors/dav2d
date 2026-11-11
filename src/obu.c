@@ -912,32 +912,37 @@ static void find_tip_ref_frames(const Dav2dContext *const c,
     }
 
     const unsigned poc = hdr->frame_offset;
+    const int nbits = seqhdr->order_hint_n_bits;
     uint8_t order[7];
-    int8_t refdist[7];
-    int n_past = 0;
-    // temporal ordering of refs
+    unsigned refpoc[7];
+    int n_past = 0, n_future = 0;
     for (int n = 0; n < n_refs; n++) {
-        const unsigned refpoc = c->refs[hdr->refidx[n]].p.p.frame_hdr->frame_offset;
-        const int dist = refdist[n] = get_poc_diff(seqhdr->order_hint_n_bits,
-                                                   refpoc, poc);
-        int m;
-        for (m = n; m > 0 && refdist[order[m - 1]] > dist; m--)
-            order[m] = order[m - 1];
-        order[m] = n;
+        refpoc[n] = c->refs[hdr->refidx[n]].p.p.frame_hdr->frame_offset;
+        const int dist = get_poc_diff(nbits, refpoc[n], poc);
         n_past += dist < 0;
+        n_future += dist > 0;
+        int cur = n;
+        for (int m = 0; m < n; m++)
+            if (get_poc_diff(nbits, refpoc[cur], refpoc[order[m]]) < 0) {
+                const int tmp = order[m];
+                order[m] = cur;
+                cur = tmp;
+            }
+        order[n] = cur;
     }
-    if (n_past == n_refs) {
-        // all refs are in the past, select nearest (last) 2
-        hdr->tip.ref[0] = order[n_refs - 1];
-        hdr->tip.ref[1] = order[n_refs - 2];
-    } else if (!n_past) {
-        // all refs are in the future, select nearest (first) 2
-        hdr->tip.ref[0] = order[0];
-        hdr->tip.ref[1] = order[1];
-    } else {
-        // temporally mixed refs, select the closest to the current one
+    if (n_past && n_future) {
+        // temporally mixed refs, select the closest past and the next one
         hdr->tip.ref[0] = order[n_past - 1];
         hdr->tip.ref[1] = order[n_past];
+    } else if (n_past >= 2) {
+        // select the nearest 2 past refs
+        hdr->tip.ref[0] = order[n_past - 1];
+        hdr->tip.ref[1] = order[n_past - 2];
+    } else {
+        // all refs are in the future (or have the same POC), select the
+        // nearest (first) 2
+        hdr->tip.ref[0] = order[0];
+        hdr->tip.ref[1] = order[1];
     }
 }
 
