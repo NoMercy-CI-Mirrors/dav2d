@@ -382,7 +382,7 @@ typedef struct Dav2dSequenceHeader {
 
     uint8_t lcr_id;
     uint8_t still_picture;
-    uint8_t max_tlayer_id, max_mlayer_id, monotonic;
+    uint8_t max_tlayer_id, max_mlayer_id, max_mlayer_cnt, monotonic;
     /**
      * Maximum dimensions for this stream. In non-scalable streams, these
      * are often the actual dimensions of the stream, although that is not
@@ -404,8 +404,14 @@ typedef struct Dav2dSequenceHeader {
     uint32_t max_encoder_buffer_delay;
     uint8_t max_low_delay_mode;
 
-    uint8_t tlayer_dependency_present, mlayer_dependency_present;
-    uint8_t tlayer_dependencies[8], mlayer_dependencies[8];
+    uint8_t mlayer_dependency_present, tlayer_dependency_present;
+    uint8_t multi_tlayer_dependency_map_present;
+    /**
+     * Layer dependencies: bit n of [l] is set if layer l can reference
+     * layer n (n <= l). The temporal layer dependencies are per mlayer.
+     */
+    uint8_t mlayer_dependencies[8 /* mlayer */];
+    uint8_t tlayer_dependencies[8 /* mlayer */][4 /* tlayer */];
 
     uint8_t /*enum Dav2dSuperblockSize*/ sbsz;
 

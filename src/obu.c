@@ -265,6 +265,12 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
         hdr->still_picture = dav2d_get_bit(gb);
         hdr->max_tlayer_id = dav2d_get_bits(gb, 2);
         hdr->max_mlayer_id = dav2d_get_bits(gb, 3);
+        hdr->max_mlayer_cnt = 1;
+        if (hdr->max_mlayer_id) {
+            hdr->max_mlayer_cnt =
+                dav2d_get_bits(gb, ulog2(hdr->max_mlayer_id) + 1) + 1;
+            if (hdr->max_mlayer_cnt > hdr->max_mlayer_id + 1) goto error;
+        }
         hdr->monotonic = dav2d_get_bit(gb);
     }
 #if DEBUG_SEQ_HDR
@@ -326,32 +332,29 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
 #endif
     }
 
-    if (hdr->max_tlayer_id) {
-        hdr->tlayer_dependency_present = dav2d_get_bit(gb);
-        if (hdr->tlayer_dependency_present) {
-            for (unsigned n = 1; n < hdr->max_tlayer_id; n++) {
-                assert(n < ARRAY_SIZE(hdr->tlayer_dependencies));
-                hdr->tlayer_dependencies[n] = dav2d_get_bits(gb, n);
-            }
-        } else {
-            for (unsigned n = 1, mask = ~0U; n < hdr->max_tlayer_id; n++, mask <<= 1) {
-                assert(n < ARRAY_SIZE(hdr->tlayer_dependencies));
-                hdr->tlayer_dependencies[n] = ~mask;
-            }
-        }
+    // by default, each layer can reference itself and all lower layers
+    for (int m = 0; m <= hdr->max_mlayer_id; m++) {
+        hdr->mlayer_dependencies[m] = (2 << m) - 1;
+        for (int t = 0; t <= hdr->max_tlayer_id; t++)
+            hdr->tlayer_dependencies[m][t] = (2 << t) - 1;
     }
-
     if (hdr->max_mlayer_id) {
         hdr->mlayer_dependency_present = dav2d_get_bit(gb);
         if (hdr->mlayer_dependency_present) {
-            for (unsigned n = 1; n < hdr->max_mlayer_id; n++) {
-                assert(n < ARRAY_SIZE(hdr->mlayer_dependencies));
-                hdr->mlayer_dependencies[n] = dav2d_get_bits(gb, n);
-            }
-        } else {
-            for (unsigned n = 1, mask = ~0U; n < hdr->max_mlayer_id; n++, mask <<= 1) {
-                assert(n < ARRAY_SIZE(hdr->mlayer_dependencies));
-                hdr->mlayer_dependencies[n] = ~mask;
+            for (int m = 1; m <= hdr->max_mlayer_id; m++)
+                hdr->mlayer_dependencies[m] = dav2d_get_bits(gb, m + 1);
+        }
+    }
+    if (hdr->max_tlayer_id) {
+        hdr->tlayer_dependency_present = dav2d_get_bit(gb);
+        if (hdr->tlayer_dependency_present) {
+            if (hdr->max_mlayer_id)
+                hdr->multi_tlayer_dependency_map_present = dav2d_get_bit(gb);
+            for (int m = 0; m <= hdr->max_mlayer_id; m++) {
+                for (int t = 1; t <= hdr->max_tlayer_id; t++)
+                    hdr->tlayer_dependencies[m][t] =
+                        m && !hdr->multi_tlayer_dependency_map_present ?
+                            hdr->tlayer_dependencies[0][t] : dav2d_get_bits(gb, t + 1);
             }
         }
     }
@@ -813,7 +816,7 @@ static int get_ref_frames(Dav2dContext *const c, const int have_resolution) {
         const Dav2dFrameHeader *const refhdr = c->refs[n].p.p.frame_hdr;
         if (!refhdr || refhdr == last_refhdr) continue;
         if (seqhdr->tlayer_dependency_present) {
-            if (!(seqhdr->tlayer_dependencies[tlayer] & (1 << refhdr->tlayer_id)))
+            if (!(seqhdr->tlayer_dependencies[mlayer][tlayer] & (1 << refhdr->tlayer_id)))
                 continue;
         } else {
             if (tlayer < refhdr->tlayer_id) continue;
