@@ -944,36 +944,43 @@ static void find_tip_ref_frames(const Dav2dContext *const c,
 static int derive_pri_sec_ref(const Dav2dContext *const c) {
     const Dav2dSequenceHeader *const seqhdr = c->seq_hdr;
     Dav2dFrameHeader *const hdr = c->frame_hdr;
-    int refs[2] = { DAV2D_PRIMARY_REF_NONE, DAV2D_PRIMARY_REF_NONE };
-    int best_qdiff[2], best_pocdiff[2], best_poc[2], best = 0;
+    struct {
+        int poc;
+        int16_t qdiff;
+        uint8_t idx, res_log2;
+    } cand[2] = {
+        { -1, INT16_MAX, DAV2D_PRIMARY_REF_NONE, 0 },
+        { -1, INT16_MAX, DAV2D_PRIMARY_REF_NONE, 0 },
+    };
     const int qidx = hdr->quant.yac, poc = hdr->frame_offset;
     const int nbits = seqhdr->order_hint_n_bits;
     for (int i = 0; i < hdr->n_ref_frames; i++) {
         const Dav2dFrameHeader *const refhdr = c->refs[hdr->refidx[i]].p.p.frame_hdr;
         if (!refhdr || refhdr->frame_type != DAV2D_FRAME_TYPE_INTER) continue;
-        const int ref_qidx = refhdr->quant.yac, qdiff = abs(ref_qidx - qidx);
+        const int qdiff = abs(refhdr->quant.yac - qidx);
         const int ref_poc = refhdr->frame_offset;
-        const int pocdiff = abs(get_poc_diff(nbits, poc, ref_poc));
-        for (int n = 0, m = best; n < 2; n++, m = !m) {
-            if (refs[m] == DAV2D_PRIMARY_REF_NONE || qdiff < best_qdiff[m] ||
-                (qdiff == best_qdiff[m] && (pocdiff < best_pocdiff[m] ||
-                 (pocdiff == best_pocdiff[m] && get_poc_diff(nbits, best_poc[m],
-                                                             ref_poc) < 0))))
-            {
-                refs[!best] = i;
-                best_pocdiff[!best] = pocdiff;
-                best_qdiff[!best] = qdiff;
-                best_poc[!best] = ref_poc;
-                if (!n) best = !best;
-                break;
+        const int res_log2 = ulog2(refhdr->width * refhdr->height);
+        for (int n = 0; n < 2; n++) {
+            if (qdiff > cand[n].qdiff) continue;
+            if (qdiff == cand[n].qdiff) {
+                const int score = abs(get_poc_diff(nbits, poc, ref_poc)) -
+                                  abs(get_poc_diff(nbits, poc, cand[n].poc)) +
+                                  (cand[n].res_log2 - res_log2) * 2;
+                if (score > 0 ||
+                    (!score && get_poc_diff(nbits, ref_poc, cand[n].poc) <= 0))
+                {
+                    continue;
+                }
             }
+            if (!n) cand[1] = cand[0];
+            cand[n].poc = ref_poc;
+            cand[n].qdiff = qdiff;
+            cand[n].idx = i;
+            cand[n].res_log2 = res_log2;
+            break;
         }
     }
-    if (best) {
-        const int tmp = refs[0];
-        refs[0] = refs[1];
-        refs[1] = tmp;
-    }
+    const int refs[2] = { cand[0].idx, cand[1].idx };
 
     if (!hdr->primary_ref_signaled || refs[0] == DAV2D_PRIMARY_REF_NONE) {
         hdr->primary_ref_frame = refs[0];
