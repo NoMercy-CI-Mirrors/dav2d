@@ -1247,8 +1247,9 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
 
+    int explicit_ref_frame_map;
     if (IS_INTER_OR_SWITCH(hdr)) {
-        const int explicit_ref_frame_map = obu_type == DAV2D_OBU_BRIDGE ? 0 :
+        explicit_ref_frame_map = obu_type == DAV2D_OBU_BRIDGE ? 0 :
             hdr->frame_type == DAV2D_FRAME_TYPE_SWITCH ||
             (seqhdr->explicit_ref_frame_map && dav2d_get_bit(gb));
 
@@ -1293,9 +1294,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
 #endif
 
     if (IS_INTER_OR_SWITCH(hdr)) {
-        if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER &&
-            !seqhdr->explicit_ref_frame_map)
-        {
+        if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER && !explicit_ref_frame_map) {
             // include resolution constraints
             hdr->n_ref_frames = get_ref_frames(c, 1);
             if (!hdr->n_ref_frames) goto error;
