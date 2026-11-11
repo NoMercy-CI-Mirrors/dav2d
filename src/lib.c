@@ -589,6 +589,7 @@ void dav2d_flush(Dav2dContext *const c) {
         if (c->refs[i].p.p.frame_hdr)
             dav2d_thread_picture_unref(&c->refs[i].p);
         dav2d_ref_dec(&c->refs[i].segmap);
+        dav2d_ref_dec(&c->refs[i].ccsomap);
         dav2d_ref_dec(&c->refs[i].refmvs);
         dav2d_cdf_thread_unref(&c->cdf[i]);
     }

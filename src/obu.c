@@ -2643,6 +2643,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 if (c->refs[i].p.p.frame_hdr)
                     dav2d_thread_picture_unref(&c->refs[i].p);
                 dav2d_ref_dec(&c->refs[i].segmap);
+                dav2d_ref_dec(&c->refs[i].ccsomap);
                 dav2d_ref_dec(&c->refs[i].refmvs);
                 dav2d_cdf_thread_unref(&c->cdf[i]);
             }
