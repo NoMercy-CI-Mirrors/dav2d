@@ -33,34 +33,6 @@
 
 #include "src/msac.h"
 
-const uint8_t dav2d_msac_rate[125][3] = {
-    { 4, 5, 6 }, { 4, 5, 5 }, { 4, 5, 4 }, { 4, 5, 7 }, { 4, 5, 7 },
-    { 4, 4, 6 }, { 4, 4, 5 }, { 4, 4, 4 }, { 4, 4, 7 }, { 4, 4, 7 },
-    { 4, 3, 6 }, { 4, 3, 5 }, { 4, 3, 4 }, { 4, 3, 7 }, { 4, 3, 7 },
-    { 4, 6, 6 }, { 4, 6, 5 }, { 4, 6, 4 }, { 4, 6, 7 }, { 4, 6, 7 },
-    { 4, 6, 6 }, { 4, 6, 5 }, { 4, 6, 4 }, { 4, 6, 7 }, { 4, 6, 7 },
-    { 3, 5, 6 }, { 3, 5, 5 }, { 3, 5, 4 }, { 3, 5, 7 }, { 3, 5, 7 },
-    { 3, 4, 6 }, { 3, 4, 5 }, { 3, 4, 4 }, { 3, 4, 7 }, { 3, 4, 7 },
-    { 3, 3, 6 }, { 3, 3, 5 }, { 3, 3, 4 }, { 3, 3, 7 }, { 3, 3, 7 },
-    { 3, 6, 6 }, { 3, 6, 5 }, { 3, 6, 4 }, { 3, 6, 7 }, { 3, 6, 7 },
-    { 3, 6, 6 }, { 3, 6, 5 }, { 3, 6, 4 }, { 3, 6, 7 }, { 3, 6, 7 },
-    { 2, 5, 6 }, { 2, 5, 5 }, { 2, 5, 4 }, { 2, 5, 7 }, { 2, 5, 7 },
-    { 2, 4, 6 }, { 2, 4, 5 }, { 2, 4, 4 }, { 2, 4, 7 }, { 2, 4, 7 },
-    { 2, 3, 6 }, { 2, 3, 5 }, { 2, 3, 4 }, { 2, 3, 7 }, { 2, 3, 7 },
-    { 2, 6, 6 }, { 2, 6, 5 }, { 2, 6, 4 }, { 2, 6, 7 }, { 2, 6, 7 },
-    { 2, 6, 6 }, { 2, 6, 5 }, { 2, 6, 4 }, { 2, 6, 7 }, { 2, 6, 7 },
-    { 5, 5, 6 }, { 5, 5, 5 }, { 5, 5, 4 }, { 5, 5, 7 }, { 5, 5, 7 },
-    { 5, 4, 6 }, { 5, 4, 5 }, { 5, 4, 4 }, { 5, 4, 7 }, { 5, 4, 7 },
-    { 5, 3, 6 }, { 5, 3, 5 }, { 5, 3, 4 }, { 5, 3, 7 }, { 5, 3, 7 },
-    { 5, 6, 6 }, { 5, 6, 5 }, { 5, 6, 4 }, { 5, 6, 7 }, { 5, 6, 7 },
-    { 5, 6, 6 }, { 5, 6, 5 }, { 5, 6, 4 }, { 5, 6, 7 }, { 5, 6, 7 },
-    { 5, 5, 6 }, { 5, 5, 5 }, { 5, 5, 4 }, { 5, 5, 7 }, { 5, 5, 7 },
-    { 5, 4, 6 }, { 5, 4, 5 }, { 5, 4, 4 }, { 5, 4, 7 }, { 5, 4, 7 },
-    { 5, 3, 6 }, { 5, 3, 5 }, { 5, 3, 4 }, { 5, 3, 7 }, { 5, 3, 7 },
-    { 5, 6, 6 }, { 5, 6, 5 }, { 5, 6, 4 }, { 5, 6, 7 }, { 5, 6, 7 },
-    { 5, 6, 6 }, { 5, 6, 5 }, { 5, 6, 4 }, { 5, 6, 7 }, { 5, 6, 7 },
-};
-
 const uint16_t ALIGN(dav2d_msac_min_prob[7][8], 16) = {
     {    63, 65535, 65535, 65535, 65535, 65535, 65535, 65535 },
     {    47,    87, 65535, 65535, 65535, 65535, 65535, 65535 },
@@ -175,6 +147,15 @@ static unsigned dav2d_msac_decode_bool_c(MsacContext *const s, const unsigned f)
     return !ret;
 }
 
+/* The upper 8 bits (plus one implicit zero bit) of the para/count value
+ * holds three 3-bit fields with adaptation rates for count = 32,
+ * count = 16-31, and count = 0-15, offset by 2. */
+static inline int get_rate(const unsigned pc, const unsigned count) {
+    assert(count <= 32);
+    const unsigned idx = count >> 4;
+    return (((pc << (idx * 3)) >> 14) & 7) + 2;
+}
+
 /* Decodes a symbol given an inverse cumulative distribution function (CDF)
  * table in Q15. */
 unsigned dav2d_msac_decode_symbol_adapt_c(MsacContext *const s,
@@ -201,8 +182,7 @@ unsigned dav2d_msac_decode_symbol_adapt_c(MsacContext *const s,
     if (s->allow_update_cdf) {
         const unsigned pc = cdf[n_symbols];
         const unsigned count = (uint8_t)pc;
-        assert(count <= 32);
-        const int rate = dav2d_msac_rate[pc >> 8][count >> 4] + (n_symbols > 2);
+        const int rate = get_rate(pc, count) + (n_symbols > 2);
         unsigned i;
         for (i = 0; i < val; i++)
             cdf[i] += (32768 - cdf[i]) >> rate;
@@ -223,7 +203,7 @@ unsigned dav2d_msac_decode_bool_adapt_c(MsacContext *const s,
         // update_cdf() specialized for boolean CDFs
         const unsigned pc = cdf[1];
         const unsigned count = (uint8_t)pc;
-        const int rate = dav2d_msac_rate[pc >> 8][count >> 4];
+        const int rate = get_rate(pc, count);
         if (bit)
             cdf[0] += (32768 - cdf[0]) >> rate;
         else

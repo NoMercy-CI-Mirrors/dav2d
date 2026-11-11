@@ -47,7 +47,6 @@ typedef struct MsacContext {
 #endif
 } MsacContext;
 
-EXTERN const uint8_t dav2d_msac_rate[125 /* para */][3 /* count */];
 EXTERN const uint16_t dav2d_msac_min_prob[7 /* n_symbols*/][8];
 
 #if HAVE_ASM

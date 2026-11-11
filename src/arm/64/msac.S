@@ -274,16 +274,16 @@ function msac_decode_bool_adapt_neon, export=1
 
         ldrh            w2,  [x1, #2]          // cdf[1]
 
-        lsr             w12, w2,  #8           // pc >> 8
         and             w8,  w2,  #0xff        // (uint8_t)count = pc & 0xff
-        add             w12, w12, w12, lsl #1  // pc >> 8 * 3
-        sub             w3,  w2,  w8,  lsr #5  // pc - (count >= 32)
-        movrel          x11, X(msac_rate)
-        add             w8,  w12,  w8, lsr #4  // pc >> 8 * 3 + count >> 4
         sub             w9,  w9,  w15          // cdf[0] -= bit
-        ldrb            w2,  [x11, x8]         // rate
+        lsr             w3,  w8,  #4           // idx
         sub             w11, w9,  w15, lsl #15 // {cdf[0], cdf[0] - 32769}
-        add             w10, w3,  #1           // pc + (count < 32)
+        add             w3,  w3,  w3,  lsl #1  // idx * 3
+        add             w10, w2,  #1
+        lsl             w2,  w2,  w3           // pc << (idx * 3)
+        sub             w10, w10, w8,  lsr #5  // pc - (count >= 32)
+        asr             w11, w11, #2           // {cdf[0], cdf[0] - 32769} >> 2
+        ubfx            w2,  w2,  #14, #3      // rate - 2
         asr             w11, w11, w2           // {cdf[0], cdf[0] - 32769} >> rate
         sub             w9,  w9,  w11          // cdf[0]
 

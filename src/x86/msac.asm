@@ -43,7 +43,6 @@ struc msac
     .update_cdf: resd 1
 endstruc
 
-cextern msac_rate
 cextern msac_min_prob
 
 %define m(x) mangle(private_prefix %+ _ %+ x %+ SUFFIX)
@@ -57,8 +56,6 @@ DECLARE_REG_TMP 3
 DECLARE_REG_TMP 0
 %define buf rsp-40 ; red zone
 %endif
-
-%define base rax-$$
 
 %macro REFILL 3 ; cnt, tmp, is_early_refill
     mov            %2, [t0+msac.buf]
@@ -117,16 +114,17 @@ DECLARE_REG_TMP 0
 %macro DECODE_SYMBOL_ADAPT 2 ; n, sz
 cglobal msac_decode_symbol_adapt%1, 3, 7, 4, s, cdf, ns
     movd           m2, [sq+msac.rng]
-    lea           rax, [$$]
+    lea           rax, [msac_min_prob-16]
     mov%2          m0, [cdfq]
     add           nsd, nsd
     movq           m3, [sq+msac.dif]
-    mov           r3d, [sq+msac.update_cdf]
+    movifnidn      t0, sq
+    mov           ecx, [sq+msac.update_cdf]
     pshuflw        m2, m2, q0000
     movd     [buf+12], m2
     por            m1, m0, [pw_127]
     psrlw          m2, 8
-    psubusw        m1, [base+msac_min_prob-16+r2*8]
+    psubusw        m1, [rax+nsq*8]
     psllw          m2, 6
 %if %1 == 8
     punpcklqdq     m2, m2
@@ -141,22 +139,21 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 4, s, cdf, ns
     mova     [buf+16], m1
     psubusw        m1, m3
     pcmpeqw        m1, m2 ; c >= v
-    test          r3d, r3d
+    test          ecx, ecx
     jz m(msac_decode_symbol_adapt4).renorm ; !allow_update_cdf
 
 ; update_cdf:
-    movzx         r3d, word [cdfq+nsq]
+    movzx         eax, word [cdfq+nsq]
     pcmpeqw        m2, m2
-    lea           r4d, [r3*3]
-    movzx         r5d, r3b
-    shr           r4d, 8  ; para * sizeof(*msac_rate)
-    shr           r5d, 4  ; count >> 4
-    add           r4d, r5d
-    movzx         eax, byte [base+msac_rate+r4]
+    mov           r4d, eax
+    shr            al, 4  ; idx
+    cmp           r4b, 32
+    lea           ecx, [rax*3+18]
+    adc           r4d, 0  ; count + (count < 32)
+    rol           eax, cl
+    and           eax, 7  ; rate
     cmp           nsd, 3*2
-    sbb           eax, -1 ; rate + (n_symbols > 2)
-    cmp           r3b, 32
-    adc           r3d, 0  ; count + (count < 32)
+    sbb           eax, -3 ; rate + (n_symbols > 2) + 2
     movd           m3, eax
     pavgw          m2, m1 ; i >= val ? 65535 : 32768
     psrlw          m4, m1, m3
@@ -165,13 +162,14 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 4, s, cdf, ns
     psrlw          m2, m3 ; for (; i < n_symbols; i++)
     paddw          m0, m2 ;     cdf[i] += ((65535 - cdf[i]) >> rate) - (65535 >> rate);
     mov%2      [cdfq], m0
-    mov    [cdfq+nsq], r3w
+    mov    [cdfq+nsq], r4w
+
 %if %1 == 8
     jmp m(msac_decode_symbol_adapt4).renorm
 %else
 .renorm:
     pmovmskb      eax, m1
-    mov            r4, [sq+msac.dif]
+    mov            r4, [t0+msac.dif]
     tzcnt         eax, eax
     movzx         r1d, word [buf+rax+16] ; v
     movzx         r2d, word [buf+rax+14] ; u
@@ -181,8 +179,7 @@ cglobal msac_decode_symbol_adapt%1, 3, 7, 4, s, cdf, ns
     shl            r1, gprsize*8-16
     add            r4, r1  ; ~dif
 .renorm2:
-    mov           r1d, [sq+msac.cnt]
-    movifnidn      t0, sq
+    mov           r1d, [t0+msac.cnt]
 .renorm3:
     bsr           ecx, r2d
     xor           ecx, 15  ; d
@@ -218,27 +215,26 @@ cglobal msac_decode_bool_adapt, 2, 7, 0, s, cdf
     sub            r4, rax ; dif - vw
     setb           al
     cmovb         r2d, r3d
-    mov           r3d, [sq+msac.update_cdf]
+    movifnidn      t0, sq
+    mov           ecx, [sq+msac.update_cdf]
     cmovb          r4, r5
     not            r4
-    test          r3d, r3d
+    test          ecx, ecx
     jz m(msac_decode_symbol_adapt4).renorm2
     movzx         r5d, word [cdfq+2]
 %if WIN64
     push           r7
-    mov            t0, sq
 %endif
-    lea           ecx, [r5*3]
-    movzx         r7d, r5b
-    shr           ecx, 8  ; para * sizeof(*msac_rate)
-    shr           r7d, 4  ; count >> 4
-    cmp           r5b, 32
-    adc           r5d, 0
-    mov      [cdfq+2], r5w
-    lea            r5, [msac_rate]
-    add           ecx, r7d
+    mov           r7d, r5d
+    shr           r5b, 4   ; idx
+    cmp           r7b, 32
+    lea           ecx, [r5*3+18]
+    adc           r7d, 0   ; count + (count < 32)
+    rol           r5d, cl
+    mov      [cdfq+2], r7w
     movzx         r7d, word [r1]
-    movzx         ecx, byte [r5+rcx]
+    and           r5d, 7
+    lea           ecx, [r5+2] ; rate
     imul          r5d, eax, -32769
     add           r5d, r7d ; if (bit)
     sub           r7d, eax ;     cdf[0] -= ((cdf[0] - 32769) >> rate) + 1;

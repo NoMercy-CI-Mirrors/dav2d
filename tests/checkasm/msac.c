@@ -58,7 +58,7 @@ typedef struct {
 static void randomize_cdf(uint16_t *const cdf, int n) {
     for (int i = n + 1; i < 8; i++)
         cdf[i] = 0; // padding
-    cdf[n] = (rnd() % 125) << 8; // para
+    cdf[n] = (rnd() & 0xdb00) + 0x0a00; // para
     if (rnd() & 1)
         cdf[--n] = 0; // explicitly test the zero edge case
     for (int c = 0; n > 0; n--) {
@@ -159,7 +159,7 @@ static void check_decode_bool_adapt(MsacDSPContext *const c, uint8_t *const buf)
             dav2d_msac_init(&s_c, buf, BUF_SIZE, !cdf_update);
             s_a = s_c;
             cdf[0][0] = cdf[1][0] = rnd() % 32767 + 1;
-            cdf[0][1] = cdf[1][1] = (rnd() % 125) << 8;
+            cdf[0][1] = cdf[1][1] = (rnd() & 0xdb00) + 0x0a00;
             while (s_c.cnt >= 0) {
                 unsigned c_res = call_ref(&s_c, cdf[0]);
                 unsigned a_res = call_new(&s_a, cdf[1]);
