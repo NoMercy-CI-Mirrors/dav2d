@@ -524,8 +524,7 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
         hdr->adaptive_mvd = dav2d_get_bit(gb);
         hdr->mvd_sign_derive = dav2d_get_bit(gb);
         hdr->flex_mvres = dav2d_get_bit(gb);
-        if (!hdr->reduced_still_picture_header)
-            hdr->global_motion = dav2d_get_bit(gb);
+        hdr->global_motion = dav2d_get_bit(gb);
         hdr->short_refresh_frame_flags = dav2d_get_bit(gb);
     }
 #if DEBUG_SEQ_HDR
