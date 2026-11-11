@@ -3020,25 +3020,6 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
 #if 0
             c->event_flags |= dav2d_picture_get_event_flags(&c->refs[fidx].p);
 #endif
-            if (tp.p.frame_hdr->frame_type == DAV2D_FRAME_TYPE_KEY) {
-                c->refs[fidx].p.showable = 0;
-                for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
-                    if (i == fidx) continue;
-
-                    if (c->refs[i].p.p.frame_hdr)
-                        dav2d_thread_picture_unref(&c->refs[i].p);
-                    dav2d_thread_picture_ref(&c->refs[i].p, &c->refs[fidx].p);
-
-                    dav2d_cdf_thread_unref(&c->cdf[i]);
-                    dav2d_cdf_thread_ref(&c->cdf[i], &c->cdf[fidx]);
-
-                    dav2d_ref_dec(&c->refs[i].segmap);
-                    c->refs[i].segmap = c->refs[fidx].segmap;
-                    if (c->refs[fidx].segmap)
-                        dav2d_ref_inc(c->refs[fidx].segmap);
-                    dav2d_ref_dec(&c->refs[i].refmvs);
-                }
-            }
             dav2d_thread_picture_unref(&tp);
         } else if (c->n_tiles == c->frame_hdr->tiling.t.cols *
                                  c->frame_hdr->tiling.t.rows ||
