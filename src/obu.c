@@ -1245,7 +1245,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     // FIXME special cases for bridge and ras frames
     if (obu_type == DAV2D_OBU_CLOSED_LOOP_KF && !seqhdr->max_mlayer_id) {
         hdr->refresh_frame_flags = (1 << seqhdr->ref_frames) - 1;
-    } else if (obu_type == DAV2D_OBU_OPEN_LOOP_KF || seqhdr->max_mlayer_id) {
+    } else if (obu_type == DAV2D_OBU_OPEN_LOOP_KF || obu_type == DAV2D_OBU_CLOSED_LOOP_KF) {
         if (seqhdr->short_refresh_frame_flags) {
             hdr->refresh_frame_flags = 1 << dav2d_get_bits0(gb, seqhdr->ref_frames_log2);
         } else {
