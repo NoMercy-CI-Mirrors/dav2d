@@ -43,6 +43,8 @@
 
 #define DEBUG_REFMV 0
 
+#define INVALID_REF2REF INT8_MIN
+
 #if DEBUG_BLOCK_INFO && DEBUG_REFMV
 #define RDB_ONLY(...) __VA_ARGS__
 #define DB_ARGS(...) __VA_ARGS__,
@@ -452,7 +454,7 @@ mv dav2d_mv_projection(const union mv mv, const int num, const int den,
 static ALWAYS_INLINE mv tmv_projection(const union tmv mv,
                                        const int num, const int den)
 {
-    assert(den > 0 && den < 32);
+    assert(den >= 0 && den < 32);
     assert(num > -32 && num < 32);
     const int frac = num * div_mult[den];
     return scale_tmv(mv, frac);
@@ -461,7 +463,7 @@ static ALWAYS_INLINE mv tmv_projection(const union tmv mv,
 static ALWAYS_INLINE union tmv tmv2_projection(const union tmv mv,
                                                const int num, const int den)
 {
-    assert(den > 0 && den < 32);
+    assert(den >= 0 && den < 32);
     assert(num > -32 && num < 32);
     const int frac = num * div_mult[den];
     const int y = mv.y * frac, x = mv.x * frac;
@@ -1908,7 +1910,11 @@ static void load_tmvs_refs_c(const refmvs_frame *const rf,
                                          ref, ref2idx, y, x, b_mv,
                                          col_start8_shifted, col_end8_shifted);
                 int ref2ref = rf->mfmv_ref2ref[n][b_ref];
-                if (!ref2ref || (ref2ref < 0) != ref_sign) continue;
+                if (ref2ref == INVALID_REF2REF ||
+                    (ref2ref && (ref2ref < 0) != ref_sign))
+                {
+                    continue;
+                }
                 const union mv mv1 = scale_tmv(b_mv, -rf->mfmv_ref2sf[n][b_ref][0]);
                 int y1 = y - apply_sign(abs(mv1.y) >> 6, mv1.y);
                 if (y1 < 0 || y1 >= rf->ih8) continue;
@@ -2186,6 +2192,11 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     const int poc = frm_hdr->frame_offset;
     int8_t ref2ref[7][7], ref2cur[7][7], refref2curref_idx[7][7];
     uint8_t have_ref_sign[7][2] = { { 0 } };
+    uint8_t is_overlay[7] = { 0 };
+    for (int i = 0; i < frm_hdr->n_ref_frames; i++)
+        for (int n = 0; n < 7 * !!refcnt[i]; n++)
+            if (ref_ref_poc[i][n] == ref_poc[i])
+                is_overlay[i] = 1;
     for (int i = 0; i < frm_hdr->n_ref_frames; i++) {
         const int poc_diff = get_poc_diff(seq_hdr->order_hint_n_bits,
                                           ref_poc[i], poc);
@@ -2202,7 +2213,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                                          poc, ref_ref_poc[i][n]);
             int m;
             for (m = 0; m < frm_hdr->n_ref_frames; m++)
-                if (ref_ref_poc[i][n] == ref_poc[m]) break;
+                if (ref_ref_poc[i][n] == ref_poc[m] && !is_overlay[m]) break;
             refref2curref_idx[i][n] = m == frm_hdr->n_ref_frames ? -1 : m;
         }
     }
@@ -2254,11 +2265,14 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
         // sort refs
         uint8_t order[7];
         for (int n = 0; n < frm_hdr->n_ref_frames; n++) {
-            const int pocdiff = rf->pocdiff[n];
-            int m;
-            for (m = n; m > 0 && pocdiff > rf->pocdiff[order[m - 1]]; m--)
-                order[m] = order[m - 1];
-            order[m] = n;
+            int cur = n;
+            for (int m = 0; m < n; m++)
+                if (rf->pocdiff[cur] > rf->pocdiff[order[m]]) {
+                    const int tmp = order[m];
+                    order[m] = cur;
+                    cur = tmp;
+                }
+            order[n] = cur;
         }
         // find bwd/fwd ref split point
         int first_fut;
@@ -2379,7 +2393,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
         mfmv_lim = rf->seq_hdr->reduced_ref_frame_mvs_mode ? 1 : 4;
         if (rf->n_mfmvs < mfmv_lim) for (int n = topo_cnt - 1; n >= 0; n--) {
             const int ref = topo_order[n];
-            const int dir = rf->pocdiff[ref] >= 0;
+            const int dir = rf->pocdiff[ref] > 0;
             if (!ref_done[ref][dir]) {
                 rf->mfmv[rf->n_mfmvs++] = (struct MfmvRef) {
                     .ref = ref,
@@ -2415,7 +2429,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                     const int rrpoc = ref_ref_poc[rf->mfmv[n].ref][m];
                     const int diff2 = get_poc_diff(seq_hdr->order_hint_n_bits,
                                                    rpoc, rrpoc);
-                    rf->mfmv_ref2ref[n][m] = diff2 + 31U < 63U ? diff2 : 0;
+                    rf->mfmv_ref2ref[n][m] = diff2 + 31U < 63U ? diff2 : INVALID_REF2REF;
                     // refs at the same POC as the projected ref don't have
                     // a trajectory endpoint (overlays, inter-layer refs)
                     int l = frm_hdr->n_ref_frames;
@@ -2425,7 +2439,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                                 break;
                     rf->mfmv_ref2idx[n][m] = l == frm_hdr->n_ref_frames ? -1 : l;
                     const int d1 = rf->mfmv_ref2cur[n];
-                    const int d2 = rf->mfmv_ref2ref[n][m];
+                    const int d2 = diff2 + 31U < 63U ? diff2 : 0;
                     const int dv = div_mult[imin(abs(d2), 31)];
                     rf->mfmv_ref2sf[n][m][0] = imin(abs(d1), 31) * dv;
                     if ((d1 < 0) ^ (d2 < 0)) rf->mfmv_ref2sf[n][m][0] *= -1;
