@@ -2649,13 +2649,13 @@ cglobal prep_6tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ns
     jmp                  wq
 .v:
     WIN64_SPILL_XMM      10, 12
-    movzx               mxd, myb
-    shr                 myd, 16
-    cmp                  hd, 4
-    cmove               myd, mxd
-    lea                 myq, [r8+myq*8+subpel_filters+1-prep_avx2]
     vpbroadcastd         m9, [pw_8192]
     lea                  r6, [dsq*3]
+    cmp                  hd, 4
+    je .v_h4
+    shr                 myd, 16
+.v_6tap:
+    lea                 myq, [r8+myq*8+subpel_filters+1-prep_avx2]
     vpbroadcastw         m6, [myq+0]
     mov                 nsq, ssq
     vpbroadcastw         m7, [myq+2]
@@ -2701,6 +2701,43 @@ cglobal prep_6tap_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my, ns
     lea                dstq, [dstq+dsq*8]
     sub                  hd, 4
     jg .v_w4_loop
+    RET
+.v_h4:
+    movzx               myd, myb ; 4-tap filter
+    cmp                  wd, 4
+    jne .v_6tap
+    ; 4x4: only read the rows used by the 4-tap filter (rows -1..+2)
+    vpbroadcastw         m6, [r8+myq*8+subpel_filters+2-prep_avx2]
+    vpbroadcastw         m7, [r8+myq*8+subpel_filters+4-prep_avx2]
+    lea                  r8, [ssq*3]
+    sub                srcq, ssq
+    movd                xm0, [srcq+ssq*0]
+    vpbroadcastd         m1, [srcq+ssq*1]
+    vpbroadcastd         m2, [srcq+ssq*2]
+    vpbroadcastd         m3, [srcq+r8   ]
+    lea                srcq, [srcq+ssq*4]
+    vpbroadcastd         m4, [srcq+ssq*0]
+    vpbroadcastd         m5, [srcq+ssq*1]
+    vpbroadcastd         m8, [srcq+ssq*2]
+    vpblendd             m0, m1, 0x02     ; 0 1 _ _   _ _ _ _
+    vpblendd             m2, m3, 0x22     ; 2 3 2 _   2 3 _ _
+    vpblendd             m1, m2, m4, 0x40 ; _ _ 2 _   2 3 4 _
+    vpblendd             m0, m1, 0xfc     ; 0 1 2 _   2 3 4 _
+    vpblendd             m4, m5, 0x20     ; _ _ 4 _   4 5 _ _
+    vpblendd             m4, m8, 0x40     ; _ _ 4 _   4 5 6 _
+    vpblendd             m2, m4, 0xfc     ; 2 3 4 _   4 5 6 _
+    vbroadcasti128       m1, [deint_shuf4]
+    pshufb               m0, m1           ; 01 12     23 34
+    pshufb               m2, m1           ; 23 34     45 56
+    pmaddubsw            m0, m6           ; a0 b0     c0 d0
+    pmaddubsw            m2, m7           ; a1 b1     c1 d1
+    paddw                m0, m2
+    pmulhrsw             m0, m9
+    vextracti128        xm1, m0, 1
+    movq       [dstq+dsq*0], xm0
+    movhps     [dstq+dsq*2], xm0
+    movq       [dstq+dsq*4], xm1
+    movhps     [dstq+r6 *2], xm1
     RET
 .v_w8:
     movq                xm1, [srcq+nsq*2]
@@ -3156,6 +3193,12 @@ cglobal prep_8tap_sharp_8bpc, 4, 9, 0, dst, ds, src, ss, w, h, mx, my
     test                myd, 0xf00
     jz mangle(private_prefix %+ _prep_6tap_8bpc_avx2).prep
 .v:
+    ; 4-tap filters are identical for sharp and regular
+    cmp                  wd, 4
+    jne .v_8tap
+    cmp                  hd, 4
+    je mangle(private_prefix %+ _prep_6tap_8bpc_avx2).v
+.v_8tap:
     WIN64_SPILL_XMM      12, 15
     movzx               mxd, myb ; Select 4-tap/8-tap filter multipliers.
     shr                 myd, 16  ; Note that the code is 8-tap only, having
