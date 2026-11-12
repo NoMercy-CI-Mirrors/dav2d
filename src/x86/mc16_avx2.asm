@@ -594,8 +594,10 @@ INIT_YMM avx2
     jg .hv_w2_loop
     RET
 .hv_w4:
-    pmullw              xm0, xm4, [srcq+ssq*0-8]
-    pmullw              xm1, xm5, [srcq+ssq*0-6]
+    movddup             xm0, [srcq+ssq*0]
+    movddup             xm1, [srcq+ssq*0+2]
+    pmullw              xm0, xm4
+    pmullw              xm1, xm5
     paddw               xm0, xm3
     paddw               xm0, xm1
     psrlw               xm0, 2
