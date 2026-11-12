@@ -857,9 +857,16 @@ L(\type\()_8tap_h_hv_\isa):
 
         .align JUMP_ALIGN
 40:     // HV8 - 4xN
-        ldur            s26, [x(\mx), #2]
         add             \src, \src, #2
+        ldur            s26, [x(\mx), #2]
 
+        cmp             \h,  #4
+        b.gt            48f
+        add             \src, \src, \s_strd     // update for 4-tap V filtering
+        b               44f
+
+        .align JUMP_ALIGN
+48:     // H4V8 - 4x8+
         bl              L(\type\()_hv_filter4_\isa)
         shrn            v16.4h, v22.4s, #2
         bl              L(\type\()_hv_filter4_\isa)
@@ -1203,9 +1210,109 @@ L(\type\()_hv_filter4_\isa):
 
         .align JUMP_ALIGN
 40:     // HV6 - 4xN
-        ldur            s26, [x(\mx), #2]
         add             \src, \src, #2
+        ldur            s26, [x(\mx), #2]
 
+        cmp             \h,  #4
+        b.gt            46f
+
+        .align JUMP_ALIGN
+44:     // HV4 - 4x4, 4x2
+        ldr             d2,  [\src, \s_strd]
+        add             \src, \src, \s_strd, lsl #1
+        ldr             d3,  [\src]
+        ldr             d4,  [\src, \s_strd]
+.ifc \isa, neon_i8mm
+        movi            v17.4s,  #0
+        movi            v18.4s,  #0
+        movi            v19.4s,  #0
+.else
+        sub             v2.16b,  v2.16b,  v24.16b
+        mov             v17.16b, v27.16b
+        sub             v3.16b,  v3.16b,  v24.16b
+        mov             v18.16b, v27.16b
+        sub             v4.16b,  v4.16b,  v24.16b
+        mov             v19.16b, v27.16b
+.endif
+        add             \src, \src, \s_strd, lsl #1
+        tbl             v2.16b, {v2.16b}, v28.16b
+        tbl             v3.16b, {v3.16b}, v28.16b
+        tbl             v4.16b, {v4.16b}, v28.16b
+        \dot            v17.4s,  v2.16b,  v26.4b[0]
+        \dot            v18.4s,  v3.16b,  v26.4b[0]
+        \dot            v19.4s,  v4.16b,  v26.4b[0]
+.ifc \isa, neon_i8mm
+        rshrn           v17.4h,  v17.4s,  #2
+        rshrn           v18.4h,  v18.4s,  #2
+        rshrn           v19.4h,  v19.4s,  #2
+.else
+        shrn            v17.4h,  v17.4s,  #2
+        shrn            v18.4h,  v18.4s,  #2
+        shrn            v19.4h,  v19.4s,  #2
+.endif
+
+        .align LOOP_ALIGN
+4:
+        ldr             d3,  [\src]
+        ldr             d4,  [\src, \s_strd]
+        add             \src, \src, \s_strd, lsl #1
+
+        smull           v0.4s,   v17.4h,  v7.h[2]
+        smull           v1.4s,   v18.4h,  v7.h[2]
+.ifc \isa, neon_dotprod
+        sub             v3.16b,  v3.16b,  v24.16b
+        sub             v4.16b,  v4.16b,  v24.16b
+.endif
+        tbl             v3.16b, {v3.16b}, v28.16b
+        tbl             v4.16b, {v4.16b}, v28.16b
+        mov             v17.16b, v19.16b
+.ifc \isa, neon_i8mm
+        movi            v5.4s,   #0
+        movi            v6.4s,   #0
+.else
+        mov             v5.16b,  v27.16b
+        mov             v6.16b,  v27.16b
+.endif
+        \dot            v5.4s,   v3.16b,  v26.4b[0]
+        \dot            v6.4s,   v4.16b,  v26.4b[0]
+        subs            \h,  \h,  #2
+        smlal           v0.4s,   v18.4h,  v7.h[3]
+        smlal           v0.4s,   v19.4h,  v7.h[4]
+        smlal           v1.4s,   v19.4h,  v7.h[3]
+
+.ifc \isa, neon_i8mm
+        rshrn           v19.4h,  v5.4s,   #2
+        rshrn           v20.4h,  v6.4s,   #2
+.else
+        shrn            v19.4h,  v5.4s,   #2
+        shrn            v20.4h,  v6.4s,   #2
+.endif
+        smlal           v0.4s,   v19.4h,  v7.h[5]
+        smlal           v1.4s,   v19.4h,  v7.h[4]
+        smlal           v1.4s,   v20.4h,  v7.h[5]
+        mov             v18.16b, v19.16b
+        mov             v19.16b, v20.16b
+
+.ifc \type, prep
+        rshrn           v0.4h,   v0.4s,   #6
+        rshrn           v1.4h,   v1.4s,   #6
+        str             d0,  [\dst]
+        str             d1,  [\dst, \d_strd]
+.else
+        tbl             v0.8b,  {v0.16b}, v25.8b
+        tbl             v1.8b,  {v1.16b}, v25.8b
+        sqrshrun        v0.8b,   v0.8h,   #2
+        sqrshrun        v1.8b,   v1.8h,   #2
+        str             s0,  [\dst]
+        str             s1,  [\dst, \d_strd]
+.endif
+        add             \dst, \dst, \d_strd, lsl #1
+
+        b.gt            4b
+        ret             x15
+
+        .align JUMP_ALIGN
+46:     // H4V6 - 4x8+
         bl              L(\type\()_hv_filter4_\isa)
         shrn            v16.4h, v22.4s, #2
         bl              L(\type\()_hv_filter4_\isa)
@@ -1247,8 +1354,8 @@ L(\type\()_hv_filter4_\isa):
 .else
         shrn            v20.4h, v5.4s, #2
 .endif
-        subs            \h, \h, #1
         smlal           v0.4s, v20.4h, v7.h[6]
+        subs            \h, \h, #1
 .ifc \type, prep
         rshrn           v0.4h, v0.4s, #6
         st1             {v0.4h}, [\dst], \d_strd
