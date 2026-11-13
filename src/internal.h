@@ -523,6 +523,10 @@ struct Dav2dTaskContext {
         };
     } scratch;
 
+    ALIGN(union, 64) {
+        uint8_t cfl_mh_luma_8bpc[CFL_MH_MAX_LUMA_SIZE];
+        uint16_t cfl_mh_luma_16bpc[CFL_MH_MAX_LUMA_SIZE];
+    };
     uint8_t txtp_map[16 * 16]; // inter-only
     union {
         Dav2dWarpedMotionParams warpmv[2];
