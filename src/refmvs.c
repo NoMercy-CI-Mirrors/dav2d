@@ -2207,7 +2207,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     }
     rf->high_priority_tmvp_mask = 0;
     if (seq_hdr->drl_reorder != 2 /* always */ &&
-        !frm_hdr->has_bothside_refs)
+        frm_hdr->use_ref_frame_mvs && !frm_hdr->has_bothside_refs)
     {
         for (int i = 0; i < frm_hdr->n_ref_frames; i++) {
             if (rf->abspocdiff[i] <= 2)
