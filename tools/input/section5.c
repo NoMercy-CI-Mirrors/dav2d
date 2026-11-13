@@ -36,6 +36,8 @@
 #include <sys/types.h>
 #endif
 
+#include "common/intops.h"
+
 #include "dav2d/headers.h"
 
 #include "input/demuxer.h"
@@ -53,7 +55,7 @@ static int section5_probe(const uint8_t *data) {
                            &obu_size, &type);
     if (ret < 0 || type != DAV2D_OBU_TD)
         return 0;
-    cnt += ret;
+    cnt += imin(ret, PROBE_SIZE - cnt);
     // sequence header is next
     while (cnt < PROBE_SIZE) {
         ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
@@ -66,9 +68,9 @@ static int section5_probe(const uint8_t *data) {
         if (type != DAV2D_OBU_LAYER_CFG_REC && type != DAV2D_OBU_OP_PT_SET &&
             type != DAV2D_OBU_ATLAS_SEG && type != DAV2D_OBU_MSDO)
             return 0;
-        cnt += ret;
+        cnt += imin(ret, PROBE_SIZE - cnt);
     }
-    cnt += ret;
+    cnt += imin(ret, PROBE_SIZE - cnt);
 
     // look for first frame
     while (cnt < PROBE_SIZE) {
@@ -82,7 +84,7 @@ static int section5_probe(const uint8_t *data) {
         case DAV2D_OBU_CLOSED_LOOP_KF:
             return 1;
         default:
-            cnt += ret;
+            cnt += imin(ret, PROBE_SIZE - cnt);
             break;
         }
     }

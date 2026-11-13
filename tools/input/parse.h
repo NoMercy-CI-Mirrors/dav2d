@@ -57,7 +57,7 @@ static int leb(const uint8_t *ptr, int sz, size_t *const len) {
     uint64_t val = 0;
     unsigned i = 0, more;
     do {
-        if (!sz--) return -1;
+        if (sz-- <= 0) return -1;
         const int v = *ptr++;
         more = v & 0x80;
         val |= ((uint64_t) (v & 0x7F)) << (i * 7);
@@ -75,7 +75,7 @@ static inline int parse_obu_header(const uint8_t *buf, int buf_size,
 {
     int ret, extension_flag;
 
-    if (!buf_size)
+    if (buf_size <= 0)
         return -1;
 
     ret = leb(buf, buf_size, obu_size);
@@ -84,7 +84,7 @@ static inline int parse_obu_header(const uint8_t *buf, int buf_size,
     buf += ret;
     buf_size -= ret;
 
-    if (!buf_size)
+    if (buf_size <= 0)
         return -1;
     extension_flag = *buf >> 7;
     *type = (*buf & 0x7c) >> 2;
@@ -92,7 +92,7 @@ static inline int parse_obu_header(const uint8_t *buf, int buf_size,
     buf_size--;
 
     if (extension_flag) {
-        if (!buf_size)
+        if (buf_size <= 0)
             return -1;
         buf++;
         buf_size--;
@@ -101,6 +101,8 @@ static inline int parse_obu_header(const uint8_t *buf, int buf_size,
     if (*obu_size < 1U + extension_flag)
         return -1;
     *obu_size -= 1 + extension_flag;
+    if (*obu_size > (size_t) (INT_MAX - ret - 1 - extension_flag))
+        return -1;
 
     return (int) *obu_size + ret + 1 + extension_flag;
 }
