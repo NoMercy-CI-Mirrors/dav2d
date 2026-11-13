@@ -244,6 +244,7 @@ int main(const int argc, char *const *const argv) {
         Dav2dSequenceHeader seq;
         unsigned seq_skip = 0;
         while (dav2d_parse_sequence_header(&seq, data.data, data.sz)) {
+            dav2d_data_unref(&data);
             if ((res = input_read(in, &data)) < 0) {
                 input_close(in);
                 return EXIT_FAILURE;
