@@ -2653,6 +2653,8 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             c->content_light = NULL;
             dav2d_ref_dec(&c->mastering_display_ref);
             dav2d_ref_dec(&c->content_light_ref);
+            dav2d_queue_flush(c);
+            c->dpb_poc = c->dpb_mlayer = 0;
             for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
                 if (c->refs[i].p.p.frame_hdr)
                     dav2d_thread_picture_unref(&c->refs[i].p);
@@ -2717,10 +2719,12 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 goto error;
             }
             c->n_frame_hdr_bits = dav2d_get_bits_pos(&gb) - hdr_start;
-            // a closed-loop key frame that starts a temporal unit (but doesn't
-            // refresh all slots, because the sequence has multiple embedded
-            // layers) removes all references that it doesn't refresh
+            // a closed-loop key frame that starts a temporal unit outputs all
+            // pending frames and removes all references that it doesn't
+            // refresh (it only refreshes some with multiple embedded layers)
             if (type == DAV2D_OBU_CLOSED_LOOP_KF && first_layer_in_tu) {
+                dav2d_queue_flush(c);
+                c->dpb_poc = c->dpb_mlayer = 0;
                 for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
                     if (c->frame_hdr->refresh_frame_flags & (1 << i)) continue;
                     if (c->refs[i].p.p.frame_hdr)

@@ -61,6 +61,8 @@ typedef struct Dav2dThreadPicture {
     // [1] motion vectors
     // [2] pixel data
     atomic_uint *progress;
+    // whether the picture was output (shared by all references to it)
+    int *shown;
 } Dav2dThreadPicture;
 
 typedef struct Dav2dPictureBuffer {

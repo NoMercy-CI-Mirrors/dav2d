@@ -321,6 +321,7 @@ static struct OutputQueue *queue_append(Dav2dContext *const c,
 {
     struct OutputQueue *const q = &c->dpb[c->dpb_in++];
     dav2d_thread_picture_ref(&q->p, p);
+    *p->shown = 1;
     q->res = 0;
     if (c->dpb_in == c->dpb_sz) c->dpb_in = 0;
     assert(c->dpb_in != c->dpb_out);
@@ -332,7 +333,7 @@ static struct OutputQueue *queue_append(Dav2dContext *const c,
     return q;
 }
 
-static void queue_flush(Dav2dContext *const c) {
+void dav2d_queue_flush(Dav2dContext *const c) {
     if (!c->seq_hdr) return;
 
     const Dav2dSequenceHeader *const seq_hdr = c->seq_hdr;
@@ -344,7 +345,7 @@ static void queue_flush(Dav2dContext *const c) {
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
             assert(hdr);
-            if (!hdr->show_implicit) continue;
+            if (!hdr->show_implicit || *c->refs[n].p.shown) continue;
             const int ipoc = hdr->frame_offset, imlayer = hdr->mlayer_id;
             if (get_output_order_diff(seq_hdr, ipoc, imlayer,
                                       c->dpb_poc, c->dpb_mlayer) > 0 &&
@@ -389,7 +390,7 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
             assert(hdr);
-            if (!hdr->show_implicit) continue;
+            if (!hdr->show_implicit || *c->refs[n].p.shown) continue;
             const int ipoc = hdr->frame_offset, imlayer = hdr->mlayer_id;
             if (get_output_order_diff(seq_hdr, ipoc, imlayer,
                                       c->dpb_poc, c->dpb_mlayer) > 0 &&
@@ -426,7 +427,7 @@ struct OutputQueue *dav2d_queue_output(Dav2dContext *const c,
             if (!c->refs[n].p.p.data[0]) continue;
             const Dav2dFrameHeader *const hdr = c->refs[n].p.p.frame_hdr;
             assert(hdr);
-            if (!hdr->show_implicit) continue;
+            if (!hdr->show_implicit || *c->refs[n].p.shown) continue;
             if (get_output_order_diff(seq_hdr, hdr->frame_offset, hdr->mlayer_id,
                                       c->dpb_poc, c->dpb_mlayer) == 1)
             {
@@ -553,7 +554,7 @@ int dav2d_get_picture(Dav2dContext *const c, Dav2dPicture *const out) {
         return res;
 
     if (c->drain && !c->in.data)
-        queue_flush(c);
+        dav2d_queue_flush(c);
 
     return output_image(c, out);
 }
@@ -606,6 +607,8 @@ void dav2d_flush(Dav2dContext *const c) {
         if (c->dpb[n].p.p.data[0])
             dav2d_thread_picture_unref(&c->dpb[n].p);
     c->dpb_in = c->dpb_out = c->drain = 0;
+    c->dpb_poc = c->dpb_mlayer = 0;
+    c->seen_layer_in_tu = 0;
 
     for (int i = 0; i < DAV2D_NUM_REF_FRAMES; i++) {
         if (c->refs[i].p.p.frame_hdr)

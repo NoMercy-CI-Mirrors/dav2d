@@ -560,6 +560,7 @@ struct Dav2dTaskContext {
     } task_thread;
 };
 
+void dav2d_queue_flush(Dav2dContext *c);
 struct OutputQueue *dav2d_queue_output(Dav2dContext *c, Dav2dThreadPicture *p,
                                        int reattach_metadata);
 
