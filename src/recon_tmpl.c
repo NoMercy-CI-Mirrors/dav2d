@@ -4238,9 +4238,9 @@ void bytefn(dav2d_filter_slice_deblock_rows)(Dav2dFrameContext *const f, const i
     }
 }
 
-void bytefn(dav2d_filter_slice_cdef)(Dav2dTaskContext *const tc, const int by64) {
+int bytefn(dav2d_filter_slice_cdef)(Dav2dTaskContext *const tc, const int by64) {
     const Dav2dFrameContext *const f = tc->f;
-    if (!(f->c->inloop_filters & (DAV2D_INLOOPFILTER_CDEF | DAV2D_INLOOPFILTER_CCSO))) return;
+    if (!(f->c->inloop_filters & (DAV2D_INLOOPFILTER_CDEF | DAV2D_INLOOPFILTER_CCSO))) return 0;
 
     const ptrdiff_t y_stride = f->cur.p.stride[0], uv_stride = f->cur.p.stride[1];
     const size_t y_stride_abs = (size_t)llabs(y_stride);
@@ -4249,6 +4249,10 @@ void bytefn(dav2d_filter_slice_cdef)(Dav2dTaskContext *const tc, const int by64)
     if (cdef_bak_sz > tc->lf.cdef_line_sz) {
         dav2d_free_aligned(tc->lf.cdef_line_buf);
         tc->lf.cdef_line_buf = dav2d_alloc_aligned(ALLOC_CDEF, cdef_bak_sz, 32);
+        if (!tc->lf.cdef_line_buf) {
+            tc->lf.cdef_line_sz = 0;
+            return DAV2D_ERR(ENOMEM);
+        }
         tc->lf.cdef_line_sz = cdef_bak_sz;
     }
     uint8_t *ptr = (uint8_t *) tc->lf.cdef_line_buf + 32;
@@ -4286,6 +4290,7 @@ void bytefn(dav2d_filter_slice_cdef)(Dav2dTaskContext *const tc, const int by64)
     }
     const int end = imin(start + n_blks, f->bh);
     bytefn(dav2d_cdef_slice)(tc, p, mask, start, end, by64);
+    return 0;
 }
 
 void bytefn(dav2d_filter_slice_lr)(Dav2dFrameContext *const f, const int by64) {
@@ -4301,13 +4306,16 @@ void bytefn(dav2d_filter_slice_lr)(Dav2dFrameContext *const f, const int by64) {
     bytefn(dav2d_lr_slice)(f, p, by64);
 }
 
-void bytefn(dav2d_filter_slice)(Dav2dFrameContext *const f, const int by64) {
+int bytefn(dav2d_filter_slice)(Dav2dFrameContext *const f, const int by64) {
     bytefn(dav2d_filter_slice_deblock_cols)(f, by64);
     bytefn(dav2d_filter_slice_deblock_rows)(f, by64);
-    if (f->lf.cdef_planes)
-        bytefn(dav2d_filter_slice_cdef)(f->c->tc, by64);
+    if (f->lf.cdef_planes) {
+        const int res = bytefn(dav2d_filter_slice_cdef)(f->c->tc, by64);
+        if (res) return res;
+    }
     if (f->lf.restore_planes)
         bytefn(dav2d_filter_slice_lr)(f, by64);
+    return 0;
 }
 
 void bytefn(dav2d_backup_prefilter_data)(Dav2dTaskContext *const t) {

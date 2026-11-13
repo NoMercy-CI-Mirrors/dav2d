@@ -62,14 +62,14 @@ typedef decl_read_pal_plane_fn(*read_pal_plane_fn);
 decl_recon_b_fn(dav2d_recon_b_8bpc);
 decl_recon_b_fn(dav2d_recon_b_16bpc);
 
-decl_filter_slice_fn(dav2d_filter_slice_8bpc);
-decl_filter_slice_fn(dav2d_filter_slice_16bpc);
+int dav2d_filter_slice_8bpc(Dav2dFrameContext *f, int by64);
+int dav2d_filter_slice_16bpc(Dav2dFrameContext *f, int by64);
 decl_filter_slice_fn(dav2d_filter_slice_deblock_cols_8bpc);
 decl_filter_slice_fn(dav2d_filter_slice_deblock_cols_16bpc);
 decl_filter_slice_fn(dav2d_filter_slice_deblock_rows_8bpc);
 decl_filter_slice_fn(dav2d_filter_slice_deblock_rows_16bpc);
-void dav2d_filter_slice_cdef_8bpc(Dav2dTaskContext *tc, int by64);
-void dav2d_filter_slice_cdef_16bpc(Dav2dTaskContext *tc, int by64);
+int dav2d_filter_slice_cdef_8bpc(Dav2dTaskContext *tc, int by64);
+int dav2d_filter_slice_cdef_16bpc(Dav2dTaskContext *tc, int by64);
 decl_filter_slice_fn(dav2d_filter_slice_lr_8bpc);
 decl_filter_slice_fn(dav2d_filter_slice_lr_16bpc);
 

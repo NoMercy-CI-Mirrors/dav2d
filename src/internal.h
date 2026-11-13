@@ -292,10 +292,10 @@ struct Dav2dFrameContext {
     const Dav2dDSPContext *dsp;
     struct {
         recon_b_fn recon_b;
-        filter_slice_fn filter_slice;
+        int (*filter_slice)(Dav2dFrameContext *f, int by64);
         filter_slice_fn filter_slice_deblock_cols;
         filter_slice_fn filter_slice_deblock_rows;
-        void (*filter_slice_cdef)(Dav2dTaskContext *tc, int sby);
+        int (*filter_slice_cdef)(Dav2dTaskContext *tc, int sby);
         filter_slice_fn filter_slice_lr;
         backup_prefilter_data_fn backup_prefilter_data;
         read_coef_blocks_fn read_coef_blocks;

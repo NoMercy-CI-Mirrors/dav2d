@@ -926,8 +926,11 @@ void *dav2d_worker_task(void *data) {
             // fall-through
         case DAV2D_TASK_TYPE_CDEF:
             if (f->lf.cdef_planes) {
-                if (!atomic_load(&f->task_thread.error))
-                    f->bd_fn.filter_slice_cdef(tc, by64);
+                if (!atomic_load(&f->task_thread.error) &&
+                    f->bd_fn.filter_slice_cdef(tc, by64))
+                {
+                    atomic_store(&f->task_thread.error, -1);
+                }
                 reset_task_cur_async(ttd, t->frame_idx, c->n_fc);
                 if (!atomic_fetch_or(&ttd->cond_signaled, 1))
                     pthread_cond_signal(&ttd->cond);

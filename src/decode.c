@@ -5369,7 +5369,8 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
         const int sb64h_end =
             imin(f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] << sbsz, f->sb64h);
         for (int by64 = sby_start << sbsz; by64 < sb64h_end; by64++) {
-            f->bd_fn.filter_slice(f, by64);
+            retval = f->bd_fn.filter_slice(f, by64);
+            if (retval) goto error;
         }
     }
 
