@@ -180,13 +180,13 @@ if is_asm_enabled
             'x86/refmvs.asm',
             'x86/refmvs_temporal.asm',
             'x86/cdef_avx2.asm',
+            'x86/cdef_avx512.asm',
             'x86/cfl_avx2.asm',
             'x86/cdef_sse.asm',
         )
 
         if dav2d_bitdepths.contains('8')
             libdav2d_sources_asm += files(
-                'x86/cdef_avx512.asm',
 #                'x86/filmgrain_avx512.asm',
                 'x86/ipred_avx512.asm',
 #                'x86/mc_avx512.asm',
