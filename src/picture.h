@@ -63,6 +63,7 @@ typedef struct Dav2dThreadPicture {
     atomic_uint *progress;
     // whether the picture was output (shared by all references to it)
     int *shown;
+    atomic_int *error;
 } Dav2dThreadPicture;
 
 typedef struct Dav2dPictureBuffer {
@@ -90,6 +91,14 @@ void dav2d_thread_picture_ref(Dav2dThreadPicture *dst,
 void dav2d_thread_picture_move_ref(Dav2dThreadPicture *dst,
                                    Dav2dThreadPicture *src);
 void dav2d_thread_picture_unref(Dav2dThreadPicture *p);
+
+static inline void dav2d_thread_picture_set_error(const Dav2dThreadPicture *const p,
+                                                  const int error)
+{
+    int old = 0;
+    while (!atomic_compare_exchange_strong(p->error, &old, error))
+        if (old == DAV2D_ERR(ENOMEM) || error != DAV2D_ERR(ENOMEM)) break;
+}
 
 /**
  * Move a picture reference.

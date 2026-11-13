@@ -121,7 +121,8 @@ static int picture_alloc(Dav2dContext *const c,
     }
     assert(bpc > 0 && bpc <= 16);
 
-    size_t extra = sizeof(int) + (c->n_fc > 1 ? sizeof(atomic_int) * 3 : 0);
+    size_t extra = sizeof(int) + sizeof(atomic_int) +
+                   (c->n_fc > 1 ? sizeof(atomic_uint) * 3 : 0);
     struct pic_ctx_context *pic_ctx = dav2d_mem_pool_pop(c->pic_ctx_pool, extra +
                                                          sizeof(struct pic_ctx_context));
     if (!pic_ctx)
@@ -196,7 +197,9 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
                                   (void **) &p->shown);
     if (res) return res;
     *p->shown = 0;
-    p->progress = c->n_fc > 1 ? (atomic_uint *) (p->shown + 1) : NULL;
+    p->error = (atomic_int *) (p->shown + 1);
+    atomic_init(p->error, 0);
+    p->progress = c->n_fc > 1 ? (atomic_uint *) (p->error + 1) : NULL;
 
     // Don't clear these flags from c->frame_flags if the frame is not going to be output.
     // This way they will be added to the next visible frame too.
@@ -308,6 +311,7 @@ void dav2d_thread_picture_ref(Dav2dThreadPicture *const dst,
     dst->showable = src->showable;
     dst->progress = src->progress;
     dst->shown = src->shown;
+    dst->error = src->error;
     dst->flags = src->flags;
 }
 
@@ -319,6 +323,7 @@ void dav2d_thread_picture_move_ref(Dav2dThreadPicture *const dst,
     dst->showable = src->showable;
     dst->progress = src->progress;
     dst->shown = src->shown;
+    dst->error = src->error;
     dst->flags = src->flags;
     memset(src, 0, sizeof(*src));
 }
@@ -347,6 +352,7 @@ void dav2d_thread_picture_unref(Dav2dThreadPicture *const p) {
 
     p->progress = NULL;
     p->shown = NULL;
+    p->error = NULL;
 }
 
 enum Dav2dEventFlags dav2d_picture_get_event_flags(const Dav2dThreadPicture *const p) {

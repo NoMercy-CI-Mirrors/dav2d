@@ -5374,9 +5374,6 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
 void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
     const Dav2dContext *const c = f->c;
 
-    if (f->cur.p.data[0])
-        atomic_init(&f->task_thread.error, 0);
-
     if (c->task_thread.n_passes > 1 && retval && f->frame_thread.cf) {
         memset(f->frame_thread.cf, 0,
                (size_t)f->frame_thread.cf_sz * 256 * 256 / 2);
@@ -5387,7 +5384,7 @@ void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
                 atomic_load(&f->refp[i].progress[2]) == FRAME_ERROR)
             {
                 retval = DAV2D_ERR(EINVAL);
-                atomic_store(&f->task_thread.error, 1);
+                dav2d_thread_picture_set_error(&f->cur, retval);
                 atomic_store(&f->cur.progress[2], FRAME_ERROR);
             }
             dav2d_thread_picture_unref(&f->refp[i]);
@@ -5712,7 +5709,6 @@ int dav2d_submit_frame(Dav2dContext *const c) {
     f->bitdepth_max = (1 << f->cur.p.p.bpc) - 1;
     f->n_seg = f->frame_hdr->segmentation.enabled ?
                8 << f->seq_hdr->segmentation.ext : 1;
-    atomic_init(&f->task_thread.error, 0);
     const int n_passes = c->task_thread.n_passes;
     const int cols = f->frame_hdr->tiling.t.cols;
     const int rows = f->frame_hdr->tiling.t.rows;
@@ -5940,7 +5936,6 @@ int dav2d_submit_frame(Dav2dContext *const c) {
 
     return 0;
 error:
-    atomic_init(&f->task_thread.error, 1);
     dav2d_cdf_thread_unref(&f->in_cdf);
     if (f->use_pri_sec_cdf) {
         dav2d_cdf_thread_unref(&f->src_cdf[0]);
@@ -5957,7 +5952,7 @@ error:
     // when it is output (like errors during frame-threaded decoding), so
     // don't also return it here
     if (q) {
-        q->res = res;
+        dav2d_thread_picture_set_error(&q->p, res);
         res = 0;
         if (c->n_fc > 1)
             for (int i = 0; i < 3; i++)

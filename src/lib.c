@@ -322,7 +322,6 @@ static struct OutputQueue *queue_append(Dav2dContext *const c,
     struct OutputQueue *const q = &c->dpb[c->dpb_in++];
     dav2d_thread_picture_ref(&q->p, p);
     *p->shown = 1;
-    q->res = 0;
     if (c->dpb_in == c->dpb_sz) c->dpb_in = 0;
     assert(c->dpb_in != c->dpb_out);
     assert(c->output_invisible_frames || c->seq_hdr->monotonic || !c->dpb_poc ||
@@ -480,8 +479,9 @@ static int output_image(Dav2dContext *const c, Dav2dPicture *const out) {
     c->dpb_out++;
     if (c->dpb_out == c->dpb_sz) c->dpb_out = 0;
 
-    if (q->res || progress == FRAME_ERROR) {
-        const int res = q->res ? q->res : DAV2D_ERR(EINVAL);
+    const int error = atomic_load(q->p.error);
+    if (error || progress == FRAME_ERROR) {
+        const int res = error ? error : DAV2D_ERR(EINVAL);
         dav2d_data_props_copy(&c->cached_error_props, &q->p.p.m);
         dav2d_thread_picture_unref(&q->p);
         return res;
@@ -679,7 +679,6 @@ void dav2d_flush(Dav2dContext *const c) {
             dav2d_decode_frame_exit(f, -1);
             f->n_tile_data = 0;
             f->task_thread.retval = 0;
-            f->task_thread.error = 0;
             f->frame_thread.scheduled = 0;
         }
         c->frame_thread.next = 0;

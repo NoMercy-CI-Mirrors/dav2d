@@ -399,13 +399,13 @@ static inline int check_tile(Dav2dTask *const t, Dav2dFrameContext *const f) {
     Dav2dTileState *const ts = &f->ts[tile_idx];
     const int p1 = atomic_load(&ts->progress[pass]);
     if (p1 < t->by64) return 1;
-    int error = p1 == TILE_ERROR;
-    error |= atomic_fetch_or(&f->task_thread.error, error);
+    if (p1 == TILE_ERROR) dav2d_thread_picture_set_error(&f->cur, DAV2D_ERR(EINVAL));
+    int error = atomic_load(f->cur.error);
     if (!error && pass > 0) {
         const int p2 = atomic_load(&ts->progress[pass - 1]);
         if (p2 <= t->by64) return 1;
-        error = p2 == TILE_ERROR;
-        error |= atomic_fetch_or(&f->task_thread.error, error);
+        if (p2 == TILE_ERROR) dav2d_thread_picture_set_error(&f->cur, DAV2D_ERR(EINVAL));
+        error = atomic_load(f->cur.error);
     }
     if (!error && f->c->n_fc > 1 && !IS_KEY_OR_INTRA(f->frame_hdr) &&
         !(t->type == DAV2D_TASK_TYPE_TILE_ENTROPY && !f->entropyref_mask) &&
@@ -445,7 +445,8 @@ static inline int check_tile(Dav2dTask *const t, Dav2dFrameContext *const f) {
             const int p_idx = pass * (1 + (n_passes == 2));
             const unsigned p3 = atomic_load(&f->refp[n].progress[p_idx]);
             if (p3 < lowest) return 1;
-            atomic_fetch_or(&f->task_thread.error, p3 == FRAME_ERROR);
+            if (p3 == FRAME_ERROR)
+                dav2d_thread_picture_set_error(&f->cur, DAV2D_ERR(EINVAL));
         }
     }
     return 0;
@@ -470,7 +471,7 @@ static inline int get_frame_progress(const Dav2dContext *const c,
 }
 
 static inline void abort_frame(Dav2dFrameContext *const f, const int error) {
-    atomic_store(&f->task_thread.error, error == DAV2D_ERR(EINVAL) ? 1 : -1);
+    dav2d_thread_picture_set_error(&f->cur, error);
     atomic_store(&f->task_thread.task_counter, 0);
     atomic_store(&f->task_thread.done[0], 1);
     atomic_store(&f->task_thread.done[1], 1);
@@ -615,7 +616,8 @@ void *dav2d_worker_task(void *data) {
                                  atomic_load(f->src_cdf[1].progress) : 1;
                     }
                     if (p1) {
-                        atomic_fetch_or(&f->task_thread.error, p1 == TILE_ERROR);
+                        if (p1 == TILE_ERROR)
+                            dav2d_thread_picture_set_error(&f->cur, DAV2D_ERR(EINVAL));
                         goto found;
                     }
                 }
@@ -640,7 +642,7 @@ void *dav2d_worker_task(void *data) {
                         goto found;
                 } else if (t->recon_progress) {
                     const int p = t->type == DAV2D_TASK_TYPE_ENTROPY_PROGRESS;
-                    int error = atomic_load(&f->task_thread.error);
+                    int error = atomic_load(f->cur.error);
                     assert(!atomic_load(&f->task_thread.done[p]) || error);
                     const int tile_row_base = f->frame_hdr->tiling.t.cols *
                                               f->frame_thread.next_tile_row[p];
@@ -648,7 +650,8 @@ void *dav2d_worker_task(void *data) {
                         atomic_int *const prog = &f->frame_thread.entropy_progress;
                         const int p1 = atomic_load(prog);
                         if (p1 < t->by64) goto next;
-                        atomic_fetch_or(&f->task_thread.error, p1 == TILE_ERROR);
+                        if (p1 == TILE_ERROR)
+                            dav2d_thread_picture_set_error(&f->cur, DAV2D_ERR(EINVAL));
                     }
                     const int pass = t->type == DAV2D_TASK_TYPE_ENTROPY_PROGRESS ?
                                      0 : f->c->task_thread.n_passes - 1;
@@ -656,13 +659,14 @@ void *dav2d_worker_task(void *data) {
                         Dav2dTileState *const ts = &f->ts[tile_row_base + tc];
                         const int p2 = atomic_load(&ts->progress[pass]);
                         if (p2 < t->recon_progress) goto next;
-                        atomic_fetch_or(&f->task_thread.error, p2 == TILE_ERROR);
+                        if (p2 == TILE_ERROR)
+                            dav2d_thread_picture_set_error(&f->cur, DAV2D_ERR(EINVAL));
                     }
                     const int sbsz = f->frame_hdr->sbsz;
                     const int inc = p ? 1 << sbsz : 1;
                     if (t->type != DAV2D_TASK_TYPE_ENTROPY_PROGRESS && c->n_fc > 1) {
                         atomic_store(&f->cur.progress[1],
-                                     atomic_load(&f->task_thread.error) ?
+                                     atomic_load(f->cur.error) ?
                                          FRAME_ERROR :
                                      t->by64 + inc < f->sb64h ?
                                          ((unsigned) t->recon_progress) << 6 :
@@ -690,7 +694,8 @@ void *dav2d_worker_task(void *data) {
                     assert(t->deblock_progress);
                     const int p1 = atomic_load(&f->frame_thread.deblock_progress);
                     if (p1 >= t->deblock_progress) {
-                        atomic_fetch_or(&f->task_thread.error, p1 == TILE_ERROR);
+                        if (p1 == TILE_ERROR)
+                            dav2d_thread_picture_set_error(&f->cur, DAV2D_ERR(EINVAL));
                         goto found;
                     }
                 }
@@ -728,8 +733,9 @@ void *dav2d_worker_task(void *data) {
         pthread_cond_signal(&ttd->cond);
         pthread_mutex_unlock(&ttd->lock);
     found_unlocked:;
-        const int flush = atomic_load(c->flush);
-        int error = atomic_fetch_or(&f->task_thread.error, flush) | flush;
+        if (atomic_load(c->flush))
+            dav2d_thread_picture_set_error(&f->cur, DAV2D_ERR(EINVAL));
+        int error = atomic_load(f->cur.error);
 
         // run it
         tc->f = f;
@@ -764,7 +770,7 @@ void *dav2d_worker_task(void *data) {
         case DAV2D_TASK_TYPE_INIT_CDF: {
             assert(c->n_fc > 1);
             int res = DAV2D_ERR(EINVAL);
-            if (!atomic_load(&f->task_thread.error)) {
+            if (!atomic_load(f->cur.error)) {
                 if (f->frame_hdr->tip.frame_mode != DAV2D_TIP_FRAME_AS_OUTPUT) {
                     res = dav2d_decode_frame_init_cdf(f);
                 } else {
@@ -822,11 +828,13 @@ void *dav2d_worker_task(void *data) {
                     t->type == DAV2D_TASK_TYPE_TILE_MV_RESOLUTION ? PASS_MVRES : PASS_RECON;
                 break;
             }
-            if (!error) error = dav2d_decode_tile_sbrow(tc);
+            if (!error && dav2d_decode_tile_sbrow(tc)) {
+                error = DAV2D_ERR(EINVAL);
+                dav2d_thread_picture_set_error(&f->cur, error);
+            }
             const int progress = error ? TILE_ERROR : sb64sz + by64;
 
             // signal progress
-            atomic_fetch_or(&f->task_thread.error, error);
             if (((by64 + sb64sz) << 4) < ts->tiling.row_end) {
                 t->by64 += sb64sz;
                 t->deps_skip = 0;
@@ -844,7 +852,7 @@ void *dav2d_worker_task(void *data) {
                 pthread_mutex_lock(&ttd->lock);
                 atomic_store(&ts->progress[pass], progress);
                 reset_task_cur(c, ttd, t->frame_idx);
-                error = atomic_load(&f->task_thread.error);
+                error = atomic_load(f->cur.error);
                 if (!f->frame_hdr->disable_cdf_update &&
                     tc->task_thread.pass & PASS_ENTROPY &&
                     ((f->task_thread.update_set &&
@@ -861,9 +869,8 @@ void *dav2d_worker_task(void *data) {
                     atomic_load(&f->task_thread.done[0]) &&
                     (n_passes == 1 || atomic_load(&f->task_thread.done[1])))
                 {
-                    error = atomic_load(&f->task_thread.error);
-                    dav2d_decode_frame_exit(f, error == 1 ? DAV2D_ERR(EINVAL) :
-                                            error ? DAV2D_ERR(ENOMEM) : 0);
+                    error = atomic_load(f->cur.error);
+                    dav2d_decode_frame_exit(f, error);
                     f->n_tile_data = 0;
                     pthread_cond_signal(&f->task_thread.cond);
                 }
@@ -874,20 +881,20 @@ void *dav2d_worker_task(void *data) {
             continue;
         }
         case DAV2D_TASK_TYPE_DEBLOCK_COLS:
-            if (!atomic_load(&f->task_thread.error))
+            if (!atomic_load(f->cur.error))
                 f->bd_fn.filter_slice_deblock_cols(f, by64);
             if (ensure_progress(ttd, f, t, DAV2D_TASK_TYPE_DEBLOCK_ROWS,
                                 &f->frame_thread.deblock_progress,
                                 &t->deblock_progress)) continue;
             // fall-through
         case DAV2D_TASK_TYPE_DEBLOCK_ROWS:
-            if (!atomic_load(&f->task_thread.error))
+            if (!atomic_load(f->cur.error))
                 f->bd_fn.filter_slice_deblock_rows(f, by64);
             // signal deblock progress
             if (f->frame_hdr->deblock.level_y[0] ||
                 f->frame_hdr->deblock.level_y[1])
             {
-                error = atomic_load(&f->task_thread.error);
+                error = atomic_load(f->cur.error);
                 atomic_store(&f->frame_thread.deblock_progress,
                              error ? TILE_ERROR : by64 + 1);
                 reset_task_cur_async(ttd, t->frame_idx, c->n_fc);
@@ -912,10 +919,9 @@ void *dav2d_worker_task(void *data) {
             // fall-through
         case DAV2D_TASK_TYPE_CDEF:
             if (f->lf.cdef_planes) {
-                if (!atomic_load(&f->task_thread.error) &&
-                    f->bd_fn.filter_slice_cdef(tc, by64))
-                {
-                    atomic_store(&f->task_thread.error, -1);
+                if (!atomic_load(f->cur.error)) {
+                    const int res = f->bd_fn.filter_slice_cdef(tc, by64);
+                    if (res) dav2d_thread_picture_set_error(&f->cur, res);
                 }
                 reset_task_cur_async(ttd, t->frame_idx, c->n_fc);
                 if (!atomic_fetch_or(&ttd->cond_signaled, 1))
@@ -923,7 +929,7 @@ void *dav2d_worker_task(void *data) {
             }
             // fall-through
         case DAV2D_TASK_TYPE_LOOP_RESTORATION:
-            if (!atomic_load(&f->task_thread.error) && f->lf.restore_planes)
+            if (!atomic_load(f->cur.error) && f->lf.restore_planes)
                 f->bd_fn.filter_slice_lr(f, by64);
             // fall-through
         case DAV2D_TASK_TYPE_RECONSTRUCTION_PROGRESS:
@@ -937,7 +943,7 @@ void *dav2d_worker_task(void *data) {
         const int n_passes = c->task_thread.n_passes;
         const int sb64h = f->sb64h;
         if (t->type == DAV2D_TASK_TYPE_ENTROPY_PROGRESS) {
-            error = atomic_load(&f->task_thread.error);
+            error = atomic_load(f->cur.error);
             const unsigned y = by64 + sb64sz >= sb64h ? UINT_MAX :
                                (unsigned)(by64 + sb64sz) * 64;
             assert(c->task_thread.n_passes > 1);
@@ -959,9 +965,8 @@ void *dav2d_worker_task(void *data) {
             if (!num_tasks && atomic_load(&f->task_thread.done[0]) &&
                 atomic_load(&f->task_thread.done[1]))
             {
-                error = atomic_load(&f->task_thread.error);
-                dav2d_decode_frame_exit(f, error == 1 ? DAV2D_ERR(EINVAL) :
-                                        error ? DAV2D_ERR(ENOMEM) : 0);
+                error = atomic_load(f->cur.error);
+                dav2d_decode_frame_exit(f, error);
                 f->n_tile_data = 0;
                 pthread_cond_signal(&f->task_thread.cond);
             }
@@ -973,7 +978,7 @@ void *dav2d_worker_task(void *data) {
                         1U << (by64 & 31));
         pthread_mutex_lock(&f->task_thread.lock);
         by64 = get_frame_progress(c, f);
-        error = atomic_load(&f->task_thread.error);
+        error = atomic_load(f->cur.error);
         const unsigned y = by64 + 1 == sb64h ? UINT_MAX : (unsigned)(by64 + 1) * 64;
         if (c->n_fc > 1 && f->cur.p.data[0] /* upon flush, this can be free'ed already */)
             atomic_store(&f->cur.progress[2], error ? FRAME_ERROR : y);
@@ -989,9 +994,8 @@ void *dav2d_worker_task(void *data) {
         if (!num_tasks && atomic_load(&f->task_thread.done[0]) &&
             (n_passes == 1 || atomic_load(&f->task_thread.done[1])))
         {
-            error = atomic_load(&f->task_thread.error);
-            dav2d_decode_frame_exit(f, error == 1 ? DAV2D_ERR(EINVAL) :
-                                    error ? DAV2D_ERR(ENOMEM) : 0);
+            error = atomic_load(f->cur.error);
+            dav2d_decode_frame_exit(f, error);
             f->n_tile_data = 0;
             pthread_cond_signal(&f->task_thread.cond);
         }

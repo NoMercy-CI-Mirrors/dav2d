@@ -128,7 +128,6 @@ struct Dav2dContext {
     Dav2dData in;
     struct OutputQueue {
         Dav2dThreadPicture p;
-        int res;
         // FIXME event/frame_flags
     } *dpb; // output buffer management
     int dpb_in, dpb_out, dpb_sz, dpb_poc, dpb_mlayer, drain;
@@ -389,7 +388,6 @@ struct Dav2dFrameContext {
         atomic_int done[2];
         int retval;
         int update_set; // whether we need to update CDF reference
-        atomic_int error;
         atomic_int task_counter, entropy_task_counter;
         struct Dav2dTask *task_head, *task_tail;
         // Points to the task directly before the cur pointer in the queue.
