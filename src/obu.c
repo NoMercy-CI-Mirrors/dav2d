@@ -3097,9 +3097,7 @@ skip:
     return gb.ptr_end - gb.ptr_start;
 
 error:
-#if 0
     dav2d_data_props_copy(&c->cached_error_props, &in->m);
-#endif
     dav2d_log(c, gb.error ? "Overrun in OBU bit buffer\n" :
                             "Error parsing OBU data\n");
     return DAV2D_ERR(EINVAL);

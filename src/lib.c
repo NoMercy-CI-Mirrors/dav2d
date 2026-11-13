@@ -180,9 +180,7 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
     c->inloop_filters = s->inloop_filters;
     c->decode_frame_type = s->decode_frame_type;
 
-#if 0
     dav2d_data_props_set_defaults(&c->cached_error_props);
-#endif
 
     if (dav2d_mem_pool_init(ALLOC_OBU_HDR, &c->seq_hdr_pool) ||
         dav2d_mem_pool_init(ALLOC_OBU_HDR, &c->frame_hdr_pool) ||
@@ -461,6 +459,7 @@ static int output_image(Dav2dContext *const c, Dav2dPicture *const out) {
 
     if (q->res || progress == FRAME_ERROR) {
         const int res = q->res ? q->res : DAV2D_ERR(EINVAL);
+        dav2d_data_props_copy(&c->cached_error_props, &q->p.p.m);
         dav2d_thread_picture_unref(&q->p);
         return res;
     }
@@ -580,6 +579,7 @@ error:
 
 void dav2d_flush(Dav2dContext *const c) {
     dav2d_data_unref_internal(&c->in);
+    dav2d_data_props_unref_internal(&c->cached_error_props);
     for (int n = 0; n < c->dpb_sz; n++)
         if (c->dpb[n].p.p.data[0])
             dav2d_thread_picture_unref(&c->dpb[n].p);
@@ -768,6 +768,7 @@ int dav2d_get_event_flags(Dav2dContext *const c, enum Dav2dEventFlags *const fla
     c->event_flags = 0;
     return 0;
 }
+#endif
 
 int dav2d_get_decode_error_data_props(Dav2dContext *const c, Dav2dDataProps *const out) {
     validate_input_or_ret(c != NULL, DAV2D_ERR(EINVAL));
@@ -779,7 +780,6 @@ int dav2d_get_decode_error_data_props(Dav2dContext *const c, Dav2dDataProps *con
 
     return 0;
 }
-#endif
 
 void dav2d_picture_unref(Dav2dPicture *const p) {
     dav2d_picture_unref_internal(p);

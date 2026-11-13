@@ -5956,9 +5956,7 @@ error:
         dav2d_ref_dec(&f->prev_ccsomap_ref[p]);
     dav2d_ref_dec(&f->seq_hdr_ref);
     dav2d_ref_dec(&f->frame_hdr_ref);
-#if 0
     dav2d_data_props_copy(&c->cached_error_props, &c->in.m);
-#endif
 
     for (int i = 0; i < f->n_tile_data; i++)
         dav2d_data_unref_internal(&f->tile[i].data);
