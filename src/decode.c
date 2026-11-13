@@ -4787,10 +4787,11 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
             // 8x8 resolution for x=25, this may round to x=24 (which our left-
             // neighbour just overwrote). To workaround this, we keep a copy of
             // all affected context bits at SB boundaries. See AVM #1091.
-            memcpy(t->a_sb_cache.ref[0], t->a->ref[0], 64);
-            memcpy(t->a_sb_cache.ref[1], t->a->ref[1], 64);
+            const int bx4 = t->bx & 63, sz = f->sb_step;
+            memcpy(&t->a_sb_cache.ref[0][bx4], &t->a->ref[0][bx4], sz);
+            memcpy(&t->a_sb_cache.ref[1][bx4], &t->a->ref[1][bx4], sz);
             if (t->by > ts->tiling.row_start)
-                memcpy(t->a_sb_cache.motion_mode, t->a->motion_mode, 64);
+                memcpy(&t->a_sb_cache.motion_mode[bx4], &t->a->motion_mode[bx4], sz);
         }
         if (decode_sb(t, DB_ONLY(1) root_bs, root_bs, &dir))
             return 1;
