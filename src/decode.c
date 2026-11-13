@@ -5969,6 +5969,8 @@ error:
     dav2d_thread_picture_unref(&f->cur);
     dav2d_ref_dec(&f->cur_segmap_ref);
     dav2d_ref_dec(&f->prev_segmap_ref);
+    dav2d_mem_pool_push(c->segmap_uv_pool, f->lf.segmap_uv);
+    f->lf.segmap_uv = NULL;
     dav2d_ref_dec(&f->mvs_ref);
     dav2d_ref_dec(&f->cur_ccsomap_ref);
     for (int p = 0; p < 3; p++)
