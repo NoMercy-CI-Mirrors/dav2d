@@ -5959,6 +5959,9 @@ error:
     if (q) {
         q->res = res;
         res = 0;
+        if (c->n_fc > 1)
+            for (int i = 0; i < 3; i++)
+                atomic_store(&f->cur.progress[i], FRAME_ERROR);
     }
     dav2d_thread_picture_unref(&f->cur);
     dav2d_ref_dec(&f->cur_segmap_ref);
