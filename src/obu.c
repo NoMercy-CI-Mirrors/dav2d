@@ -2231,21 +2231,25 @@ static int parse_fgm_hdr(Dav2dContext *const c, GetBits *const gb) {
     const uint8_t *const init_ptr = gb->ptr;
 #endif
     const unsigned mask = dav2d_get_bits(gb, 8);
+    int res = DAV2D_ERR(EINVAL);
     enum Dav2dPixelLayout layout = dav2d_get_vlc(gb);
-    if (layout > 3) return -1;
+    if (layout > 3) return res;
 #if DEBUG_FGM_HDR
     printf("FGM: post-init[mask=0x%x,layout=%d]: off=%td\n",
            mask, layout,
            (gb->ptr - init_ptr) * 8 - gb->bits_left);
 #endif
     layout = dav2d_layouts[layout];
-    if (layout != c->seq_hdr->layout) return -1;
+    if (layout != c->seq_hdr->layout) return res;
 
     for (int idx = 0, m = 1; idx < 8; idx++, m <<= 1) {
         if (!(mask & m)) continue;
         dav2d_ref_dec(&c->fgm[idx]);
         c->fgm[idx] = dav2d_ref_create_using_pool(c->fgm_pool, sizeof(Dav2dFilmGrainData));
-        if (!c->fgm[idx]) goto error;
+        if (!c->fgm[idx]) {
+            res = DAV2D_ERR(ENOMEM);
+            goto error;
+        }
         Dav2dFilmGrainData *const fgd = c->fgm[idx]->data;
         memset(fgd, 0, sizeof(*fgd));
 
@@ -2330,7 +2334,7 @@ error:
     for (int idx = 0, m = 1; idx < 8; idx++, m <<= 1) {
         if (mask & m) dav2d_ref_dec(&c->fgm[idx]);
     }
-    return -1;
+    return res;
 }
 
 static int parse_ci_hdr(Dav2dContext *const c, GetBits *const gb,
@@ -2769,7 +2773,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             if ((c->n_tile_data + 1) > INT_MAX / (int)sizeof(*c->tile)) goto error;
             struct Dav2dTileGroup *tile = dav2d_realloc(ALLOC_TILE, c->tile,
                                                         (c->n_tile_data + 1) * sizeof(*c->tile));
-            if (!tile) goto error;
+            if (!tile) return DAV2D_ERR(ENOMEM);
             c->tile = tile;
             memset(c->tile + c->n_tile_data, 0, sizeof(*c->tile));
             c->n_tile_data_alloc = c->n_tile_data + 1;
@@ -2805,7 +2809,10 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
     }
     case DAV2D_OBU_FGM: {
         if (!c->seq_hdr) goto error;
-        if (parse_fgm_hdr(c, &gb) < 0) goto error;
+        if ((res = parse_fgm_hdr(c, &gb)) < 0) {
+            if (res == DAV2D_ERR(ENOMEM)) return res;
+            goto error;
+        }
         if (check_trailing_bits(&gb, c->strict_std_compliance) < 0)
             goto error;
         break;
@@ -2814,6 +2821,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
         if (c->ci_ref) dav2d_ref_dec(&c->ci_ref);
         c->ci_ref = dav2d_ref_create_using_pool(c->ci_pool,
                                                 sizeof(Dav2dContentInterpretation));
+        if (!c->ci_ref) return DAV2D_ERR(ENOMEM);
         parse_ci_hdr(c, &gb, c->strict_std_compliance);
         if (check_trailing_bits(&gb, c->strict_std_compliance) < 0)
             goto error;
@@ -2931,7 +2939,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             if ((c->n_itut_t35 + 1) > INT_MAX / (int)sizeof(*c->itut_t35)) goto error;
             struct Dav2dITUTT35 *itut_t35 = dav2d_realloc(ALLOC_OBU_META, c->itut_t35,
                                                           (c->n_itut_t35 + 1) * sizeof(*c->itut_t35));
-            if (!itut_t35) goto error;
+            if (!itut_t35) return DAV2D_ERR(ENOMEM);
             c->itut_t35 = itut_t35;
             memset(c->itut_t35 + c->n_itut_t35, 0, sizeof(*c->itut_t35));
 
@@ -2939,7 +2947,11 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             if (!c->n_itut_t35) {
                 assert(!c->itut_t35_ref);
                 itut_t35_ctx = dav2d_malloc(ALLOC_OBU_META, sizeof(struct itut_t35_ctx_context));
-                if (!itut_t35_ctx) goto error;
+                if (!itut_t35_ctx) {
+                    dav2d_free(c->itut_t35);
+                    c->itut_t35 = NULL;
+                    return DAV2D_ERR(ENOMEM);
+                }
                 c->itut_t35_ref = dav2d_ref_init(&itut_t35_ctx->ref, c->itut_t35,
                                                  dav2d_picture_free_itut_t35, itut_t35_ctx, 0);
             } else {
@@ -2952,7 +2964,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
 
             Dav2dITUTT35 *const itut_t35_metadata = &c->itut_t35[c->n_itut_t35];
             itut_t35_metadata->payload = dav2d_malloc(ALLOC_OBU_META, payload_size);
-            if (!itut_t35_metadata->payload) goto error;
+            if (!itut_t35_metadata->payload) return DAV2D_ERR(ENOMEM);
 
             itut_t35_metadata->country_code = country_code;
             itut_t35_metadata->country_code_extension_byte = country_code_extension_byte;
