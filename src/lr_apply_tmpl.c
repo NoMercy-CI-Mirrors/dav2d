@@ -315,11 +315,20 @@ static void lr_sbrow(const Dav2dFrameContext *const f, pixel *const p[3],
     if (first_sby_in_tile_row == FIRST_SB_TOP) edges |= LR_HAVE_BOTTOM_INTEGRATED;
     if (first_sby_in_tile_row == FIRST_SB_BOTTOM && y > 0) edges |= LR_HAVE_TOP_INTEGRATED;
 
-    int aligned_unit_pos_y = row_y & ~(unit_size[0] - 1);
-    if (aligned_unit_pos_y && aligned_unit_pos_y + (unit_size[0] >> 1) > h)
+    const int sbsz_y = 4 * f->sb_step;
+    const int tile_row = tile_row_m1 + (first_sby_in_tile_row != FIRST_SB_TOP);
+    const uint16_t *const row_start_sb = &f->frame_hdr->tiling.t.row_start_sb[tile_row];
+    const int tile_y_start = row_start_sb[0] * sbsz_y;
+    const int tile_y_end = imin(row_start_sb[1] * sbsz_y, h);
+    int aligned_unit_pos_y = tile_y_start + ((row_y - tile_y_start) & ~(unit_size[0] - 1));
+    if (aligned_unit_pos_y > tile_y_start &&
+        aligned_unit_pos_y + (unit_size[0] >> 1) > tile_y_end)
         aligned_unit_pos_y -= unit_size[0];
-    int aligned_unit_pos_uv = (row_y >> ss_ver) & ~(unit_size[1] - 1);
-    if (aligned_unit_pos_uv && aligned_unit_pos_uv + (unit_size[1] >> 1) > (h >> ss_ver))
+    const int tile_uv_start = tile_y_start >> ss_ver, tile_uv_end = tile_y_end >> ss_ver;
+    int aligned_unit_pos_uv = tile_uv_start +
+        (((row_y >> ss_ver) - tile_uv_start) & ~(unit_size[1] - 1));
+    if (aligned_unit_pos_uv > tile_uv_start &&
+        aligned_unit_pos_uv + (unit_size[1] >> 1) > tile_uv_end)
         aligned_unit_pos_uv -= unit_size[1];
     aligned_unit_pos_uv <<= ss_ver;
     const int unit_idx[2] = {
