@@ -1865,21 +1865,23 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
                 continue;
             }
             int i = 0;
-            for (int r = 0; r < hdr->n_ref_frames; r++) {
-                const Dav2dFrameHeader *const ref_hdr =
-                    c->refs[hdr->refidx[r]].p.p.frame_hdr;
-                for (int dir = (const int8_t[]){ 0, +1, -1 }[p], p2 = p;;
-                     p2 += dir, dir = 0)
-                {
-                    const struct Dav2dNSWienerPlane *const rpd =
-                        &ref_hdr->restoration.p[p2].ns;
-                    if (rpd->frame_filters_on) {
-                        const int n_classes =
-                            imin(n_ref_filters - i, rpd->num_classes);
-                        for (int n = 0; n < n_classes; n++)
-                            memcpy(ref_filters[i++], rpd->filter[n], n_feat);
+            if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER) {
+                for (int r = 0; r < hdr->n_ref_frames; r++) {
+                    const Dav2dFrameHeader *const ref_hdr =
+                        c->refs[hdr->refidx[r]].p.p.frame_hdr;
+                    for (int dir = (const int8_t[]){ 0, +1, -1 }[p], p2 = p;;
+                         p2 += dir, dir = 0)
+                    {
+                        const struct Dav2dNSWienerPlane *const rpd =
+                            &ref_hdr->restoration.p[p2].ns;
+                        if (rpd->frame_filters_on) {
+                            const int n_classes =
+                                imin(n_ref_filters - i, rpd->num_classes);
+                            for (int n = 0; n < n_classes; n++)
+                                memcpy(ref_filters[i++], rpd->filter[n], n_feat);
+                        }
+                        if (!dir) break;
                     }
-                    if (!dir) break;
                 }
             }
             assert(i <= (p ? 14 : 47));
