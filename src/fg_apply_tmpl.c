@@ -171,7 +171,7 @@ void bitfn(dav2d_apply_grain_row)(const Dav2dFilmGrainDSPContext *const dsp,
     const int ss_y = in->p.layout == DAV2D_PIXEL_LAYOUT_I420;
     const int ss_x = in->p.layout != DAV2D_PIXEL_LAYOUT_I444;
     const int cpw = (out->p.w + ss_x) >> ss_x;
-    const int is_id = 0; //out->seq_hdr->mtrx == DAV2D_MC_IDENTITY;
+    const int is_id = data->mc_identity;
     const int bs = 16 << data->block_size;
     pixel *const luma_src =
         ((pixel *) in->data[0]) + row * bs * PXSTRIDE(in->stride[0]);
