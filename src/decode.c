@@ -3973,17 +3973,25 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         {
             bp = PARTITION_NONE;
         } else if (!have_h_split || !have_v_split) {
+            const int cw4 = bw4 >> ss_hor, ch4 = bh4 >> ss_ver;
             if (bw4 == bh4) {
                 if (!have_v_split || !no_v) {
                     dir = have_v_split;
                     bp = !have_v_split ? PARTITION_H : PARTITION_V;
                 }
+            } else if (lbs != BS_INVALID && cbs != BS_INVALID &&
+                       f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400 &&
+                       (bw4 > bh4 ? (cw4 < 2 || ch4 < 1) && !have_h_split :
+                                    (cw4 < 1 || ch4 < 2) && !have_v_split))
+            {
+                bp = PARTITION_NONE;
             } else if (bw4 > bh4) {
                 if (!have_h_split || f->bh <= t->by + qh4) {
                     dir = 1;
                     bp = PARTITION_V;
                 }
-            } else if (bh4 > bw4) {
+            } else {
+                assert(bh4 > bw4);
                 if (!have_v_split || f->bw <= t->bx + qw4) {
                     dir = 0;
                     bp = PARTITION_H;
