@@ -938,10 +938,10 @@ static void find_tip_ref_frames(const Dav2dContext *const c,
     }
 }
 
-static void derive_pri_sec_ref(const Dav2dContext *const c, int refs[2]) {
+static int derive_pri_sec_ref(const Dav2dContext *const c) {
     const Dav2dSequenceHeader *const seqhdr = c->seq_hdr;
-    const Dav2dFrameHeader *const hdr = c->frame_hdr;
-    refs[0] = refs[1] = DAV2D_PRIMARY_REF_NONE;
+    Dav2dFrameHeader *const hdr = c->frame_hdr;
+    int refs[2] = { DAV2D_PRIMARY_REF_NONE, DAV2D_PRIMARY_REF_NONE };
     int best_qdiff[2], best_pocdiff[2], best_poc[2], best = 0;
     const int qidx = hdr->quant.yac, poc = hdr->frame_offset;
     const int nbits = seqhdr->order_hint_n_bits;
@@ -971,6 +971,17 @@ static void derive_pri_sec_ref(const Dav2dContext *const c, int refs[2]) {
         refs[0] = refs[1];
         refs[1] = tmp;
     }
+
+    if (!hdr->primary_ref_signaled || refs[0] == DAV2D_PRIMARY_REF_NONE) {
+        hdr->primary_ref_frame = refs[0];
+    } else if (hdr->primary_ref_frame != DAV2D_PRIMARY_REF_NONE &&
+               hdr->primary_ref_frame >= hdr->n_ref_frames)
+    {
+        return DAV2D_ERR(EINVAL);
+    }
+    hdr->secondary_ref_frame = hdr->primary_ref_frame == DAV2D_PRIMARY_REF_NONE ?
+        DAV2D_PRIMARY_REF_NONE : refs[refs[1] != hdr->primary_ref_frame];
+    return 0;
 }
 
 static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
@@ -1423,10 +1434,7 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             }
 
             hdr->disable_cdf_update = 1;
-            int refs[2];
-            derive_pri_sec_ref(c, refs);
-            hdr->primary_ref_frame = refs[0];
-            hdr->secondary_ref_frame = refs[1];
+            if (derive_pri_sec_ref(c)) goto error;
 
             goto grain;
         }
@@ -1542,19 +1550,8 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     }
 
     hdr->secondary_ref_frame = DAV2D_PRIMARY_REF_NONE;
-    if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER) {
-        int refs[2];
-        derive_pri_sec_ref(c, refs);
-        if (!hdr->primary_ref_signaled || refs[0] == DAV2D_PRIMARY_REF_NONE) {
-             hdr->primary_ref_frame = refs[0];
-        } else if (hdr->primary_ref_frame != DAV2D_PRIMARY_REF_NONE &&
-                   hdr->primary_ref_frame >= hdr->n_ref_frames)
-        {
-            goto error;
-        }
-        if (hdr->primary_ref_frame != DAV2D_PRIMARY_REF_NONE)
-            hdr->secondary_ref_frame = refs[refs[1] != hdr->primary_ref_frame];
-    }
+    if (hdr->frame_type == DAV2D_FRAME_TYPE_INTER && derive_pri_sec_ref(c))
+        goto error;
 
 #if DEBUG_FRAME_HDR
     printf("HDR: post-quant[yac:%d,deltas=ydc:%d,uac:%d/dc:%d,vac:%d/dc:%d]: off=%td\n",
