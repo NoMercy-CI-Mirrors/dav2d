@@ -2091,10 +2091,11 @@ void dav2d_refmvs_save_tmvs(refmvs_tile *const rt,
 }
 
 static unsigned abs_closest_ref(const int8_t *const ref2ref,
-                                const int8_t *const cur2ref, const int dir)
+                                const int8_t *const cur2ref, const int cnt,
+                                const int dir)
 {
     int b = 0xff;
-    for (int n = 0; n < 7; n++) {
+    for (int n = 0; n < cnt; n++) {
         const int a = abs(ref2ref[n]);
         if (((cur2ref[n] > 0 && ref2ref[n] > 0 && dir) ||
              (cur2ref[n] < 0 && ref2ref[n] < 0 && !dir)) && a < b)
@@ -2111,7 +2112,7 @@ static int topo_insert(int cnt, const int idx, int8_t *const order,
 {
     if (rev_order[idx] != -1) return cnt;
     rev_order[idx] = 0; // dummy
-    for (int n = 0; n < 7 * !!refcnt[idx]; n++) {
+    for (int n = 0; n < refcnt[idx]; n++) {
         const int r_idx = cnv[idx][n];
         if (r_idx == -1) continue;
         cnt = topo_insert(cnt, r_idx, order, rev_order, cnv, refcnt);
@@ -2192,7 +2193,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
         rf->pocdiff[i] = iclip(get_poc_diff(seq_hdr->order_hint_n_bits,
                                             poc, ref_poc[i]), -31, 31);
         rf->abspocdiff[i] = abs(rf->pocdiff[i]);
-        for (int n = 0; n < 7 * !!refcnt[i]; n++) {
+        for (int n = 0; n < refcnt[i]; n++) {
             ref2ref[i][n] = get_poc_diff(seq_hdr->order_hint_n_bits,
                                          ref_poc[i], ref_ref_poc[i][n]);
             if (ref2ref[i][n] > 0) have_ref_sign[i][0] = 1;
@@ -2318,9 +2319,9 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
             int order = 0;
             if (ref1 >= 0 && ref2 >= 0) {
                 const unsigned acr1 = rp_ref[ref1] ?
-                    abs_closest_ref(ref2ref[ref1], ref2cur[ref1], 0) : 0xff;
+                    abs_closest_ref(ref2ref[ref1], ref2cur[ref1], refcnt[ref1], 0) : 0xff;
                 const unsigned acr2 = rp_ref[ref2] ?
-                    abs_closest_ref(ref2ref[ref2], ref2cur[ref2], 1) : 0xff;
+                    abs_closest_ref(ref2ref[ref2], ref2cur[ref2], refcnt[ref2], 1) : 0xff;
                 order = acr1 < acr2;
             }
             if (order && !ref_done[ref1][1]) {
@@ -2410,7 +2411,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
                 rf->mfmv_ref2cur[n] = INVALID_REF2CUR;
             } else {
                 rf->mfmv_ref2cur[n] = diff1;
-                for (int m = 0; m < 7; m++) {
+                for (int m = 0; m < refcnt[rf->mfmv[n].ref]; m++) {
                     const int rrpoc = ref_ref_poc[rf->mfmv[n].ref][m];
                     const int diff2 = get_poc_diff(seq_hdr->order_hint_n_bits,
                                                    rpoc, rrpoc);

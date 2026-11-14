@@ -5729,7 +5729,7 @@ int dav2d_submit_frame(Dav2dContext *const c) {
             const int poc = f->cur.p.frame_hdr->frame_offset;
             // we use -2 here so it doesn't match b->ref==-1, which means intra
             int furthest_future_refidx = -2;
-            for (int i = 0; i < 7; i++) {
+            for (int i = 0; i < f->frame_hdr->n_ref_frames; i++) {
                 f->refpoc[i] = f->refp[i].p.frame_hdr->frame_offset;
                 const int delta = f->refdist[i] =
                     get_poc_diff(f->seq_hdr->order_hint_n_bits, f->refpoc[i], poc);
