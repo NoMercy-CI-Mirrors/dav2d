@@ -1295,19 +1295,22 @@ int bytefn(dav2d_read_coef_blocks)(Dav2dTaskContext *const t,
             step = 16;
             lbs2 = lbs == BS_INVALID ? BS_INVALID : BS_64x64;
             cbs2i = cbs == BS_INVALID ? BS_INVALID :
+                    f->frame_hdr->segmentation.lossless[b->seg_id] ?
+                    csplit[cbs - BS_128x128][0] :
                     csplit[cbs - BS_128x128][ss_hor + ss_ver];
         }
+        const int il = step == 32 || f->frame_hdr->segmentation.lossless[b->seg_id];
         for (int y = 0; t->by < y_end; t->by += step, y++) {
             for (int x = 0; t->bx < x_end; t->bx += step, x++) {
                 enum BlockSize cbs2;
-                if (step == 32) {
+                if (il) {
                     cbs2 = cbs2i;
                 } else {
                     // coef reading is done with the first luma 64x64
                     cbs2 = !((x & ss_hor) | (y & ss_ver)) ? cbs2i : BS_INVALID;
                 }
                 const int res = bytefn(dav2d_read_coef_blocks)(t, DB_ONLY(depth) lbs2, cbs2, b);
-                if (step == 32) {
+                if (il) {
                     t->cbx += step;
                 } else if ((x & ss_hor) == ss_hor) {
                     t->cbx += step << ss_hor;
@@ -1319,7 +1322,7 @@ int bytefn(dav2d_read_coef_blocks)(Dav2dTaskContext *const t,
                 }
             }
             t->cbx = t->bx = x_start;
-            if (step == 32) {
+            if (il) {
                 t->cby += step;
             } else if ((y & ss_ver) == ss_ver) {
                 t->cby += step << ss_ver;
