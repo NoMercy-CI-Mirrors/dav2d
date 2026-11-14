@@ -1888,28 +1888,30 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             if (f->frame_hdr->cdef.n_strengths == 1) {
                 v = 0;
             } else {
-                const int left_cdef_idx =
-                    t->bx - 16 < ts->tiling.col_start ? -1 :
+                // the left/top units are unavailable outside of the tile or
+                // the superblock row; available units without a coded index
+                // (only skipped blocks) are -1, which counts as "not 0"
+                const int have_left_unit = t->bx - 16 >= ts->tiling.col_start;
+                const int have_top_unit = !!((t->by & ~15) & (f->sb_step - 1));
+                const int left_cdef_idx = !have_left_unit ? -1 :
                     idx & 3 ? cdef_ptr[-1] :
                     t->lf_mask[-1].cdef_idx[idx + 3];
-                const int top_cdef_idx =
-                    !((t->by & ~15) & (f->sb_step - 1)) ? -1 :
+                const int top_cdef_idx = !have_top_unit ? -1 :
                     idx & 0xc ? cdef_ptr[-4] :
                     t->lf_mask[-f->sb256w].cdef_idx[idx + 12];
-                // cdef_idx=-1: --, 0: true, 1-7: false, edge combo -> context
                 // ctx=0: false/false, false/--, --/false, --/--
                 // ctx=1: false/true, true/false
                 // ctx=2: true/--, --/true, true/true [same coded block]
                 // ctx=3: true/true [different coded block]
                 int ctx;
-                if ((left_cdef_idx | top_cdef_idx) != -1) {
-                    // both edges are available
+                if (have_left_unit && have_top_unit) {
                     ctx = !left_cdef_idx + !top_cdef_idx;
                     // FIXME this should only be done when both edges are *not*
                     // from the same coded block
                     ctx += ctx == 2;
                 } else {
-                    ctx = !(left_cdef_idx & top_cdef_idx) * 2;
+                    ctx = 2 * ((have_left_unit && !left_cdef_idx) ||
+                               (have_top_unit && !top_cdef_idx));
                 }
                 if (dav2d_msac_decode_bool_adapt(&ts->msac,
                                                  ts->cdf.m.cdef_idx0[ctx]))
