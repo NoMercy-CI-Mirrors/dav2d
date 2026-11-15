@@ -5125,7 +5125,10 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         if (f->prefilter_data_sz) // otherwise it's a pointer into f->cur
             dav2d_free_aligned(f->prefilter_data_buf);
         if (prefilter_data_sz) {
-            f->prefilter_data_buf = dav2d_alloc_aligned(ALLOC_IPRED, prefilter_data_sz, 64);
+            // SIMD may read a few pixels before and after the rows (like in
+            // pictures, which are padded), so pad the data on both sides
+            f->prefilter_data_buf = dav2d_alloc_aligned(ALLOC_IPRED,
+                                                        prefilter_data_sz + 2 * 64, 64);
             if (!f->prefilter_data_buf) {
                 f->prefilter_data_sz = 0;
                 goto error;
@@ -5134,12 +5137,12 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         f->prefilter_data_sz = prefilter_data_sz;
     }
     if (prefilter_data_sz) {
-        uint8_t *ptr = f->prefilter_data_buf;
+        uint8_t *ptr = f->prefilter_data_buf + 64;
         f->prefilter_data[0] = (pixel *) (y_stride < 0 ?
             ptr - y_stride * (prefilter_rows_y - 1) : ptr);
         if (f->cur.p.p.layout != DAV2D_PIXEL_LAYOUT_I400) {
             for (int pl = 1; pl <= 2; pl++) {
-                ptr = f->prefilter_data_buf + prefilter_data_size_y +
+                ptr = f->prefilter_data_buf + 64 + prefilter_data_size_y +
                       (pl - 1) * prefilter_data_size_uv;
                 f->prefilter_data[pl] = (pixel *) (uv_stride < 0 ?
                     ptr - uv_stride * (prefilter_rows_uv - 1) : ptr);
