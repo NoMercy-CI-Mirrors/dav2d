@@ -287,6 +287,7 @@ if cc.get_argument_syntax() != 'msvc'
       '-Werror=vla',
       '-Wno-maybe-uninitialized',
       '-Wno-missing-field-initializers',
+      '-Wno-stringop-overflow',
       '-Wno-unused-parameter',
       '-Wstrict-prototypes',
       '-Werror=missing-prototypes',
