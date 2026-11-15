@@ -774,7 +774,7 @@ L(prep_tbl):
         mov             r6,  #64
 64:
         vld1.8          {q0,  q1},  [r2]!
-        subs            r4,  r4,  #1
+        subs            r5,  r5,  #1
         vshll.u8        q8,  d0,  #4
         vshll.u8        q9,  d1,  #4
         vld1.8          {q2,  q3},  [r2], r3
