@@ -45,20 +45,22 @@
 
 #define PROBE_SIZE 2048
 
-static int section5_probe(const uint8_t *data) {
+static int section5_probe(const uint8_t *data, int size) {
     int ret, cnt = 0;
+
+    size = imin(size, PROBE_SIZE);
 
     // start with temporal delimiter
     size_t obu_size;
     enum Dav2dObuType type;
-    ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
+    ret = parse_obu_header(data + cnt, size - cnt,
                            &obu_size, &type);
     if (ret < 0 || type != DAV2D_OBU_TD)
         return 0;
-    cnt += imin(ret, PROBE_SIZE - cnt);
+    cnt += imin(ret, size - cnt);
     // sequence header is next
-    while (cnt < PROBE_SIZE) {
-        ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
+    while (cnt < size) {
+        ret = parse_obu_header(data + cnt, size - cnt,
                                &obu_size, &type);
         if (ret < 0)
             return 0;
@@ -68,13 +70,13 @@ static int section5_probe(const uint8_t *data) {
         if (type != DAV2D_OBU_LAYER_CFG_REC && type != DAV2D_OBU_OP_PT_SET &&
             type != DAV2D_OBU_ATLAS_SEG && type != DAV2D_OBU_MSDO)
             return 0;
-        cnt += imin(ret, PROBE_SIZE - cnt);
+        cnt += imin(ret, size - cnt);
     }
-    cnt += imin(ret, PROBE_SIZE - cnt);
+    cnt += imin(ret, size - cnt);
 
     // look for first frame
-    while (cnt < PROBE_SIZE) {
-        ret = parse_obu_header(data + cnt, PROBE_SIZE - cnt,
+    while (cnt < size) {
+        ret = parse_obu_header(data + cnt, size - cnt,
                                &obu_size, &type);
         if (ret < 0)
             return 0;
@@ -84,12 +86,12 @@ static int section5_probe(const uint8_t *data) {
         case DAV2D_OBU_CLOSED_LOOP_KF:
             return 1;
         default:
-            cnt += imin(ret, PROBE_SIZE - cnt);
+            cnt += imin(ret, size - cnt);
             break;
         }
     }
 
-    return 1;
+    return size == PROBE_SIZE;
 }
 
 typedef struct DemuxerPriv {
