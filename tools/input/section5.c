@@ -120,7 +120,7 @@ static int section5_open(Section5InputContext *const c, const char *const file,
         if (res < 0)
             break;
         if (fread(&byte[0], 1, 1, c->f) < 1)
-            return -1;
+            goto error;
         const enum Dav2dObuType obu_type = (byte[0] >> 2) & 0x1f;
         switch (obu_type) {
         case DAV2D_OBU_TD:
@@ -130,15 +130,19 @@ static int section5_open(Section5InputContext *const c, const char *const file,
         }
         const int has_extension = byte[0] >> 7;
         if (has_extension && fread(&byte[1], 1, 1, c->f) < 1)
-            return -1;
+            goto error;
         if (len < 1U + has_extension)
-            return -1;
+            goto error;
         len -= 1 + has_extension;
         fseeko(c->f, len, SEEK_CUR); // skip packet
     }
     fseeko(c->f, 0, SEEK_SET);
 
     return 0;
+
+error:
+    fclose(c->f);
+    return -1;
 }
 
 static int section5_read(Section5InputContext *const c, Dav2dData *const data) {
