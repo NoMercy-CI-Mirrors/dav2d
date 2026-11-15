@@ -227,7 +227,7 @@ static int create_filter_sbrow(Dav2dFrameContext *const f,
     if (num_tasks > f->task_thread.num_tasks) {
         const size_t size = sizeof(Dav2dTask) * num_tasks;
         tasks = dav2d_realloc(ALLOC_COMMON_CTX, f->task_thread.tasks, size);
-        if (!tasks) return -1;
+        if (!tasks) return DAV2D_ERR(ENOMEM);
         memset(tasks, 0, size);
         f->task_thread.tasks = tasks;
         f->task_thread.num_tasks = num_tasks;
@@ -241,7 +241,7 @@ static int create_filter_sbrow(Dav2dFrameContext *const f,
         if (prog_sz > f->frame_thread.prog_sz) {
             atomic_uint *const prog = dav2d_realloc(ALLOC_COMMON_CTX, f->frame_thread.frame_progress,
                                                     2 * prog_sz * sizeof(*prog));
-            if (!prog) return -1;
+            if (!prog) return DAV2D_ERR(ENOMEM);
             f->frame_thread.frame_progress = prog;
             f->frame_thread.copy_db_progress = prog + prog_sz;
         }
@@ -277,7 +277,7 @@ int dav2d_task_create_tile_sbrow(Dav2dFrameContext *const f, const int pass,
         if (alloc_num_tasks > f->task_thread.num_tile_tasks) {
             const size_t size = sizeof(Dav2dTask) * alloc_num_tasks;
             tasks = dav2d_realloc(ALLOC_COMMON_CTX, f->task_thread.tile_tasks[0], size);
-            if (!tasks) return -1;
+            if (!tasks) return DAV2D_ERR(ENOMEM);
             memset(tasks, 0, size);
             f->task_thread.tile_tasks[0] = tasks;
             f->task_thread.num_tile_tasks = alloc_num_tasks;
@@ -288,10 +288,9 @@ int dav2d_task_create_tile_sbrow(Dav2dFrameContext *const f, const int pass,
     tasks += num_tasks * pass;
 
     Dav2dTask *pf_t = NULL;
-    if (!(n_passes == 3 && pass == 1) &&
-        create_filter_sbrow(f, pass + 1 != n_passes, &pf_t))
-    {
-        return -1;
+    if (!(n_passes == 3 && pass == 1)) {
+        const int res = create_filter_sbrow(f, pass + 1 != n_passes, &pf_t);
+        if (res) return res;
     }
 
     Dav2dTask *prev_t = NULL;
@@ -794,7 +793,7 @@ void *dav2d_worker_task(void *data) {
                         atomic_store(&f->cur.progress[p], FRAME_ERROR);
                         if (p == 2 && atomic_load(&f->task_thread.done[1])) {
                             assert(!atomic_load(&f->task_thread.task_counter));
-                            dav2d_decode_frame_exit(f, DAV2D_ERR(ENOMEM));
+                            dav2d_decode_frame_exit(f, res);
                             f->n_tile_data = 0;
                             pthread_cond_signal(&f->task_thread.cond);
                         } else {
