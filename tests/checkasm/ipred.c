@@ -309,7 +309,8 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
 #endif
 
     declare_func(void, pixel *dst, const pixel *src, const pixel *top_sb_edge,
-                 ptrdiff_t src_stride, int refw, int refh, int w, int h, int flags);
+                 ptrdiff_t src_stride, int refw, int refh, int w, int h,
+                 int padw, int padh, int flags);
 
     INIT_PIXEL_RECT(src0_buf);
     INIT_PIXEL_RECT(top_sb0);
@@ -349,10 +350,14 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                     const int dir_l = dir == CFL_DIR_LEFT;
                                     const int dir_t = dir == CFL_DIR_TOP;
 
+                                    const int padw = rnd() % (w >> 2);
+                                    const int padh = rnd() % (h >> 2);
+                                    const int vis_w = w - padw * 4, vis_h = h - padh * 4;
+
                                     int refw = 0, refh = 0, n_left_cols = 0, n_top_rows = 0;
                                     if (has_t) {
-                                        const int avail = rnd() % (3 - (w == 4));
-                                        refw = w;
+                                        const int avail = padw ? 0 : rnd() % (3 - (w == 4));
+                                        refw = vis_w;
                                         if (avail == 1) // full
                                             refw += w;
                                         else if (avail == 2) // partial
@@ -360,8 +365,8 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                         n_top_rows = 1 + dir_t;
                                     }
                                     if (has_l) {
-                                        const int avail = rnd() % (3 - (h == 4));
-                                        refh = h;
+                                        const int avail = padh ? 0 : rnd() % (3 - (h == 4));
+                                        refh = vis_h;
                                         if (avail == 1)
                                             refh += h;
                                         else if (avail == 2)
@@ -374,7 +379,7 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                         needed_top = refw + dir_l;
                                         if (dir_t) {
                                             const int need_first = !has_l && needed_top > w;
-                                            needed_top = need_first + imax(needed_top, w + n_left_cols);
+                                            needed_top = need_first + imax(needed_top, vis_w + n_left_cols);
                                         }
                                     }
                                     if (has_l) {
@@ -382,7 +387,7 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                         needed_left = refh + dir_t;
                                         if (dir_l) {
                                             const int need_first = !has_t && needed_left > h;
-                                            needed_left = need_first + imax(needed_left, h + n_top_rows);
+                                            needed_left = need_first + imax(needed_left, vis_h + n_top_rows);
                                         }
                                     }
 
@@ -391,9 +396,11 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                     pixel *const top_sb = itse ? top_sb0 + 64 : NULL;
 
                                     call_ref(c_dst, src, top_sb, src0_stride,
-                                             needed_top, needed_left - n_top_rows, w, h, flags);
+                                             needed_top, needed_left - n_top_rows, w, h,
+                                             padw, padh, flags);
                                     call_new(a_dst, src, top_sb, src0_stride,
-                                             needed_top, needed_left - n_top_rows, w, h, flags);
+                                             needed_top, needed_left - n_top_rows, w, h,
+                                             padw, padh, flags);
 
                                     const int blk_off = n_top_rows * CFL_MH_TOP_STRIDE;
                                     const pixel *const c_left = c_dst + blk_off + 32 * 32;
@@ -404,9 +411,12 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                     checkasm_check_pixel(c_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
                                                          a_dst, CFL_MH_TOP_STRIDE * sizeof(pixel),
                                                          needed_top, n_top_rows, "top");
-                                    checkasm_check_pixel(c_left, n_left_cols, a_left, n_left_cols,
+                                    checkasm_check_pixel(c_left, n_left_cols * sizeof(pixel),
+                                                         a_left, n_left_cols * sizeof(pixel),
                                                          n_left_cols, needed_left - n_top_rows, "left");
-                                    checkasm_check_pixel(c_blk, w, a_blk, w, w, h, "blk");
+                                    checkasm_check_pixel(c_blk, w * sizeof(pixel),
+                                                         a_blk, w * sizeof(pixel),
+                                                         vis_w, vis_h, "blk");
 
                                     const int avail_tr = rnd() % (3 - (w == 4));
                                     const int avail_bl = rnd() % (3 - (h == 4));
@@ -427,7 +437,7 @@ static void check_cfl_mh_gen_y(Dav2dIntraPredDSPContext *const c) {
                                     if (dir_l) needed_left = imax(needed_left, h + 1);
                                     bench_new(a_dst, src, top_sb, src0_stride,
                                               needed_top, needed_left - (1 + dir_t),
-                                              w, h, flags | CFL_HAS_TOP | CFL_HAS_LEFT);
+                                              w, h, 0, 0, flags | CFL_HAS_TOP | CFL_HAS_LEFT);
                                 }
 #if !BENCH_DIR
                             }

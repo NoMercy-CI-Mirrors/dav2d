@@ -90,7 +90,7 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
                                                    w, h, flags, \
                                                    nleft, ntop, tbl
  DECLARE_REG_TMP 12, 13
-    mov                 flagsd, flagsm
+    mov                 flagsd, r10m
     mov                     hd, hm
     movifnidn      needed_topd, needed_topm
     movifnidn     needed_leftd, needed_leftm
@@ -436,7 +436,7 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
                                                   w, h, flags, \
                                                   nleft, ntop, tbl
  DECLARE_REG_TMP 12, 13, 14
-    mov                 flagsd, flagsm
+    mov                 flagsd, r10m
     mov                     hd, hm
     movifnidn      needed_topd, needed_topm
     movifnidn     needed_leftd, needed_leftm
@@ -1013,7 +1013,7 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
                                                  w, h, flags, \
                                                  nleft, ntop, tbl, top, ts
  DECLARE_REG_TMP 14, 12, 13
-    mov                 flagsd, flagsm
+    mov                 flagsd, r10m
     mov                     hd, hm
     movifnidn      needed_topd, needed_topm
     movifnidn     needed_leftd, needed_leftm

@@ -3340,7 +3340,7 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
                                                   w, h, flags, \
                                                   nleft, ntop, tbl
  DECLARE_REG_TMP 9, 14, 10, 12
-    mov                 flagsd, flagsm
+    mov                 flagsd, r10m
     mov                     hd, hm
     movifnidn      needed_topd, needed_topm
     movifnidn     needed_leftd, needed_leftm
@@ -3655,7 +3655,7 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
                                                  w, h, flags, \
                                                  nleft, ntop, tbl
  DECLARE_REG_TMP 9, 14, 10, 12, 13
-    mov                 flagsd, flagsm
+    mov                 flagsd, r10m
     mov                     hd, hm
     movifnidn      needed_topd, needed_topm
     movifnidn     needed_leftd, needed_leftm
@@ -4159,11 +4159,11 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
                                                 w, h, flags, \
                                                 nleft, ntop, tbl, ts
  DECLARE_REG_TMP 9, 14, 10, 12, 13
-    mov                 flagsd, flagsm
+    mov                 flagsd, r10m
     mov                     hd, hm
     movifnidn      needed_topd, needed_topm
     movifnidn     needed_leftd, needed_leftm
-    mov                 flagsd, flagsm
+    mov                 flagsd, r10m
     xor                    t4d, t4d
     test                flagsb, 0xb
     mov                    t0d, flagsd

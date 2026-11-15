@@ -3254,10 +3254,10 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         // matching the direction.
         if (has_t && dir_t) {
             const int need_first = !has_l && needed_top > ctw;
-            needed_top = need_first + imax(needed_top, ctw + n_left_cols);
+            needed_top = need_first + imax(needed_top, ctw4 * 4 + n_left_cols);
         } else if (has_l && dir_l) {
             const int need_first = !has_t && needed_left > cth;
-            needed_left = need_first + imax(needed_left, cth + n_top_rows);
+            needed_left = need_first + imax(needed_left, cth4 * 4 + n_top_rows);
         }
 
         pixel *const luma = bytefn(t->cfl_mh_luma);
@@ -3270,7 +3270,8 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         dsp->ipred.cfl_mh_gen_y[layout][filter_type](luma, ysrc, ytop_sb_edge,
                                                      ystride, needed_top,
                                                      needed_left - n_top_rows,
-                                                     ctw, cth, flags);
+                                                     ctw, cth, t_dim->w - ctw4,
+                                                     t_dim->h - cth4, flags);
         if (has_t || has_l)
             dsp->ipred.cfl_mh_gen_mat(mat, imat, luma, refw, refh, flags HIGHBD_CALL_SUFFIX);
 

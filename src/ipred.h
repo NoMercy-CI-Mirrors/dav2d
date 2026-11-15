@@ -113,9 +113,14 @@ typedef decl_cfl_pred_fn(*cfl_pred_fn);
 #define CFL_MH_MAX_LUMA_SIZE 1220
 #define CFL_MH_TOP_STRIDE 64
 
+/*
+ * - w/hpad is the edge of the width/height that extends outside the visible
+ *   portion of the frame in 4px units;
+ */
 #define decl_cfl_mh_gen_y_fn(name) \
 void (name)(pixel *dst, const pixel *src, const pixel *top_sb_edge, \
-            ptrdiff_t src_stride, int refw, int refh, int w, int h, int flags)
+            ptrdiff_t src_stride, int refw, int refh, int w, int h, \
+            int padw, int padh, int flags)
 typedef decl_cfl_mh_gen_y_fn(*cfl_mh_gen_y_fn);
 
 /*
