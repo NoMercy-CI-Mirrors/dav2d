@@ -3201,9 +3201,9 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         const int dir_l = b->cfl_mh_dir == CFL_DIR_LEFT;
         const int dir_t = b->cfl_mh_dir == CFL_DIR_TOP;
         const int cbx4 = (t->cbx & 63) >> ss_hor, cby4 = (t->cby & 63) >> ss_ver;
-        int refw = 0, refh = 0, n_left_cols = 0, n_top_rows = 0, n_tr = 0, n_bl = 0;
+        int n_tr = 0, n_bl = 0;
 
-        if (has_t) {
+        if (has_t && ctw4 > !ss_hor) {
             const int csbsz = sbsz >> ss_hor;
             const int tile_end = ts->tiling.col_end >> ss_hor;
             int w = imax(0, imin(ctw4, tile_end - ssbx - ctw4));
@@ -3220,10 +3220,8 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                     n_tr = imin(ctz(0x10000 | ~bits), w);
                 }
             }
-            refw += (ctw4 + n_tr) * 4;
-            n_top_rows = 1 + dir_t;
         }
-        if (has_l) {
+        if (has_l && cth4 > !ss_ver) {
             const int csbsz = sbsz >> ss_ver;
             const int end = imax(0, imin((ssby + csbsz) & ~(csbsz - 1),
                                          ts->tiling.row_end >> ss_ver));
@@ -3236,8 +3234,6 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                     if (!(t->is_coded[1][cby4 + n_bl + cth4] & mask))
                         break;
             }
-            refh += (cth4 + n_bl) * 4;
-            n_left_cols = 1 + dir_l;
         }
 
         // In MHCCP reference samples are defined as pairs of pixels in the
@@ -3248,13 +3244,16 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
         // one more pixel when the direction's orientation is along the edge.
         // Although since it is part of the same sample pair, we do not count
         // it, but we still need to regress it in gen_y.
+        int refw = 0, refh = 0, n_left_cols = 0, n_top_rows = 0;
         int needed_top = 0, needed_left = 0;
         if (has_t) {
-            refw = imin(refw + has_l - 1 - !has_l, (128 >> ss_hor) - 2);
+            refw = imin((ctw4 + n_tr) * 4 + has_l - 1 - !has_l, (128 >> ss_hor) - 2);
             needed_top = refw + dir_l;
+            n_top_rows = 1 + dir_t;
         }
         if (has_l) {
-            refh = imin(refh + has_t - 1 - !has_t, (128 >> ss_ver) - 2);
+            refh = imin((cth4 + n_bl) * 4 + has_t - 1 - !has_t, (128 >> ss_ver) - 2);
+            n_left_cols = 1 + dir_l;
             needed_left = refh + dir_t;
             // The topleft sample is counted twice (since it is common to both
             // edges), so adjust refh accordingly.
