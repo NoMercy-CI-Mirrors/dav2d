@@ -85,6 +85,12 @@ prep_c(int16_t *tmp, const ptrdiff_t tmp_stride,
      F[6] * src[x + +3 * stride] + \
      F[7] * src[x + +4 * stride])
 
+#define FILTER_4TAP(src, x, F, stride) \
+    (F[2] * src[x + -1 * stride] + \
+     F[3] * src[x + +0 * stride] + \
+     F[4] * src[x + +1 * stride] + \
+     F[5] * src[x + +2 * stride])
+
 #define FILTER_8TAP2(src, x, F) \
     (F[0] * src[0][x] + \
      F[1] * src[1][x] + \
@@ -97,6 +103,9 @@ prep_c(int16_t *tmp, const ptrdiff_t tmp_stride,
 
 #define DAV2D_FILTER_8TAP_RND(src, x, F, stride, sh) \
     ((FILTER_8TAP(src, x, F, stride) + ((1 << (sh)) >> 1)) >> (sh))
+
+#define DAV2D_FILTER_4TAP_RND(src, x, F, stride, sh) \
+    ((FILTER_4TAP(src, x, F, stride) + ((1 << (sh)) >> 1)) >> (sh))
 
 #define DAV2D_FILTER_8TAP_RND2(src, x, F, stride, rnd, sh) \
     ((FILTER_8TAP(src, x, F, stride) + (rnd)) >> (sh))
@@ -355,27 +364,69 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
             int tmp_h = h + 7;
             int16_t mid[64 * (64 + 7)], *mid_ptr = mid;
 
-            src -= src_stride * 3;
-            do {
-                for (int x = 0; x < w; x++)
-                    mid_ptr[x] = DAV2D_FILTER_8TAP_RND(src, x, fh, 1,
-                                                       bits - intermediate_bits);
+            if (h == 4 && filter_type >= 0) {
+                tmp_h -= 4;
+                mid_ptr += 64 * 2;
+                src -= src_stride;
+            } else {
+                src -= src_stride * 3;
+            }
 
-                mid_ptr += 64;
-                src += src_stride;
-            } while (--tmp_h);
+            if (w == 4 && filter_type >= 0) {
+                do {
+                    for (int x = 0; x < 4; x++)
+                        mid_ptr[x] = DAV2D_FILTER_4TAP_RND(src, x, fh, 1,
+                                                           bits - intermediate_bits);
+
+                    mid_ptr += 64;
+                    src += src_stride;
+                } while (--tmp_h);
+            } else {
+                do {
+                    for (int x = 0; x < w; x++)
+                        mid_ptr[x] = DAV2D_FILTER_8TAP_RND(src, x, fh, 1,
+                                                           bits - intermediate_bits);
+
+                    mid_ptr += 64;
+                    src += src_stride;
+                } while (--tmp_h);
+            }
 
             mid_ptr = mid + 64 * 3;
-            do {
-                for (int x = 0; x < w; x++) {
-                    int t = DAV2D_FILTER_8TAP_RND(mid_ptr, x, fv, 64, bits) -
-                                  PREP_BIAS;
-                    assert(t >= INT16_MIN && t <= INT16_MAX);
-                    tmp[x] = t;
-                }
+            if (h == 4 && filter_type >= 0) {
+                do {
+                    for (int x = 0; x < w; x++) {
+                        int t = DAV2D_FILTER_4TAP_RND(mid_ptr, x, fv, 64, bits) -
+                                      PREP_BIAS;
+                        assert(t >= INT16_MIN && t <= INT16_MAX);
+                        tmp[x] = t;
+                    }
 
-                mid_ptr += 64;
+                    mid_ptr += 64;
+                    tmp += tmp_stride;
+                } while (--h);
+            } else {
+                do {
+                    for (int x = 0; x < w; x++) {
+                        int t = DAV2D_FILTER_8TAP_RND(mid_ptr, x, fv, 64, bits) -
+                                      PREP_BIAS;
+                        assert(t >= INT16_MIN && t <= INT16_MAX);
+                        tmp[x] = t;
+                    }
+
+                    mid_ptr += 64;
+                    tmp += tmp_stride;
+                } while (--h);
+            }
+        } else if (w == 4 && filter_type >= 0) {
+            do {
+                for (int x = 0; x < 4; x++)
+                    tmp[x] = DAV2D_FILTER_4TAP_RND(src, x, fh, 1,
+                                                   bits - intermediate_bits) -
+                             PREP_BIAS;
+
                 tmp += tmp_stride;
+                src += src_stride;
             } while (--h);
         } else {
             do {
@@ -389,15 +440,27 @@ prep_8tap_c(int16_t *tmp, const ptrdiff_t tmp_stride,
             } while (--h);
         }
     } else if (fv) {
-        do {
-            for (int x = 0; x < w; x++)
-                tmp[x] = DAV2D_FILTER_8TAP_RND(src, x, fv, src_stride,
-                                               bits - intermediate_bits) -
-                         PREP_BIAS;
+        if (h == 4 && filter_type >= 0) {
+            do {
+                for (int x = 0; x < w; x++)
+                    tmp[x] = DAV2D_FILTER_4TAP_RND(src, x, fv, src_stride,
+                                                   bits - intermediate_bits) -
+                             PREP_BIAS;
 
-            tmp += tmp_stride;
-            src += src_stride;
-        } while (--h);
+                tmp += tmp_stride;
+                src += src_stride;
+            } while (--h);
+        } else {
+            do {
+                for (int x = 0; x < w; x++)
+                    tmp[x] = DAV2D_FILTER_8TAP_RND(src, x, fv, src_stride,
+                                                   bits - intermediate_bits) -
+                             PREP_BIAS;
+
+                tmp += tmp_stride;
+                src += src_stride;
+            } while (--h);
+        }
     } else
         prep_c(tmp, tmp_stride, src, src_stride, w, h HIGHBD_TAIL_SUFFIX);
 }
