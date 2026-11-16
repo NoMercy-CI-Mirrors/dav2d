@@ -25,7 +25,7 @@
  */
 
 #include "src/arm/asm.S"
-#include "mc_common.S"
+#include "mc_tmpl.S"
 #include "util.S"
 
 #if HAVE_SVE

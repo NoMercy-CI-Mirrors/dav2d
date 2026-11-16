@@ -25,8 +25,8 @@
  */
 
 #include "src/arm/asm.S"
-#include "mc_common.S"
-#include "mc16_common.S"
+#include "mc_tmpl.S"
+#include "mc16_tmpl.S"
 #include "util.S"
 
 #define PREP_BIAS 32, lsl #8        // 8192
