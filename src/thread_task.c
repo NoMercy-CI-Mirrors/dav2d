@@ -234,18 +234,19 @@ static int create_filter_sbrow(Dav2dFrameContext *const f,
     }
     tasks += f->sb64h * is_entropy_pass;
 
+    const int prog_sz = ((f->sb64h + 31) & ~31) >> 5;
+    if (prog_sz > f->frame_thread.prog_sz) {
+        atomic_uint *const prog = dav2d_realloc(ALLOC_COMMON_CTX, f->frame_thread.frame_progress,
+                                                2 * prog_sz * sizeof(*prog));
+        if (!prog) return DAV2D_ERR(ENOMEM);
+        f->frame_thread.frame_progress = prog;
+        f->frame_thread.copy_db_progress = prog + prog_sz;
+    }
+    f->frame_thread.prog_sz = prog_sz;
+
     if (is_entropy_pass) {
         f->frame_thread.entropy_progress = 0;
     } else {
-        const int prog_sz = ((f->sb64h + 31) & ~31) >> 5;
-        if (prog_sz > f->frame_thread.prog_sz) {
-            atomic_uint *const prog = dav2d_realloc(ALLOC_COMMON_CTX, f->frame_thread.frame_progress,
-                                                    2 * prog_sz * sizeof(*prog));
-            if (!prog) return DAV2D_ERR(ENOMEM);
-            f->frame_thread.frame_progress = prog;
-            f->frame_thread.copy_db_progress = prog + prog_sz;
-        }
-        f->frame_thread.prog_sz = prog_sz;
         memset(f->frame_thread.frame_progress, 0, prog_sz * sizeof(atomic_uint));
         memset(f->frame_thread.copy_db_progress, 0, prog_sz * sizeof(atomic_uint));
         atomic_store(&f->frame_thread.deblock_progress, 0);
