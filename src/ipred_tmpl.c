@@ -985,9 +985,9 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
             dc[1] = (dc[1] + (npx >> 1)) >> ctz(npx);
             dc[2] = (dc[2] + (npx >> 1)) >> ctz(npx);
         } else {
-            dc[0] = fast_div32_dc(dc[0], npx);
-            dc[1] = fast_div32_dc(dc[1], npx);
-            dc[2] = fast_div32_dc(dc[2], npx);
+            dc[0] = umin(fast_div32_dc(dc[0], npx), (BITDEPTH_MAX << 3) | 7);
+            dc[1] = umin(fast_div32_dc(dc[1], npx), BITDEPTH_MAX);
+            dc[2] = umin(fast_div32_dc(dc[2], npx), BITDEPTH_MAX);
         }
     }
 
