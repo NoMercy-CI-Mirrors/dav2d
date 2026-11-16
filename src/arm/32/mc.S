@@ -772,6 +772,7 @@ L(prep_tbl):
         sub             r3,  r3,  #32
         add             r8,  r0,  #32
         mov             r6,  #64
+        sub             r1,  r1,  #64
 64:
         vld1.8          {q0,  q1},  [r2]!
         subs            r5,  r5,  #1
@@ -786,8 +787,8 @@ L(prep_tbl):
         vshll.u8        q14, d6,  #4
         vst1.16         {q10, q11}, [r8, :128], r6
         vshll.u8        q15, d7,  #4
-        vst1.16         {q12, q13}, [r0, :128], r6
-        vst1.16         {q14, q15}, [r8, :128], r6
+        vst1.16         {q12, q13}, [r0, :128], r1
+        vst1.16         {q14, q15}, [r8, :128], r1
         bgt             64b
         pop             {r4-r11,pc}
 endfunc
