@@ -908,9 +908,9 @@ void dav2d_refmvs_find(const refmvs_tile *const rt,
     }
 
     // sort
-    if ((rf->seq_hdr->drl_reorder == 2 /* always */ &&
+    if ((rf->seq_hdr->drl_reorder == DAV2D_ON &&
          nearest_refmv_count >= 2) ||
-        (rf->seq_hdr->drl_reorder == 1 /* constraint */ &&
+        (rf->seq_hdr->drl_reorder == DAV2D_ADAPTIVE &&
          (!high_priority_tmvp && nearest_refmv_count >= 4)))
     {
         int maxwidx = 0, maxw = mvstack[0].weight;
@@ -2218,7 +2218,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
         }
     }
     rf->high_priority_tmvp_mask = 0;
-    if (seq_hdr->drl_reorder != 2 /* always */ &&
+    if (seq_hdr->drl_reorder != DAV2D_ON &&
         frm_hdr->use_ref_frame_mvs && !frm_hdr->has_bothside_refs)
     {
         for (int i = 0; i < frm_hdr->n_ref_frames; i++) {

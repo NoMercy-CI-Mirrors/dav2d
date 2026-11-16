@@ -439,7 +439,8 @@ typedef struct Dav2dSequenceHeader {
     uint8_t reduced_ref_frame_mvs_mode;
     uint8_t order_hint_n_bits;
 
-    uint8_t refmv_bank, drl_reorder;
+    uint8_t refmv_bank;
+    uint8_t /*enum Dav2dAdaptiveBoolean*/ drl_reorder;
     uint8_t explicit_ref_frame_map;
     uint8_t ref_frames, ref_frames_log2, number_of_bits_for_lt_frame_id;
     uint8_t def_max_drl_bits, allow_frame_max_drl_bits;

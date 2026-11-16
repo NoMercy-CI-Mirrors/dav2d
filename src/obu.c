@@ -457,7 +457,8 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
     }
 
     hdr->refmv_bank = dav2d_get_bit(gb);
-    hdr->drl_reorder = dav2d_get_bit(gb) ? 0 : 2 - dav2d_get_bit(gb);
+    hdr->drl_reorder = dav2d_get_bit(gb) ? DAV2D_OFF :
+                       dav2d_get_bit(gb) ? DAV2D_ADAPTIVE : DAV2D_ON;
     if (hdr->reduced_still_picture_header) {
         hdr->ref_frames = 2;
         hdr->def_max_drl_bits = 1;
@@ -479,7 +480,7 @@ static NOINLINE int parse_seq_hdr(Dav2dSequenceHeader *const hdr,
            "nrefs:%d,nbitsltfid:%d,drlbits:%d,fdrlbits:%d,bvpdrlbits:%d,"
            "fbvpdrlbits:%d,numsamerefcomp:%d]: off=%u\n",
            hdr->refmv_bank,
-           hdr->drl_reorder,
+           hdr->drl_reorder == DAV2D_ADAPTIVE ? 1 : 2 * hdr->drl_reorder,
            hdr->explicit_ref_frame_map,
            hdr->ref_frames,
            hdr->number_of_bits_for_lt_frame_id,
