@@ -873,7 +873,8 @@ static int get_ref_frames(Dav2dContext *const c, const int have_resolution) {
 
     if (n_refs > 7) {
         const int q_thr = (maxq + minq + 1) >> 1;
-        int maxpocdiff[2] = { 0, 0 }, num[2] = { 0, 0 }, furthest_idx[2];
+        int maxpocdiff[2] = { 0, 0 }, num[2] = { 0, 0 };
+        int furthest_idx[2] = { 7, 7 };
         for (int n = 0; n < n_refs; n++) {
             const struct Score *const r = &ref_info[sort_idx[n]];
             if (r->qidx < q_thr) continue;
