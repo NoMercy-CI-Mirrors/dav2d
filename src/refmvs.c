@@ -2194,7 +2194,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     uint8_t have_ref_sign[7][2] = { { 0 } };
     uint8_t is_overlay[7] = { 0 };
     for (int i = 0; i < frm_hdr->n_ref_frames; i++)
-        for (int n = 0; n < 7 * !!refcnt[i]; n++)
+        for (int n = 0; n < refcnt[i]; n++)
             if (ref_ref_poc[i][n] == ref_poc[i])
                 is_overlay[i] = 1;
     for (int i = 0; i < frm_hdr->n_ref_frames; i++) {
