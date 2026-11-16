@@ -471,11 +471,20 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         } else {
             // inferred from either the luma txtp (inter) or a LUT (intra)
             txtp = intra ? dav2d_txtp_from_uvmode[b->uv_mode] : *txtp_stx_cctx;
-            if ((t_dim->w >= 8 && txtp & 0x02 /* horizontal is (flip)adst */) ||
-                (t_dim->h >= 8 && txtp & 0x40 /* vertical is (flip)adst */) ||
+            if (/* horizontal is (flip)adst for tx>=32 or identity for tx>=64 */
+                (t_dim->lw >= TX_32X32 &&
+                 txtp & (t_dim->lw == TX_64X64 ? 0x03 : 0x02)) ||
+                /* vertical is (flip)adst for tx>=32 or identity for tx>=64 */
+                (t_dim->lh >= TX_32X32 &&
+                 txtp & (t_dim->lh == TX_64X64 ? 0x60 : 0x40)) ||
                 (tx == (int) TX_16X16 &&
                  ((txtp & 0x47) == 0x41 /* (flip)adst ver, identity hor */ ||
-                  (txtp & 0xe2) == 0x22 /* identity ver, (flip)adst hor */)))
+                  (txtp & 0xe2) == 0x22 /* identity ver, (flip)adst hor */)) ||
+                /* 32x32 only allows dct/dct and idtx */
+                (tx == (int) TX_32X32 && (txtp == V_DCT || txtp == H_DCT)) ||
+                /* 64x64, 64x32 and 32x64 only allow dct/dct */
+                ((1 << tx) & ((1 << TX_64X64) | (1 << RTX_64X32) |
+                              (1 << RTX_32X64))))
             {
                 txtp = DCT_DCT;
             } else if (txtp == IDTX_INV) txtp = IDTX;
