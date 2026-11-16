@@ -1116,7 +1116,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         depth, "", dc_sign_ctx, dc_sign, ts->msac.rng);
     }
 
-    int dc_dq = dq_tbl[0];
+    unsigned dc_dq = dq_tbl[0];
     if (qm_tbl)
         dc_dq = (dc_dq * qm_tbl[0] + 16) >> 5;
     int dc_val;
@@ -1128,7 +1128,9 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         dc_tok += hr;
         DEBUG_CF_printf("%*sPost-residual_ph[pos=0,%d->%d]: r=%d\n",
                         depth, "", hr, dc_tok, ts->msac.rng);
-        dc_val = (dc_tok * dc_dq + 4) >> dq_shift;
+        dc_tok &= 0xfffff;
+        dc_val = (((dc_tok * dc_dq) & 0xffffff) + 4) >> dq_shift;
+        dc_val = umin(dc_val, cf_max + dc_sign);
     } else if (dc_tok >= max_br - tcq_enabled) {
         const int hr = decode_hr(&ts->msac, hr_avg);
         dc_tok += hr << tcq_enabled;
