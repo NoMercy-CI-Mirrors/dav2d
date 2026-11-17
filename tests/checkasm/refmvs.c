@@ -793,7 +793,7 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
                     rf.iw8 = 1 + (rnd() & 0xff);
                     rf.ih8 = 1 + (rnd() & 0xff);
                     refmvs_temporal_block *rp_ref_mem =
-                        malloc(stride * 256 * 4 * sizeof(refmvs_temporal_block));
+                        malloc(4 * 256 * (stride >> 5) * sizeof(refmvs_temporal_block));
                     if (!rp_ref_mem) goto end;
 
                     rf.n_mfmvs = mfmv;
@@ -881,7 +881,7 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
 
                     for (int n = 0; n < rf.n_mfmvs; n++) {
                         refmvs_temporal_block *r = rp_ref[rf.mfmv[n].ref] =
-                            &rp_ref_mem[n * stride * 256];
+                            &rp_ref_mem[n * 256 * (stride >> 5)];
                         for (int y = row_start8_align32; y < row_start8_align32 + 32;
                              y += sample_step)
                         {
