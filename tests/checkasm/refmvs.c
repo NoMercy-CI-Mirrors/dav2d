@@ -749,6 +749,7 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
     ALIGN_STK_64(union tmv, a_dst_traj_mem, 7, [32 * 256]);
     ALIGN_STK_64(refmvs_traj_map, c_dst_map_mem, 3, [7][32 * 256]);
     ALIGN_STK_64(refmvs_traj_map, a_dst_map_mem, 3, [7][32 * 256]);
+    ALIGN_STK_64(refmvs_temporal_block, rp_ref_mem, 4, [256 * (256 >> 5)]);
     refmvs_sngl_mv_block c_dst_proj[256], a_dst_proj[256];
     refmvs_traj_map *c_dst_map[3][7], *a_dst_map[3][7];
     union tmv *c_dst_traj[7], *a_dst_traj[7];
@@ -792,9 +793,6 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
 
                     rf.iw8 = 1 + (rnd() & 0xff);
                     rf.ih8 = 1 + (rnd() & 0xff);
-                    refmvs_temporal_block *rp_ref_mem =
-                        malloc(4 * 256 * (stride >> 5) * sizeof(refmvs_temporal_block));
-                    if (!rp_ref_mem) goto end;
 
                     rf.n_mfmvs = mfmv;
                     const int order_hint_n_bits = 1 + (rnd() & 15);
@@ -881,7 +879,7 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
 
                     for (int n = 0; n < rf.n_mfmvs; n++) {
                         refmvs_temporal_block *r = rp_ref[rf.mfmv[n].ref] =
-                            &rp_ref_mem[n * 256 * (stride >> 5)];
+                            rp_ref_mem[n];
                         for (int y = row_start8_align32; y < row_start8_align32 + 32;
                              y += sample_step)
                         {
@@ -951,11 +949,8 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
                               alternate(c_dst_traj, a_dst_traj),
                               alternate(c_dst_map, a_dst_map), 0, 256,
                               row_start8_align32, row_start8_align32 + 32, sample_step);
-
-                    free(rp_ref_mem);
                 }
 
-end:
     report("load_tmvs_refs");
 }
 
