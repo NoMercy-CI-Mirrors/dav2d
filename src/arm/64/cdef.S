@@ -308,8 +308,6 @@ endfunc
 padding_func_edged 8, 16, d
 padding_func_edged 4, 8,  s
 
-tables
-
 filter 8, 8
 filter 4, 8
 
@@ -365,11 +363,11 @@ find_dir 8
 .macro filter_func_8 w, pri, sec, min, suffix
 function cdef_filter\w\suffix\()_edged_8bpc_neon
 .if \pri
-        movrel          x8,  pri_taps
+        movrel          x8,  X(cdef_pri_taps)
         and             w9,  w3,  #1
         add             x8,  x8,  x9, lsl #1
 .endif
-        movrel          x9,  directions\w
+        movrel          x9,  X(cdef_directions\w)
         add             x5,  x9,  w5, uxtw #1
         movi            v30.8b,  #7
         dup             v28.8b,  w6                 // damping

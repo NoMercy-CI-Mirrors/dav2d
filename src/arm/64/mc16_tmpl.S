@@ -125,7 +125,7 @@
 .macro opfl_refine_mv_16bpc_large opfl_refine_mv_large, isa
         clz             w20, w13
         uxtw            x5,  w5
-        movrel          x8,  shift_large
+        movrel          x8,  X(opfl_shift_large)
         sub             sp,  sp,  #224                  // 10 * 128-bit vectors for out accs + 4 spill vectors
 
         mov             x9,  #0
@@ -172,7 +172,7 @@
                                       v4,  v5,  v6,  v7
 
         mov             w9,  #0
-        ldrel           q8,  x8,  shift_small
+        ldrel           q8,  x8,  X(opfl_shift_small)
         mul             w16, w7,  w7                    // bs * bs
 
         \opfl_refine_mv_small opfl_compute_next_rows_16bpc_small, \isa

@@ -3595,7 +3595,7 @@ endfunc
 // pixels to the right and restart from the top.
 .macro opfl_refine_mv_8bpc_large_neon
         uxtw            x5,  w5
-        movrel          x8,  shift_large
+        movrel          x8,  X(opfl_shift_large)
         sub             sp,  sp,  #224                   // 10 * 128-bit vectors for out accs + 4 spill vectors
 
         mov             x9,  #0                          // bx = 0
@@ -3674,7 +3674,7 @@ endfunc
 
         sub             w11, w6,  #2                 // h - 2
         mov             w9,  #0                      // y = 0
-        ldrel           q8,  x8,  shift_small
+        ldrel           q8,  x8,  X(opfl_shift_small)
         mul             w16, w7,  w7                 // bs * bs
 
         opfl_refine_mv_small opfl_compute_next_rows_8bpc_small_neon, neon

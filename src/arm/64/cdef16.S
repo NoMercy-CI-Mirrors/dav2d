@@ -221,8 +221,6 @@ endfunc
 padding_func_16 8, 16, q
 padding_func_16 4, 8,  d
 
-tables
-
 filter 8, 16
 filter 4, 16
 

@@ -28,35 +28,6 @@
 #include "src/arm/asm.S"
 #include "util.S"
 
-.macro dir_table w, stride
-const directions\w
-        .byte           -1 * \stride + 1, -2 * \stride + 2
-        .byte            0 * \stride + 1, -1 * \stride + 2
-        .byte            0 * \stride + 1,  0 * \stride + 2
-        .byte            0 * \stride + 1,  1 * \stride + 2
-        .byte            1 * \stride + 1,  2 * \stride + 2
-        .byte            1 * \stride + 0,  2 * \stride + 1
-        .byte            1 * \stride + 0,  2 * \stride + 0
-        .byte            1 * \stride + 0,  2 * \stride - 1
-// Repeated, to avoid & 7
-        .byte           -1 * \stride + 1, -2 * \stride + 2
-        .byte            0 * \stride + 1, -1 * \stride + 2
-        .byte            0 * \stride + 1,  0 * \stride + 2
-        .byte            0 * \stride + 1,  1 * \stride + 2
-        .byte            1 * \stride + 1,  2 * \stride + 2
-        .byte            1 * \stride + 0,  2 * \stride + 1
-endconst
-.endm
-
-.macro tables
-dir_table 8, 16
-dir_table 4, 8
-
-const pri_taps
-        .byte           4, 2, 3, 3
-endconst
-.endm
-
 .macro load_px d1, d2, w, t1, t2
         add             x6,  x2,  x9, lsl #1        // x + off
         sub             x9,  x2,  x9, lsl #1        // x - off
@@ -116,7 +87,7 @@ function cdef_filter\w\suffix\()_\bpc\()bpc_neon
         sub             w9,  w9,  #24               // -bitdepth_min_8
         neg             w9,  w9                     // bitdepth_min_8
 .endif
-        movrel          x8,  pri_taps
+        movrel          x8,  X(cdef_pri_taps)
 .if \bpc == 16
         lsr             w9,  w3,  w9                // pri_strength >> bitdepth_min_8
         and             w9,  w9,  #1                // (pri_strength >> bitdepth_min_8) & 1
@@ -125,7 +96,7 @@ function cdef_filter\w\suffix\()_\bpc\()bpc_neon
 .endif
         add             x8,  x8,  x9, lsl #1
 .endif
-        movrel          x9,  directions\w
+        movrel          x9,  X(cdef_directions\w)
         add             x5,  x9,  w5, uxtw #1
         movi            v30.4h,   #15
         dup             v28.4h,   w6                // damping
@@ -265,14 +236,6 @@ function cdef_filter\w\()_\bpc\()bpc_neon, export=1
         b               cdef_filter\w\()_pri_sec_\bpc\()bpc_neon // both pri and sec
 endfunc
 .endm
-
-const div_table, align=4
-        .short         840, 420, 280, 210, 168, 140, 120, 105
-endconst
-
-const alt_fact
-        .short         420, 210, 140, 105, 105, 105, 105, 105, 140, 210, 420, 0
-endconst
 
 .macro cost_alt s1, s2, s3, s4
         smull           v22.4s,  \s1\().4h, \s1\().4h // sum_alt[n]*sum_alt[n]
@@ -418,7 +381,7 @@ function cdef_find_dir_\bpc\()bpc_neon, export=1
         ext             v1.16b,  v1.16b,  v1.16b, #10 // sum_diag[0][14-n]
         ext             v3.16b,  v3.16b,  v3.16b, #10 // sum_diag[1][14-n]
 
-        ldrel           q31, x4,  div_table
+        ldrel           q31, x4,  X(cdef_div_table)
 
         smull           v22.4s,  v0.4h,   v0.4h       // sum_diag[0]*sum_diag[0]
         smull2          v23.4s,  v0.8h,   v0.8h
@@ -435,7 +398,7 @@ function cdef_find_dir_\bpc\()bpc_neon, export=1
         mul             v24.4s,  v24.4s,  v30.4s      // cost[4]
         mla             v24.4s,  v25.4s,  v31.4s      // cost[4]
 
-        movrel          x5,  alt_fact
+        movrel          x5,  X(cdef_alt_fact)
         ldr             q30, [x5]                     // div_table[2*m+1] + 105
         ldr             d31, [x5, #16]
 

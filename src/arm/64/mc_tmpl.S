@@ -24,16 +24,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// Replace the shift right by 7 with a shift right by 6 when e1 = 1, allowing
-// to skip the multiplication by (e1 + 1).
-const shift_large, align=4
-        .short -6, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -7, -6
-endconst
-
-const shift_small, align=4
-        .short -6, -7, -7, -7, -7, -7, -7, -6
-endconst
-
 .macro opfl_refine_mv_large compute_next_rows, src_inc, isa
         // This decides how much to shift y0 when computing the vertical
         // gradient. It is a shift right by 7 in most cases, unless e2 is 1 in

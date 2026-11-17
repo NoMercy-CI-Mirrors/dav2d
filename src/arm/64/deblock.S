@@ -30,13 +30,6 @@
 
 #define DST_STRIDE (16)
 
-const comparisons, align=4
-        .byte 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80
-        .byte 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80
-        .byte 0, 0, 0, 0, 0, 0, 0, 0
-        .byte 1, 1, 1, 1, 1, 1, 1, 1
-endconst
-
 // void setup_thr_rows_sb64_seg_8bpc_neon(
 //     pixel (*thr_dst)[16 * 16], const uint8_t *const segmap,
 //     const ptrdiff_t seg_stride, const uint16_t (*const mask)[5][4],
@@ -208,7 +201,7 @@ endfunc
 .endm
 
 function setup_thr_sb64_seg_8bpc_neon_common
-        movrel          x9,  comparisons
+        movrel          x9,  X(deblock_comparisons)
         ldp             q2,  q3,  [x4]                      // q_lut and side_lut
         add             x3,  x3,  #32
         ldp             q4,  q5,  [x9]
