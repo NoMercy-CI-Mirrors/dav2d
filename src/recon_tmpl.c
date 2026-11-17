@@ -3070,9 +3070,11 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
     int n_tr = 0, n_bl = 0;
     const int chroma = !!plane;
     const int ss_hor = chroma * f->ss_hor, ss_ver = chroma * f->ss_ver;
+    const int ssbw4 = bw4 >> ss_hor;
+    const int ssbh4 = bh4 >> ss_ver;
     if (m == SMOOTH_PRED) {
         const int bx4 = bx & 63, by4 = by & 63, sbsz = f->sb_step;
-        if (by > ts->tiling.row_start) {
+        if (by > ts->tiling.row_start && (!chroma || ssbw4 <= 8)) {
             int w = imin(bw4, ts->tiling.col_end - bx - bw4);
             if (!(by & (sbsz - 1))) {
                 // top sb boundary
@@ -3091,7 +3093,7 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
             }
         }
 
-        if (bx > ts->tiling.col_start) {
+        if (bx > ts->tiling.col_start && (!chroma || ssbh4 <= 8)) {
             const int end = imin((by + sbsz) & ~(sbsz - 1), ts->tiling.row_end);
             const int h = imin(bh4, end - by - bh4);
             if (h <= 0) {
@@ -3110,8 +3112,6 @@ static void iiblend(Dav2dTaskContext *const t, const Av2Block *const b,
         &f->prefilter_data[plane][(f->prefilter_data_full_frame ?
                                    (by * 4 >> ss_ver) - 1 : ts->tiling.row) *
                                   PXSTRIDE(f->cur.p.stride[!!plane])];
-    const int ssbw4 = bw4 >> ss_hor;
-    const int ssbh4 = bh4 >> ss_ver;
     const int apply_ibp = f->seq_hdr->ibp && imax(ssbw4, ssbh4) > 1;
     const int intra_flags =
         (apply_ibp ? ANGLE_IBP_FLAG /* for dc */ : 0) |
