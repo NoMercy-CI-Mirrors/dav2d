@@ -170,23 +170,18 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
             dav2d_data_unref(&buf);
     }
 
+    // drain the decoder, keeping the first picture to test calling
+    // dav2d_picture_unref() after dav2d_close()
     dav2d_send_data(ctx, NULL);
-    memset(&pic, 0, sizeof(pic));
-    if ((err = dav2d_get_picture(ctx, &pic)) == 0) {
-        /* Test calling dav2d_picture_unref() after dav2d_close() */
-        do {
-            Dav2dPicture pic2 = { 0 };
-            if ((err = dav2d_get_picture(ctx, &pic2)) == 0)
-                dav2d_picture_unref(&pic2);
-        } while (err != DAV2D_EOF);
-
-        dav2d_close(&ctx);
-        dav2d_picture_unref(&pic);
-        return 0;
+    if (!dav2d_get_picture(ctx, &pic)) {
+        Dav2dPicture pic2 = { 0 };
+        while ((err = dav2d_get_picture(ctx, &pic2)) != DAV2D_EOF)
+            if (!err) dav2d_picture_unref(&pic2);
     }
 
 cleanup:
     dav2d_close(&ctx);
+    dav2d_picture_unref(&pic);
 end:
     return 0;
 }
