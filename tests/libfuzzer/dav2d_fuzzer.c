@@ -94,7 +94,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
     Dav2dSettings settings = { 0 };
     Dav2dContext * ctx = NULL;
-    Dav2dPicture pic;
+    Dav2dPicture pic = { 0 };
     const uint8_t *ptr = data;
     int have_seq_hdr = 0;
     int err;
@@ -161,22 +161,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         ptr += frame_size;
 
         do {
-            if ((err = dav2d_send_data(ctx, &buf)) < 0) {
-                if (err != DAV2D_ERR(EAGAIN))
-                    break;
-            }
-            for (;;) {
-                memset(&pic, 0, sizeof(pic));
-                err = dav2d_get_picture(ctx, &pic);
-                if (err == 0) {
+            if (!(err = dav2d_send_data(ctx, &buf)) || err == DAV2D_ERR(EAGAIN))
+                while (!(err = dav2d_get_picture(ctx, &pic)))
                     dav2d_picture_unref(&pic);
-                } else if (err != DAV2D_ERR(EAGAIN)) {
-                    goto nested_break;
-                }
-            }
-        } while (buf.sz > 0);
+        } while (err == DAV2D_ERR(EAGAIN) && buf.sz > 0);
 
-    nested_break:
         if (buf.sz > 0)
             dav2d_data_unref(&buf);
     }
