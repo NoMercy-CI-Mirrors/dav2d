@@ -3057,7 +3057,9 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
                 tp.p.fgm_ref = NULL;
                 tp.p.fgm = NULL;
             }
-            if (c->frame_hdr->film_grain.present) {
+            if (c->frame_hdr->film_grain.present &&
+                c->fgm[c->frame_hdr->film_grain.id])
+            {
                 tp.p.fgm_ref = c->fgm[c->frame_hdr->film_grain.id];
                 dav2d_ref_inc(tp.p.fgm_ref);
                 tp.p.fgm = tp.p.fgm_ref->data;
