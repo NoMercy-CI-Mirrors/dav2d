@@ -1104,6 +1104,12 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
     const Dav2dSequenceHeader *const seqhdr = c->seq_hdr;
     Dav2dFrameHeader *const hdr = c->frame_hdr;
 
+    if (seqhdr->reduced_still_picture_header &&
+        obu_type != DAV2D_OBU_CLOSED_LOOP_KF)
+    {
+        goto error;
+    }
+
     if (obu_type == DAV2D_OBU_BRIDGE) hdr->multi_frame_hdr_id = 0;
     else hdr->multi_frame_hdr_id = dav2d_get_vlc(gb);
 
