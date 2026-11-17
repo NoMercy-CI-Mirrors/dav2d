@@ -779,9 +779,14 @@ static int read_frame_size(Dav2dContext *const c, GetBits *const gb) {
     }
 
     const Dav2dSequenceHeader *const seqhdr = c->seq_hdr;
+    const Dav2dMultiFrameHeader *const mfh = hdr->multi_frame_hdr_id ?
+        c->multi_frame_hdrs[hdr->multi_frame_hdr_id] : NULL;
     if (hdr->frame_size_override) {
         hdr->width = dav2d_get_bits(gb, seqhdr->width_n_bits) + 1;
         hdr->height = dav2d_get_bits(gb, seqhdr->height_n_bits) + 1;
+    } else if (mfh && mfh->size.present) {
+        hdr->width = mfh->size.width;
+        hdr->height = mfh->size.height;
     } else {
         hdr->width = seqhdr->max_width;
         hdr->height = seqhdr->max_height;
