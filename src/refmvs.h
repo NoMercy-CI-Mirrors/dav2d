@@ -97,6 +97,7 @@ typedef struct refmvs_frame {
     int sbsz /* in 4px units */;
     int mfmv_sbsz8, mfmv_edge, mfmv_k_shift;
     int use_ref_frame_mvs;
+    int mv_traj;
     struct {
         int32_t sf[2];
         refpair ref;

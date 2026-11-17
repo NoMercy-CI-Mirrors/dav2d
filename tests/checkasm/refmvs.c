@@ -753,7 +753,6 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
     refmvs_traj_map *c_dst_map[3][7], *a_dst_map[3][7];
     union tmv *c_dst_traj[7], *a_dst_traj[7];
     refmvs_frame rf;
-    Dav2dSequenceHeader seq_hdr;
     Dav2dFrameHeader frm_hdr;
 
     declare_func(void, const refmvs_frame *rf, refmvs_sngl_mv_block *rp_proj,
@@ -783,9 +782,8 @@ static void check_load_tmvs_refs_fn(const Dav2dRefmvsDSPContext *const c) {
                             a_dst_map[k][n] = a_dst_map_mem[k][n];
                         }
                     }
-                    rf.seq_hdr = &seq_hdr;
                     rf.frm_hdr = &frm_hdr;
-                    seq_hdr.mv_traj = traj;
+                    rf.mv_traj = traj;
                     rf.mfmv_edge = mfmv_sbsz8 >> (sample_step == 1);
                     rf.sbsz = sbsz8 << 1;
                     rf.mfmv_k_shift = 3 + mfmv_sbsz;

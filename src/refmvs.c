@@ -265,7 +265,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                                    st->dr, &st->drvd_cnt, 4, weight, cand_mv,
                                    0, 0, &st->drvd_iter_cntr, 2);
                 break;
-            } else if (rf->seq_hdr->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
+            } else if (rf->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
                        (unsigned) ref.ref[0] < TIP_FRAME &&
                        (b->ref.ref[0] == TIP_FRAME ||
                         (unsigned) b->ref.ref[n] < TIP_FRAME) &&
@@ -358,7 +358,7 @@ static void add_spatial_candidate(const int y_off, const int x_off,
                            st->mv, st->cnt, 6, weight, b->mf >> 2,
                            cand_mv, &st->iter_cntr, 16);
     } else {
-        if (rf->seq_hdr->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
+        if (rf->mv_traj && rf->frm_hdr->use_ref_frame_mvs &&
             b->ref.ref[0] != TIP_FRAME && ref.ref[0] != ref.ref[1] &&
             rt->rp_traj[ref.ref[0]][st->b8x8].n != INVALID_TMV &&
             rt->rp_traj[ref.ref[1]][st->b8x8].n != INVALID_TMV)
@@ -484,7 +484,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
     if ((unsigned) ref.ref[0] >= TIP_FRAME) return 0;
     union tmv tmv = rt->rp_traj[ref.ref[0]][off_8x8];
     union mv mv;
-    if (!rf->seq_hdr->mv_traj || tmv.n == INVALID_TMV) {
+    if (!rf->mv_traj || tmv.n == INVALID_TMV) {
         tmv = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
         if (tmv.n == INVALID_TMV) return 0;
         mv = tmv_projection(tmv, rf->pocdiff[ref.ref[0]],
@@ -502,7 +502,7 @@ static int add_temporal_candidate(const refmvs_tile *const rt,
     }
     union tmv tmv2 = rt->rp_traj[ref.ref[1]][off_8x8];
     union mv mv2;
-    if (!rf->seq_hdr->mv_traj || tmv2.n == INVALID_TMV) {
+    if (!rf->mv_traj || tmv2.n == INVALID_TMV) {
         tmv2 = rt->rp_proj[off_8x8 >> 5].mv[off_8x8 & 31];
         if (tmv2.n == INVALID_TMV) return 0;
         mv2 = tmv_projection(tmv2, rf->pocdiff[ref.ref[1]],
@@ -1864,7 +1864,7 @@ static void load_tmvs_refs_c(const refmvs_frame *const rf,
             rp_proj_ptr[x >> 5].mv[x & 31].n = INVALID_TMV;
         rp_proj_ptr += sample_step * stride >> 5;
     }
-    if (rf->seq_hdr->mv_traj) {
+    if (rf->mv_traj) {
         const int mask = mfmv_sbsz8 - 1;
         for (int n = 0; n < 7 /*rf->frm_hdr->n_ref_frames*/; n++) {
             union tmv *tj = rp_traj[n];
@@ -1905,7 +1905,7 @@ static void load_tmvs_refs_c(const refmvs_frame *const rf,
                 const int ref2idx = rf->mfmv_ref2idx[n][b_ref];
                 union tmv b_mv = dequantize_mv(rb->mv[pos & 31].mv[ref_sign]);
                 if (b_mv.n == INVALID_TMV) continue;
-                if (rf->seq_hdr->mv_traj && ref2idx != -1)
+                if (rf->mv_traj && ref2idx != -1)
                     check_traj_intersect(rf, rp_traj, rp_map,
                                          ref, ref2idx, y, x, b_mv,
                                          col_start8_shifted, col_end8_shifted);
@@ -1937,7 +1937,7 @@ static void load_tmvs_refs_c(const refmvs_frame *const rf,
                 {
                     continue;
                 }
-                if (rf->seq_hdr->mv_traj) {
+                if (rf->mv_traj) {
                     const int k1 = (x1 >> shift) - (x >> shift);
                     assert(k1 >= -1 && k1 <= +1);
                     rp_traj[ref][pos1].y = iclip(mv1.y, -2047, 2047);
@@ -2041,7 +2041,7 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
     }
     union tmv *rp_traj[7];
     refmvs_traj_map *rp_map[3][7];
-    if (rf->seq_hdr->mv_traj) {
+    if (rf->mv_traj) {
         for (int n = 0; n < 7 /*rf->frm_hdr->n_ref_frames*/; n++) {
             rp_traj[n] = &rf->rp_traj[n][offset];
             for (int k = -1; k <= +1; k++)
@@ -2065,7 +2065,7 @@ void dav2d_refmvs_load_tmvs(const Dav2dRefmvsDSPContext *dsp,
         }
     }
     if (sample_step > 1) {
-        if (rf->seq_hdr->mv_traj) {
+        if (rf->mv_traj) {
             for (int n = 0; n < rf->frm_hdr->n_ref_frames; n++)
                 dsp->fill_gap_traj(rp_traj[n], stride, col_start8, col_end8, h8);
         }
@@ -2149,6 +2149,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     rf->mfmv_sbsz8 = 8 << mfmv_sbsz;
     rf->mfmv_edge = rf->mfmv_sbsz8 >> (frm_hdr->tmvp_sample_step == 1);
     rf->seq_hdr = seq_hdr;
+    rf->mv_traj = seq_hdr->mv_traj;
     rf->frm_hdr = frm_hdr;
     rf->iw8 = (frm_hdr->width + 7) >> 3;
     rf->ih8 = (frm_hdr->height + 7) >> 3;
