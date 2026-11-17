@@ -1046,11 +1046,6 @@ static NOINLINE void parse_tile_info_frmhdr(Dav2dFrameHeader *const hdr,
                                          sbmul, seqhdr->sbsz, hdr->height);
             t->col_start_sb[t->cols] = sbw;
             t->row_start_sb[t->rows] = sbh;
-        } else if (sbmul == 2) {
-            for (int n = 0; n < hdr->tiling.t.rows; n++)
-                hdr->tiling.t.row_start_sb[n] *= 2;
-            for (int n = 0; n < hdr->tiling.t.cols; n++)
-                hdr->tiling.t.col_start_sb[n] *= 2;
         }
     } else {
         sbmul = seqhdr->sbsz == DAV2D_SB_SIZE_256 && IS_KEY_OR_INTRA(hdr) ? 2 : 1;
