@@ -2079,13 +2079,14 @@ static ALWAYS_INLINE int get_mask(const Dav2dContext *const c,
 }
 
 static void update_temporal(const Dav2dFrameContext *const f,
-                            refmvs_temporal_block *t_dst, const ptrdiff_t off_x8,
+                            const ptrdiff_t t_off, const ptrdiff_t off_x8,
                             const ptrdiff_t t_stride, const int w8,
                             const int h8, const union refpair ref,
                             const union mv mv[2], const int swap)
 {
     if (!f->seq_hdr->ref_frame_mvs) return;
 
+    refmvs_temporal_block *t_dst = &f->rf.rp[t_off];
     union refpair *const ref_dst = &t_dst->ref[off_x8];
     ref_dst->ref[0] = ref.ref[swap];
     ref_dst->ref[1] = ref.ref[!swap];
@@ -2240,8 +2241,7 @@ static int tip_pred(Dav2dTaskContext *const t,
     union mv (*rmv_line)[2][2] = &t->rmv[((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1)];
     const unsigned sad8x8_thr = f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_REF ? 6 : 15;
     const ptrdiff_t t_stride = f->rf.rp_stride;
-    refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * (t_stride >> 5) +
-                                             (t->bx >> 6)];
+    ptrdiff_t t_off = (t->by >> 1) * (t_stride >> 5) + (t->bx >> 6);
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (ref.ref[0] * 8 + ref.ref[1])));
     const int x4e = t->bx >> 6, bx4 = t->bx & 63;
     for (int y = 0; y < h4; y += step, rmv_line += 16 * step >> 1) {
@@ -2327,7 +2327,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                     [1] = { .y = (cmv[1].y + (dd.d[1].y > 0)) >> 1,
                             .x = (cmv[1].x + (dd.d[1].x > 0)) >> 1 },
                 };
-                update_temporal(f, t_dst, off_x8, t_stride, step >> 1, step >> 1,
+                update_temporal(f, t_off, off_x8, t_stride, step >> 1, step >> 1,
                                 ref, dmv, t_swap);
                 if (bacp)
                     have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x, t->by, y,
@@ -2341,7 +2341,7 @@ static int tip_pred(Dav2dTaskContext *const t,
                        step, step, t->bx + x, t->by + y, 0,
                        cmv[i], refp[i], ref.ref[i], b->filter,
                        0, f->bw * 4, 0, f->bh * 4);
-                update_temporal(f, t_dst, off_x8, t_stride, step >> 1,
+                update_temporal(f, t_off, off_x8, t_stride, step >> 1,
                                 step >> 1, ref, cmv, t_swap);
                 if (bacp)
                     have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x, t->by, y,
@@ -2352,7 +2352,7 @@ static int tip_pred(Dav2dTaskContext *const t,
         }
         if (dst) dst += PXSTRIDE(stride) * 4 * step;
         if (tmp) off_y += stride * 4 * step;
-        t_dst += (step >> 1) * (t_stride >> 5);
+        t_off += (step >> 1) * (t_stride >> 5);
     }
     return bacp && have_bacp;
 }
@@ -2396,8 +2396,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
     const int rmv_base = ((t->by & 31) >> 1) * 16 + ((t->bx & 31) >> 1);
     union mv (*rmv_line)[2][2] = &t->rmv[rmv_base];
     const ptrdiff_t t_stride = f->rf.rp_stride;
-    refmvs_temporal_block *t_dst = &f->rf.rp[(t->by >> 1) * (t_stride >> 5) +
-                                             (t->bx >> 6)];
+    ptrdiff_t t_off = (t->by >> 1) * (t_stride >> 5) + (t->bx >> 6);
     const int t_swap = !!(f->rf.ref_flip & (1ULL << (b->ref.ref[0] * 8 + b->ref.ref[1])));
     const int sh4 = imin(4, bh4), sw4 = imin(4, bw4), bx4 = t->bx & 63;
     for (int y = 0; y < h4; y += sh4, rmv_line += 16 * sh4 >> 1) {
@@ -2451,7 +2450,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                                 [1] = { .y = (mv[1].y + (dd[0].d[1].y > 0)) >> 1,
                                         .x = (mv[1].x + (dd[0].d[1].x > 0)) >> 1 },
                             };
-                            update_temporal(f, &t_dst[!!by * (t_stride >> 5)],
+                            update_temporal(f, t_off + !!by * (t_stride >> 5),
                                             off_x8 + !!bx, t_stride, 1, 1,
                                             b->ref, dmv, t_swap);
                             if (bacp)
@@ -2475,7 +2474,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                            iclip(left[i] + sw4 * 4 + 7, 1, w),
                            iclip(top[i], 0, h - 1),
                            iclip(top[i] + sh4 * 4 + 7, 1, h));
-                    update_temporal(f, t_dst, off_x8, t_stride, sw4 >> 1, sh4 >> 1,
+                    update_temporal(f, t_off, off_x8, t_stride, sw4 >> 1, sh4 >> 1,
                                     b->ref, mv, t_swap);
                     if (bacp)
                         have_bacp |= get_mask(f->c, mask, bw4 * 4, t->bx, x,
@@ -2530,7 +2529,7 @@ static int opfl_pred(Dav2dTaskContext *const t,
                             [1] = { .y = (mv[1].y + (ddl->d[1].y > 0)) >> 1,
                                     .x = (mv[1].x + (ddl->d[1].x > 0)) >> 1 },
                         };
-                        update_temporal(f, &t_dst[!!by * (t_stride >> 5)],
+                        update_temporal(f, t_off + !!by * (t_stride >> 5),
                                         off_x8, t_stride, bs >> 1,
                                         bs >> 1, b->ref, dmv, t_swap);
                     } else {
@@ -2555,13 +2554,13 @@ static int opfl_pred(Dav2dTaskContext *const t,
                 dmv[1].x = (b->mv[1].x * 8 + tmp + 3 + (tmp > 0)) >> 3;
                 tmp = dd[0].d[1].y + dd[1].d[1].y + dd[2].d[1].y + dd[3].d[1].y;
                 dmv[1].y = (b->mv[1].y * 8 + tmp + 3 + (tmp > 0)) >> 3;
-                update_temporal(f, t_dst, bx4 >> 1, t_stride, 1, 1,
+                update_temporal(f, t_off, bx4 >> 1, t_stride, 1, 1,
                                 b->ref, dmv, t_swap);
             }
         }
         for (int n = 0; n < 2; n++)
             top[n] += 4 * sh4;
-        t_dst += (t_stride >> 5) * (sh4 >> 1);
+        t_off += (t_stride >> 5) * (sh4 >> 1);
     }
 
     return bacp && have_bacp;
