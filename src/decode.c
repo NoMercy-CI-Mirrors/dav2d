@@ -417,7 +417,7 @@ static int read_pal_indices(Dav2dTaskContext *const t, uint8_t *const pal_out,
     const int lim1 = sz[!dir], lim2 = sz[dir];
     int copy = dav2d_msac_decode_symbol_adapt4(&ts->msac,
                    ts->cdf.m.pal_idx_identity[3], 2);
-    if (copy == 2) return -1;
+    if (copy == 2) return DAV2D_ERR(EINVAL);
     int prev_v = pal_idx[0] = dav2d_msac_decode_uniform(&ts->msac, pal_sz);
     if (copy == 1) {
         // FIXME if dir=0, maybe use memset()?
@@ -2349,8 +2349,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     ts->frame_thread[p].pal_idx += bw4 * bh4 * 8;
                 } else
                     pal_idx = t->scratch.pal_idx_y;
-                read_pal_indices(t, pal_idx, b->pal_sz,
-                                 (int[4]) { w4 * 4, h4 * 4, bw4 * 4, bh4 * 4 });
+                const int res = read_pal_indices(t, pal_idx, b->pal_sz,
+                                    (int[4]) { w4 * 4, h4 * 4, bw4 * 4, bh4 * 4 });
+                if (res < 0) return res;
                 DEBUG_BLOCK_printf("%*sPost-y-pal-indices: r=%d\n",
                                    depth, "", ts->msac.rng);
             }
