@@ -1156,6 +1156,8 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
             if (hdr->film_grain.present) {
                 hdr->film_grain.id = dav2d_get_bits(gb, 3);
                 hdr->film_grain.seed = dav2d_get_bits(gb, 16);
+                if (c->strict_std_compliance && !c->fgm[hdr->film_grain.id])
+                    goto error;
             }
 #if DEBUG_FRAME_HDR
             printf("HDR: post-filmgrain[%d]: off=%td\n",
@@ -2191,6 +2193,8 @@ grain:
         if (hdr->film_grain.present) {
             hdr->film_grain.id = dav2d_get_bits(gb, 3);
             hdr->film_grain.seed = dav2d_get_bits(gb, 16);
+            if (c->strict_std_compliance && !c->fgm[hdr->film_grain.id])
+                goto error;
         }
 #if DEBUG_FRAME_HDR
         printf("HDR: post-filmgrain[%d]: off=%td\n",
