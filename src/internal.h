@@ -128,7 +128,6 @@ struct Dav2dContext {
     Dav2dData in;
     struct OutputQueue {
         Dav2dThreadPicture p;
-        // FIXME event/frame_flags
     } *dpb; // output buffer management
     int dpb_in, dpb_out, dpb_sz, dpb_poc, dpb_mlayer, drain;
     atomic_int flush_mem, *flush;
@@ -217,10 +216,8 @@ struct Dav2dContext {
     enum Dav2dDecodeFrameType decode_frame_type;
     Dav2dDataProps cached_error_props;
     int cached_error;
-#if 0
     enum PictureFlags frame_flags;
     enum Dav2dEventFlags event_flags;
-#endif
 
     Dav2dLogger logger;
 

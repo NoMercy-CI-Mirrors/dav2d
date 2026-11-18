@@ -2654,9 +2654,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
 
         if (!c->seq_hdr) {
             c->frame_hdr = NULL;
-#if 0
             c->frame_flags |= PICTURE_FLAG_NEW_SEQUENCE;
-#endif
         } else if (memcmp(seq_hdr, c->seq_hdr, sizeof(Dav2dSequenceHeader))) {
             c->frame_hdr = NULL;
             c->mastering_display = NULL;
@@ -2676,14 +2674,7 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             for (int i = 0; i < 8; i++)
                 dav2d_ref_dec(&c->fgm[i]);
             dav2d_ref_dec(&c->ci_ref);
-#if 0
             c->frame_flags |= PICTURE_FLAG_NEW_SEQUENCE;
-        // If operating_parameter_info changed, signal it
-        } else if (memcmp(seq_hdr->operating_parameter_info, c->seq_hdr->operating_parameter_info,
-                          sizeof(seq_hdr->operating_parameter_info)))
-        {
-            c->frame_flags |= PICTURE_FLAG_NEW_OP_PARAMS_INFO;
-#endif
         }
         dav2d_ref_dec(&c->seq_hdr_ref);
         c->seq_hdr_ref = ref;
@@ -3072,9 +3063,6 @@ ptrdiff_t dav2d_parse_obus(Dav2dContext *const c, Dav2dData *const in) {
             tp.p.frame_hdr = c->frame_hdr;
             c->frame_hdr = NULL;
             dav2d_queue_output(c, &tp, 1);
-#if 0
-            c->event_flags |= dav2d_picture_get_event_flags(&c->refs[fidx].p);
-#endif
             dav2d_thread_picture_unref(&tp);
         } else if (c->n_tiles == c->frame_hdr->tiling.t.cols *
                                  c->frame_hdr->tiling.t.rows ||

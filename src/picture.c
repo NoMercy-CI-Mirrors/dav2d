@@ -206,11 +206,8 @@ int dav2d_thread_picture_alloc(Dav2dContext *const c, Dav2dFrameContext *const f
     const int flags_mask = ((f->frame_hdr->show_immediate || c->output_invisible_frames) /*&&
                             c->max_spatial_id == f->frame_hdr->spatial_id*/)
                            ? 0 : (PICTURE_FLAG_NEW_SEQUENCE | PICTURE_FLAG_NEW_OP_PARAMS_INFO);
-#if 0
     p->flags = c->frame_flags;
     c->frame_flags &= flags_mask;
-#endif
-    (void)flags_mask;
 
     p->visible = f->frame_hdr->show_immediate;
     p->showable = f->frame_hdr->show_immediate || f->frame_hdr->show_implicit;

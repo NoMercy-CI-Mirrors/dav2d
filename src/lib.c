@@ -474,6 +474,7 @@ static int output_image(Dav2dContext *const c, Dav2dPicture *const out) {
     if (progress != FRAME_ERROR && progress != UINT_MAX) return DAV2D_ERR(EAGAIN);
     c->dpb_out++;
     if (c->dpb_out == c->dpb_sz) c->dpb_out = 0;
+    c->event_flags |= dav2d_picture_get_event_flags(&q->p);
 
     const int error = atomic_load(q->p.error);
     if (error || progress == FRAME_ERROR) {
@@ -793,7 +794,6 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
     dav2d_freep_aligned(c_out);
 }
 
-#if 0
 int dav2d_get_event_flags(Dav2dContext *const c, enum Dav2dEventFlags *const flags) {
     validate_input_or_ret(c != NULL, DAV2D_ERR(EINVAL));
     validate_input_or_ret(flags != NULL, DAV2D_ERR(EINVAL));
@@ -802,7 +802,6 @@ int dav2d_get_event_flags(Dav2dContext *const c, enum Dav2dEventFlags *const fla
     c->event_flags = 0;
     return 0;
 }
-#endif
 
 int dav2d_get_decode_error_data_props(Dav2dContext *const c, Dav2dDataProps *const out) {
     validate_input_or_ret(c != NULL, DAV2D_ERR(EINVAL));
