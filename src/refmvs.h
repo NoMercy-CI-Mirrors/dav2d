@@ -120,7 +120,7 @@ typedef struct refmvs_frame {
     int32_t mfmv_ref2sf[4][7][2];
     int n_mfmvs;
 
-    int n_blocks;
+    int n_rp_proj, n_traj, n_ra;
     refmvs_temporal_block *rp;
     ptrdiff_t rp_stride;
     /*const*/ refmvs_temporal_block *const *rp_ref;

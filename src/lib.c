@@ -755,6 +755,8 @@ static COLD void close_internal(Dav2dContext **const c_out, int flush) {
         dav2d_free(f->lf.tx_db_right_edge[0]);
         dav2d_free(f->lf.start_of_tile_row);
         dav2d_free_aligned(f->rf.rp_proj);
+        dav2d_free_aligned(f->rf.rp_traj[0]);
+        dav2d_free_aligned(f->rf.ra);
         dav2d_free_aligned(f->lf.lr_line_buf);
     }
     dav2d_free_aligned(c->fc);
