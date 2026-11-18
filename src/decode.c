@@ -4838,14 +4838,13 @@ int dav2d_decode_tile_sbrow(Dav2dTaskContext *const t) {
 
 int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
     const Dav2dContext *const c = f->c;
-    int retval = DAV2D_ERR(ENOMEM);
 
     if (f->sbh > f->lf.start_of_tile_row_sz) {
         dav2d_free(f->lf.start_of_tile_row);
         f->lf.start_of_tile_row = dav2d_malloc(ALLOC_TILE, f->sbh * sizeof(uint8_t));
         if (!f->lf.start_of_tile_row) {
             f->lf.start_of_tile_row_sz = 0;
-            goto error;
+            return DAV2D_ERR(ENOMEM);
         }
         f->lf.start_of_tile_row_sz = f->sbh;
     }
@@ -4863,12 +4862,12 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
                 dav2d_malloc(ALLOC_TILE, sizeof(*f->frame_thread.tile_start_off) * n_ts);
             if (!f->frame_thread.tile_start_off) {
                 f->n_ts = 0;
-                goto error;
+                return DAV2D_ERR(ENOMEM);
             }
         }
         dav2d_free_aligned(f->ts);
         f->ts = dav2d_alloc_aligned(ALLOC_TILE, sizeof(*f->ts) * n_ts, 32);
-        if (!f->ts) goto error;
+        if (!f->ts) return DAV2D_ERR(ENOMEM);
         f->n_ts = n_ts;
     }
 
@@ -4878,7 +4877,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         f->a = dav2d_malloc(ALLOC_TILE, sizeof(*f->a) * a_sz);
         if (!f->a) {
             f->a_sz = 0;
-            goto error;
+            return DAV2D_ERR(ENOMEM);
         }
         f->a_sz = a_sz;
     }
@@ -4895,7 +4894,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
                              sizeof(*f->tile_thread.lowest_pixel_mem));
             if (!f->tile_thread.lowest_pixel_mem) {
                 f->tile_thread.lowest_pixel_mem_sz = 0;
-                goto error;
+                return DAV2D_ERR(ENOMEM);
             }
             f->tile_thread.lowest_pixel_mem_sz = lowest_pixel_mem_sz;
         }
@@ -4934,7 +4933,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
                                     cbi_sz * 64 * 64 / 4, 64);
             if (!f->frame_thread.cbi) {
                 f->frame_thread.cbi_sz = 0;
-                goto error;
+                return DAV2D_ERR(ENOMEM);
             }
             f->frame_thread.cbi_sz = cbi_sz;
         }
@@ -4946,7 +4945,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
                 dav2d_alloc_aligned(ALLOC_COEF, (size_t)cf_sz * 256 * 256 / 2, 64);
             if (!f->frame_thread.cf) {
                 f->frame_thread.cf_sz = 0;
-                goto error;
+                return DAV2D_ERR(ENOMEM);
             }
             memset(f->frame_thread.cf, 0, (size_t)cf_sz * 256 * 256 / 2);
             f->frame_thread.cf_sz = cf_sz;
@@ -4958,7 +4957,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
             f->frame_thread.partition = dav2d_malloc(ALLOC_BLOCK, (size_t)part_sz);
             if (!f->frame_thread.partition) {
                 f->frame_thread.part_sz = 0;
-                goto error;
+                return DAV2D_ERR(ENOMEM);
             }
             f->frame_thread.part_sz = part_sz;
         }
@@ -4972,7 +4971,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
                                         pal_sz * 32 * 32, 64);
                 if (!f->frame_thread.pal) {
                     f->frame_thread.pal_sz = 0;
-                    goto error;
+                    return DAV2D_ERR(ENOMEM);
                 }
                 f->frame_thread.pal_sz = pal_sz;
             }
@@ -4985,7 +4984,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
                                         pal_idx_sz * 256 * 256 / 8, 64);
                 if (!f->frame_thread.pal_idx) {
                     f->frame_thread.pal_idx_sz = 0;
-                    goto error;
+                    return DAV2D_ERR(ENOMEM);
                 }
                 f->frame_thread.pal_idx_sz = pal_idx_sz;
             }
@@ -5017,7 +5016,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         uint8_t *ptr = f->lf.lr_line_buf = dav2d_alloc_aligned(ALLOC_LR, alloc_sz, 64);
         if (!ptr) {
             f->lf.lr_buf_plane_sz[0] = f->lf.lr_buf_plane_sz[1] = 0;
-            goto error;
+            return DAV2D_ERR(ENOMEM);
         }
 
         ptr += 64;
@@ -5059,7 +5058,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         f->lf.mask = dav2d_malloc(ALLOC_LF, sizeof(*f->lf.mask) * num_sb256);
         if (!f->lf.mask) {
             f->lf.mask_sz = 0;
-            goto error;
+            return DAV2D_ERR(ENOMEM);
         }
         dav2d_free(f->frame_thread.b);
         f->frame_thread.b = dav2d_malloc(ALLOC_BLOCK, sizeof(*f->frame_thread.b) *
@@ -5067,13 +5066,13 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
                                               num_sb256 * 64 * 64 : 16 * 16));
         if (!f->frame_thread.b) {
             f->lf.mask_sz = 0;
-            goto error;
+            return DAV2D_ERR(ENOMEM);
         }
         dav2d_free(f->lf.lr_mask);
         f->lf.lr_mask = dav2d_malloc(ALLOC_LR, sizeof(*f->lf.lr_mask) * num_sb256);
         if (!f->lf.lr_mask) {
             f->lf.mask_sz = 0;
-            goto error;
+            return DAV2D_ERR(ENOMEM);
         }
         f->lf.mask_sz = num_sb256;
     }
@@ -5142,7 +5141,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
                                                         prefilter_data_sz + 2 * 64, 64);
             if (!f->prefilter_data_buf) {
                 f->prefilter_data_sz = 0;
-                goto error;
+                return DAV2D_ERR(ENOMEM);
             }
         }
         f->prefilter_data_sz = prefilter_data_sz;
@@ -5167,7 +5166,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
         f->lf.tx_db_right_edge[0] = dav2d_malloc(ALLOC_LF, re_sz * 64 * 2);
         if (!f->lf.tx_db_right_edge[0]) {
             f->lf.re_sz = 0;
-            goto error;
+            return DAV2D_ERR(ENOMEM);
         }
         f->lf.tx_db_right_edge[1] = f->lf.tx_db_right_edge[0] + re_sz * 64;
         f->lf.re_sz = re_sz;
@@ -5179,7 +5178,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
             dav2d_refmvs_init_frame(&f->rf, f->seq_hdr, f->frame_hdr,
                                     f->refpoc, f->mvs, f->refrefpoc, f->refcnt,
                                     f->ref_mvs, f->c->n_tc > 1, f->c->n_fc > 1);
-        if (ret < 0) goto error;
+        if (ret < 0) return ret;
     }
 
     // setup dequant tables
@@ -5219,9 +5218,7 @@ int dav2d_decode_frame_init(Dav2dFrameContext *const f) {
                           f->frame_hdr->tip.frame_mode == DAV2D_TIP_FRAME_AS_OUTPUT);
     }
 
-    retval = 0;
-error:
-    return retval;
+    return 0;
 }
 
 // Derive the CDFs stored for use by subsequent frames from the tile CDFs.
@@ -5249,7 +5246,6 @@ void dav2d_decode_frame_update_cdf(Dav2dFrameContext *const f) {
 
 int dav2d_decode_frame_init_cdf(Dav2dFrameContext *const f) {
     const Dav2dContext *const c = f->c;
-    int retval = DAV2D_ERR(EINVAL);
 
     if (f->use_pri_sec_cdf) {
         dav2d_cdf_pri_sec_average(f->in_cdf.data.cdf,
@@ -5270,13 +5266,13 @@ int dav2d_decode_frame_init_cdf(Dav2dFrameContext *const f) {
             if (j == f->tile[i].end) {
                 tile_sz = size;
             } else {
-                if (f->frame_hdr->tiling.n_bytes > size) goto error;
+                if (f->frame_hdr->tiling.n_bytes > size) return DAV2D_ERR(EINVAL);
                 tile_sz = 0;
                 for (unsigned k = 0; k < f->frame_hdr->tiling.n_bytes; k++)
                     tile_sz |= (unsigned)*data++ << (k * 8);
                 tile_sz++;
                 size -= f->frame_hdr->tiling.n_bytes;
-                if (tile_sz > size) goto error;
+                if (tile_sz > size) return DAV2D_ERR(EINVAL);
             }
 
             setup_tile(&f->ts[j], f, data, tile_sz, tile_row, tile_col++,
@@ -5303,9 +5299,7 @@ int dav2d_decode_frame_init_cdf(Dav2dFrameContext *const f) {
     atomic_store(&f->task_thread.entropy_task_counter,
                  f->frame_hdr->tiling.t.cols * f->frame_hdr->tiling.t.rows);
 
-    retval = 0;
-error:
-    return retval;
+    return 0;
 }
 
 void dav2d_decode_tip_frame_init(Dav2dFrameContext *const f) {
@@ -5335,7 +5329,6 @@ void dav2d_decode_tip_frame_init(Dav2dFrameContext *const f) {
 
 int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
     const Dav2dContext *const c = f->c;
-    int retval = DAV2D_ERR(EINVAL);
 
     assert(f->c->n_tc == 1);
 
@@ -5361,7 +5354,7 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
             }
             for (int tile_col = 0; tile_col < f->frame_hdr->tiling.t.cols; tile_col++) {
                 t->ts = &f->ts[tile_row * f->frame_hdr->tiling.t.cols + tile_col];
-                if (dav2d_decode_tile_sbrow(t)) goto error;
+                if (dav2d_decode_tile_sbrow(t)) return DAV2D_ERR(EINVAL);
             }
         }
         // post filters (deblock + cdef + ccso + ...)
@@ -5369,14 +5362,12 @@ int dav2d_decode_frame_main(Dav2dFrameContext *const f) {
         const int sb64h_end =
             imin(f->frame_hdr->tiling.t.row_start_sb[tile_row + 1] << sbsz, f->sb64h);
         for (int by64 = sby_start << sbsz; by64 < sb64h_end; by64++) {
-            retval = f->bd_fn.filter_slice(f, by64);
-            if (retval) goto error;
+            const int res = f->bd_fn.filter_slice(f, by64);
+            if (res) return res;
         }
     }
 
-    retval = 0;
-error:
-    return retval;
+    return 0;
 }
 
 void dav2d_decode_frame_exit(Dav2dFrameContext *const f, int retval) {
