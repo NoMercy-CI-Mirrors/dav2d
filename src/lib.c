@@ -52,6 +52,9 @@
 #include "src/wedge.h"
 #include "src/wiener_tables.h"
 
+#define DAV2D_MAX_THREADS 256
+#define DAV2D_MAX_FRAME_DELAY 256
+
 static COLD void init_internal(void) {
     dav2d_init_cpu();
     dav2d_init_ibp_weights();
@@ -122,19 +125,16 @@ static COLD void get_num_threads(Dav2dContext *const c, const Dav2dSettings *con
         6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,       /* 26-36 */
         7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, /* 37-49 */
     };
-    *n_tc = s->n_threads ? s->n_threads :
-        iclip(dav2d_num_logical_processors(c), 1, DAV2D_MAX_THREADS);
-    *n_fc = s->max_frame_delay ? umin(s->max_frame_delay, *n_tc) :
+    *n_tc = s->n_threads ? umin(s->n_threads, DAV2D_MAX_THREADS) :
+        (unsigned) iclip(dav2d_num_logical_processors(c), 1, DAV2D_MAX_THREADS);
+    *n_fc = s->max_frame_delay ?
+            umin(umin(s->max_frame_delay, DAV2D_MAX_FRAME_DELAY), *n_tc) :
             *n_tc < 50 ? fc_lut[*n_tc - 1] : 8; // min(8, ceil(sqrt(n)))
 }
 
 COLD int dav2d_get_frame_delay(const Dav2dSettings *const s) {
     unsigned n_tc, n_fc;
     validate_input_or_ret(s != NULL, DAV2D_ERR(EINVAL));
-    validate_input_or_ret(s->n_threads >= 0 &&
-                          s->n_threads <= DAV2D_MAX_THREADS, DAV2D_ERR(EINVAL));
-    validate_input_or_ret(s->max_frame_delay >= 0 &&
-                          s->max_frame_delay <= DAV2D_MAX_FRAME_DELAY, DAV2D_ERR(EINVAL));
 
     get_num_threads(NULL, s, &n_tc, &n_fc);
     return n_fc;
@@ -146,10 +146,6 @@ COLD int dav2d_open(Dav2dContext **const c_out, const Dav2dSettings *const s) {
 
     validate_input_or_ret(c_out != NULL, DAV2D_ERR(EINVAL));
     validate_input_or_ret(s != NULL, DAV2D_ERR(EINVAL));
-    validate_input_or_ret(s->n_threads >= 0 &&
-                          s->n_threads <= DAV2D_MAX_THREADS, DAV2D_ERR(EINVAL));
-    validate_input_or_ret(s->max_frame_delay >= 0 &&
-                          s->max_frame_delay <= DAV2D_MAX_FRAME_DELAY, DAV2D_ERR(EINVAL));
     validate_input_or_ret(s->allocator.alloc_picture_callback != NULL,
                           DAV2D_ERR(EINVAL));
     validate_input_or_ret(s->allocator.release_picture_callback != NULL,

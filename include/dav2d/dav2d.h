@@ -43,9 +43,6 @@ extern "C" {
 typedef struct Dav2dContext Dav2dContext;
 typedef struct Dav2dRef Dav2dRef;
 
-#define DAV2D_MAX_THREADS 256
-#define DAV2D_MAX_FRAME_DELAY 256
-
 typedef struct Dav2dLogger {
     void *cookie; ///< Custom data to pass to the callback.
     /**
@@ -79,8 +76,8 @@ enum Dav2dDecodeFrameType {
 };
 
 typedef struct Dav2dSettings {
-    int n_threads; ///< number of threads (0 = number of logical cores in host system, default 0)
-    int max_frame_delay; ///< Set to 1 for low-latency decoding (0 = ceil(sqrt(n_threads)), default 0)
+    unsigned n_threads; ///< number of threads (0 = automatic, default 0)
+    unsigned max_frame_delay; ///< Set to 1 for low-latency decoding (0 = automatic, default 0)
     int apply_grain; ///< whether to apply film grain on output frames (default 1)
     int operating_point; ///< select an operating point for scalable AV2 bitstreams (0 - 31, default 0)
     int all_layers; ///< output all spatial layers of a scalable AV2 biststream (default 1)
