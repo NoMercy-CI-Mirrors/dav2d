@@ -2163,7 +2163,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     const int n_rp_proj = have_frame_threading ?
         ((rf->ih8 + 31) & ~31) * (rp_stride >> 5) :
         (2 + (rf->sbsz >> 1)) * (n_blocks >> 5);
-    if (n_rp_proj > rf->n_rp_proj) {
+    if (n_rp_proj != rf->n_rp_proj) {
         dav2d_free_aligned(rf->rp_proj);
         rf->rp_proj = dav2d_alloc_aligned(ALLOC_REFMVS,
                                           sizeof(*rf->rp_proj) * n_rp_proj, 64);
@@ -2175,7 +2175,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
     }
 
     const int n_traj = rf->sbsz * n_blocks;
-    if (n_traj > rf->n_traj) {
+    if (n_traj != rf->n_traj) {
         const size_t rp_traj_sz = sizeof(**rf->rp_traj) * n_traj >> 1;
         const size_t rp_map_sz = sizeof(***rf->rp_map) * n_traj >> 1;
         dav2d_free_aligned(rf->rp_traj[0]);
@@ -2198,7 +2198,7 @@ int dav2d_refmvs_init_frame(refmvs_frame *const rf,
         rf->n_traj = n_traj;
     }
 
-    if (n_blocks > rf->n_ra) {
+    if (n_blocks != rf->n_ra) {
         dav2d_free_aligned(rf->ra);
         rf->ra = dav2d_alloc_aligned(ALLOC_REFMVS, sizeof(*rf->ra) * n_blocks, 64);
         if (!rf->ra) {
