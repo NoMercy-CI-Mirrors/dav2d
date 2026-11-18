@@ -1803,6 +1803,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
 
     // skip_txfm
     if (f->frame_hdr->segmentation.d.skip_mask & (1 << b->seg_id)) {
+        if (b->intra && !intrabc) return -1;
         b->skip_txfm = 1;
     } else if (b->intra && !intrabc) {
         if (has_luma) b->skip_txfm = 0;
