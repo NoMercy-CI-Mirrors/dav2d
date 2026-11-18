@@ -1094,6 +1094,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pmaddwd                m12, m10, m10        ; sum_xx
     pmaddwd                m13, m10, m1         ; sum_xy
     pand                   m11, m1, m14         ; sum_y
+    xor                    t2d, t2d
     mov                     t1, 0x60
     jmp .left.chroma.sampling_done
 .left.chroma.skip_sampling:
@@ -1101,9 +1102,10 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     pxor                   m12, m12
     pxor                   m11, m11
     pxor                   m13, m13
+    mov                    t2d, 1
     mov                     t1, 0x70
 .left.chroma.sampling_done:
-    xor                    t0d, t0d
+    mov                    t0d, t2d
     sub                     hd, 4
     jz .top
     jb .left.chroma.pad.hm4
@@ -1130,10 +1132,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     punpckldq               m3, m7
     punpcklqdq              m2, m3
     pand                    m2, m15
-    cmp                  stepd, 8
-    jb .left.chroma.loop.sampling
-    xor                    t0d, 1
-    jz .left.chroma.loop.skip_sampling
+    xor                    t0d, t2d
+    jnz .left.chroma.loop.skip_sampling
 .left.chroma.loop.sampling:
     movu                    m6, [rsp+%%stksz+t1]
     sub                     t1, 16
@@ -1165,11 +1165,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     mov                    t1d, hpadd
 .left.chroma.pad:
     paddw                   m1, m2
-    cmp                  stepd, 8
-    ; todo we could fuse this by sete t2, xor t0, t2
-    jne .left.chroma.pad.sampling
-    xor                    t0d, 1
-    jz .left.chroma.pad.skip_sampling
+    xor                    t0d, t2d
+    jnz .left.chroma.pad.skip_sampling
 .left.chroma.pad.sampling:
     paddw                  m10, m6
     paddw                  m11, m7
@@ -1212,8 +1209,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     punpcklqdq              m2, m3
     pand                    m2, m15
     paddw                   m1, m2
-    xor                    t0d, 1
-    jz .left.chroma.pad.h64.2px.skip_sampling
+    xor                    t0d, t2d
+    jnz .left.chroma.pad.h64.2px.skip_sampling
     movu                    m6, [rsp+%%stksz+t1]
     sub                     t1, 16
     phaddw                  m6, m6
@@ -1231,6 +1228,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     jz .top
     movu                    m6, [rsp+%%stksz+t1]
     mov                    t1d, t2d
+    cmp                  stepd, 8
+    sete                   t2b
     phaddw                  m6, m6
     psrlw                   m6, 3
     pshufd                  m2, m2, q3311
