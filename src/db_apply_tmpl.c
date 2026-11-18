@@ -611,7 +611,7 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
                                        1, cur_qidx, lut);
                 l_qidx = cur_qidx;
             }
-            int a_qidx;
+            int a_qidx = 0; // initialized to silence a false positive in valgrind
             if (a_lut_ptr) {
                 if (any_ll)
                     ll_mask_mem[0] = a_lflvl[x64 >> 2].lossless_mask_y[(starty4 + 63) & 63][bx64];
@@ -670,7 +670,7 @@ void bytefn(dav2d_deblock_slice_rows)(const Dav2dFrameContext *const f,
                                     cur_qidx, lut);
             l_qidx = cur_qidx;
         }
-        int a_qidx;
+        int a_qidx = 0; // initialized to silence a false positive in valgrind
         if (a_lut_ptr) {
             if (any_ll)
                 ll_mask_mem[0] = a_lflvl[x64 >> 2].lossless_mask_uv[((starty4 + 63) & 63) >> ss_ver][bx64];
