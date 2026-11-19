@@ -735,26 +735,20 @@ int dav2d_parse_sequence_header(Dav2dSequenceHeader *const out,
     int res = DAV2D_ERR(ENOENT);
 
     do {
-        dav2d_get_bit(&gb); // obu_forbidden_bit
-        const enum Dav2dObuType type = dav2d_get_bits(&gb, 4);
-        const int has_extension = dav2d_get_bit(&gb);
-        const int has_length_field = dav2d_get_bit(&gb);
-        dav2d_get_bits(&gb, 1 + 8 * has_extension); // ignore
+        const size_t len = dav2d_get_uleb128(&gb);
+        if (len > (size_t)(gb.ptr_end - gb.ptr)) return DAV2D_ERR(EINVAL);
+        const uint8_t *const obu_end = gb.ptr + len;
 
-        const uint8_t *obu_end = gb.ptr_end;
-        if (has_length_field) {
-            const size_t len = dav2d_get_uleb128(&gb);
-            if (len > (size_t)(obu_end - gb.ptr)) return DAV2D_ERR(EINVAL);
-            obu_end = gb.ptr + len;
-        }
+        const int has_extension = dav2d_get_bit(&gb);
+        const enum Dav2dObuType type = dav2d_get_bits(&gb, 5);
+        dav2d_get_bits(&gb, 2 + 8 * has_extension); // tlayer_id, mlayer_id, xlayer_id
 
         if (type == DAV2D_OBU_SEQ_HDR) {
             if ((res = parse_seq_hdr(out, &gb, 0)) < 0) return res;
-            if (gb.ptr > obu_end) return DAV2D_ERR(EINVAL);
             dav2d_bytealign_get_bits(&gb);
         }
 
-        if (gb.error) return DAV2D_ERR(EINVAL);
+        if (gb.error || gb.ptr > obu_end) return DAV2D_ERR(EINVAL);
         assert(gb.state == 0 && gb.bits_left == 0);
         gb.ptr = obu_end;
     } while (gb.ptr < gb.ptr_end);
