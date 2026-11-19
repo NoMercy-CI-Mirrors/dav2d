@@ -8,13 +8,13 @@ Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
  av2/common/idct.h         |   7 +-
  av2/common/reconintra.c   | 189 ++++++++++++++++++++++++++++++++++++--
  av2/common/reconintra.h   |   3 +-
- av2/common/tip.c          |  15 +++
+ av2/common/tip.c          |  22 +++
  av2/decoder/decodeframe.c |  48 ++++++++-
  av2/encoder/encodemb.c    |  10 +-
  av2/encoder/tpl_model.c   |   2 +-
  av2/encoder/tx_search.c   |   8 +-
  avm/debug.h               |  49 ++++++++++
- 10 files changed, 326 insertions(+), 24 deletions(-)
+ 10 files changed, 333 insertions(+), 24 deletions(-)
 
 diff --git a/av2/common/idct.c b/av2/common/idct.c
 index 9af694416..699c7c3b2 100644
@@ -427,22 +427,29 @@ index caaaf46d9..8a062d790 100644
  // Percentage threshold of number of blocks with available motion
  // projection in a frame to allow TIP mode
  #define TIP_ENABLE_COUNT_THRESHOLD 60
-@@ -959,4 +961,17 @@ void av2_setup_tip_frame(AV2_COMMON *cm, MACROBLOCKD *xd, uint16_t **mc_buf,
+@@ -959,4 +961,24 @@ void av2_setup_tip_frame(AV2_COMMON *cm, MACROBLOCKD *xd, uint16_t **mc_buf,
    tip_setup_tip_frame_planes(cm, xd, 0, 0, mvs_rows, mvs_cols, mvs_cols, mc_buf,
                               tmp_conv_dst, calc_subpel_params_func,
                               copy_refined_mvs);
 +#if DEBUG_B_PIXELS
-+  const int sbsz = cm->seq_params.mib_size * 4;
-+  const YV12_BUFFER_CONFIG *src = &cm->tip_ref.tip_frame->buf;
-+  const ptrdiff_t stride = src->strides[0];
-+  const int h = mvs_rows * 8, w = mvs_cols * 8;
-+  for (int y = 0; y < h; y += sbsz)
-+    for (int x = 0; x < w; x += sbsz)
-+      for (int yy = y; yy < AVMMIN(h, y + sbsz); yy += 64)
-+        for (int xx = x; xx < AVMMIN(w, x + sbsz); xx += 64)
-+          hex_dump(&src->buffers[0][yy * stride + xx], stride,
-+                   AVMMIN(w - xx, 64), AVMMIN(h - yy, 64),
-+                   "y-pred", !!(xd->bd - 8));
++  if (cm->features.tip_frame_mode == TIP_FRAME_AS_OUTPUT) {
++    const int sbsz = cm->seq_params.mib_size * 4;
++    const YV12_BUFFER_CONFIG *src = &cm->tip_ref.tip_frame->buf;
++    const ptrdiff_t stride = src->strides[0];
++    const int h = mvs_rows * 8, w = mvs_cols * 8;
++    for (int y = 0; y < h; y += sbsz)
++      for (int x = 0; x < w; x += sbsz)
++        for (int y128 = y; y128 < AVMMIN(h, y + sbsz); y128 += 128)
++          for (int x128 = x; x128 < AVMMIN(w, x + sbsz); x128 += 128)
++            for (int yy = y128; yy < AVMMIN(h, y128 + 128); yy += 64)
++              for (int xx = x128; xx < AVMMIN(w, x128 + 128); xx += 64) {
++                const int mi_row = yy / MI_SIZE, mi_col = xx / MI_SIZE;
++                if (BLOCK_TO_DEBUG)
++                  hex_dump(&src->buffers[0][yy * stride + xx], stride,
++                           AVMMIN(w - xx, 64), AVMMIN(h - yy, 64),
++                           "y-pred", !!(xd->bd - 8));
++              }
++  }
 +#endif
  }
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
