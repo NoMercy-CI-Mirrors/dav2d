@@ -9,12 +9,12 @@ Subject: [PATCH 4/5] Print Intra Prediction, DQ coeffs and inverse transform
  av2/common/reconintra.c   | 189 ++++++++++++++++++++++++++++++++++++--
  av2/common/reconintra.h   |   3 +-
  av2/common/tip.c          |  15 +++
- av2/decoder/decodeframe.c |  41 ++++++++-
+ av2/decoder/decodeframe.c |  48 ++++++++-
  av2/encoder/encodemb.c    |  10 +-
  av2/encoder/tpl_model.c   |   2 +-
  av2/encoder/tx_search.c   |   8 +-
  avm/debug.h               |  49 ++++++++++
- 10 files changed, 319 insertions(+), 24 deletions(-)
+ 10 files changed, 326 insertions(+), 24 deletions(-)
 
 diff --git a/av2/common/idct.c b/av2/common/idct.c
 index 9af694416..699c7c3b2 100644
@@ -492,13 +492,13 @@ index f37b10870..d8aa59120 100644
  
  #if CONFIG_MISMATCH_DEBUG
    {
-@@ -938,6 +961,22 @@ static AVM_INLINE void predict_inter_block(AV2_COMMON *const cm,
+@@ -938,6 +961,29 @@ static AVM_INLINE void predict_inter_block(AV2_COMMON *const cm,
      }
    }
  #endif  // CONFIG_INSPECTION
 +
 +#if DEBUG_B_PIXELS
-+  if (BLOCK_TO_DEBUG) {
++  {
 +    struct macroblockd_plane *const pd = &xd->plane[0];
 +    const int plane_block_size =
 +      get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);
@@ -506,10 +506,17 @@ index f37b10870..d8aa59120 100644
 +                         mi_size_wide[plane_block_size]) * MI_SIZE;
 +    const int h = AVMMIN(cm->mi_params.mi_rows - mi_row,
 +                         mi_size_high[plane_block_size]) * MI_SIZE;
-+    for (int y = 0; y < h; y += 64)
-+      for (int x = 0; x < w; x += 64)
-+        hex_dump(&pd->dst.buf[y * pd->dst.stride + x], pd->dst.stride,
-+                 AVMMIN(w - x, 64), AVMMIN(h - y, 64), "y-pred", !!(xd->bd - 8));
++    for (int y128 = 0; y128 < h; y128 += 128)
++      for (int x128 = 0; x128 < w; x128 += 128)
++        for (int y = y128; y < AVMMIN(h, y128 + 128); y += 64)
++          for (int x = x128; x < AVMMIN(w, x128 + 128); x += 64) {
++            const int mi_row = xd->mi_row + y / MI_SIZE;
++            const int mi_col = xd->mi_col + x / MI_SIZE;
++            if (BLOCK_TO_DEBUG)
++              hex_dump(&pd->dst.buf[y * pd->dst.stride + x], pd->dst.stride,
++                       AVMMIN(w - x, 64), AVMMIN(h - y, 64), "y-pred",
++                       !!(xd->bd - 8));
++          }
 +  }
 +#endif
  }
