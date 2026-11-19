@@ -1,0 +1,21 @@
+From: Ewout ter Hoeven <15776622+EwoutH@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 20:40:56 +0000
+Subject: [PATCH] fix color-description trace labels
+
+Pass transfer characteristics and matrix coefficients in the order of
+the printf labels. The parsed color values are unchanged.
+
+---
+diff --git a/av2/decoder/obu_ci.c b/av2/decoder/obu_ci.c
+--- a/av2/decoder/obu_ci.c
++++ b/av2/decoder/obu_ci.c
+@@ -178,8 +178,8 @@
+     printf("CI: post-colordesc[id=%d,pri=%d,trc=%d,mtrx=%d,rng=%d]: off=%u\n",
+            ci_temp.color_info.color_description_idc,
+            ci_temp.color_info.color_primaries,
++           ci_temp.color_info.transfer_characteristics,
+            ci_temp.color_info.matrix_coefficients,
+-           ci_temp.color_info.transfer_characteristics,
+            ci_temp.color_info.full_range_flag, rb->bit_offset);
+ #endif
+   } else {
