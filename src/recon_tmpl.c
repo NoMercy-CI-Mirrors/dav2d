@@ -1700,12 +1700,6 @@ static void mc(Dav2dTaskContext *const t,
         const int bottom =
             ((pos_y + (bh4 * v_mul - 1) * f->svc[refidx][1].step) >> 10) + 1;
 
-        if (DEBUG_BLOCK_INFO)
-            printf("Off %dx%d [%d,%d,%d], size %dx%d [%d,%d]\n",
-                   left, top, orig_pos_x, f->svc[refidx][0].scale, refidx,
-                   right-left, bottom-top,
-                   f->svc[refidx][0].step, f->svc[refidx][1].step);
-
         const int w = ((refp->p.p.w + 7) & ~7) >> ss_hor;
         const int h = ((refp->p.p.h + 7) & ~7) >> ss_ver;
         if (left < 3 || top < 3 || right + 4 > w || bottom + 4 > h) {
@@ -1716,7 +1710,6 @@ static void mc(Dav2dTaskContext *const t,
                                 refp->p.data[pl], ref_stride);
             ref = &emu_edge_buf[320 * 3 + 3];
             ref_stride = 320 * sizeof(pixel);
-            if (DEBUG_BLOCK_INFO) printf("Emu\n");
         } else {
             ref = ((pixel *) refp->p.data[pl]) + PXSTRIDE(ref_stride) * top + left;
         }
