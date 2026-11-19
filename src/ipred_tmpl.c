@@ -897,7 +897,7 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
                 edge[2][i] = vleft[0];
                 i++;
             }
-            yleft += ystride << ss_ver;
+            yleft += ystride * (1 << ss_ver);
             uleft += cstride;
             vleft += cstride;
         }
@@ -1062,7 +1062,7 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
                     dst[pl][xpad] = dst[pl][x - 1];
                 dst[pl] += cstride;
             }
-        ypx += ystride << ss_ver;
+        ypx += ystride * (1 << ss_ver);
     }
     for (int pl = 0; pl < 2; pl++)
         if (alpha[pl])
@@ -1172,7 +1172,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
             const int l = (n_left_cols & 1) ? c - 1 : imax(c - 1, 0);
             FILTER(dst_left, x, src_left, top_left);
         }
-        src_left += src_stride << 1;
+        src_left += src_stride * 2;
         top_left = src_left - src_stride;
         dst_left += n_left_cols;
     }
@@ -1186,7 +1186,7 @@ cfl_mh_gen_y_420_c(pixel *dst, const pixel *src, const pixel *const top_sb_edge,
             const int l = !has_l ? imax(c - 1, 0) : c - 1;
             FILTER(dst, x, src, top);
         }
-        src += src_stride << 1;
+        src += src_stride * 2;
         top = src - src_stride;
         dst += w;
     }

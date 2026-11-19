@@ -92,7 +92,7 @@ ccso_prep_bo_c(uint8_t *dst, const pixel *src, const ptrdiff_t src_stride,
         for (int x = 0; x < w; x++)
             dst[x] = src[x << ss_hor] >> shift;
 
-        src += PXSTRIDE(src_stride) << ss_ver;
+        src += PXSTRIDE(src_stride) * (1 << ss_ver);
         dst += 64 >> ss_hor;
     }
 }
