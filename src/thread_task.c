@@ -947,11 +947,8 @@ void *dav2d_worker_task(void *data) {
             const unsigned y = by64 + sb64sz >= sb64h ? UINT_MAX :
                                (unsigned)(by64 + sb64sz) * 64;
             assert(c->task_thread.n_passes > 1);
-            if (c->n_fc > 1 &&
-                f->cur.p.data[0] /* upon flush, this can be free'ed already */)
-            {
+            if (c->n_fc > 1)
                 atomic_store(&f->cur.progress[0], error ? FRAME_ERROR : y);
-            }
             atomic_store(&f->frame_thread.entropy_progress,
                          error ? TILE_ERROR : by64 + sb64sz);
             if (by64 + sb64sz >= sb64h)
@@ -980,7 +977,7 @@ void *dav2d_worker_task(void *data) {
         by64 = get_frame_progress(c, f);
         error = atomic_load(f->cur.error);
         const unsigned y = by64 + 1 == sb64h ? UINT_MAX : (unsigned)(by64 + 1) * 64;
-        if (c->n_fc > 1 && f->cur.p.data[0] /* upon flush, this can be free'ed already */)
+        if (c->n_fc > 1)
             atomic_store(&f->cur.progress[2], error ? FRAME_ERROR : y);
         pthread_mutex_unlock(&f->task_thread.lock);
         if (by64 + 1 == sb64h)
