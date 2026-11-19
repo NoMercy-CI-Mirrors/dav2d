@@ -1222,17 +1222,23 @@ static int parse_frame_hdr(Dav2dContext *const c, GetBits *const gb,
         hdr->frame_size_override = hdr->frame_type == DAV2D_FRAME_TYPE_SWITCH ?
                                    1 : dav2d_get_bit(gb);
         hdr->coded_frame_offset = dav2d_get_bits(gb, seqhdr->order_hint_n_bits);
-        int max_poc = 0;
-        for (int n = 0; n < DAV2D_NUM_REF_FRAMES; n++) {
-            const Dav2dFrameHeader *const ref_hdr = c->refs[n].p.p.frame_hdr;
-            if (!ref_hdr || !(ref_hdr->show_immediate || ref_hdr->show_implicit))
-                continue;
-            max_poc = umax(max_poc, ref_hdr->frame_offset);
-        }
         int this_poc = hdr->coded_frame_offset;
-        const int range = 1 << seqhdr->order_hint_n_bits, hrange = range >> 1;
-        if (max_poc - this_poc >= hrange)
-            this_poc += (max_poc - this_poc + hrange) & ~(range - 1);
+        if (obu_type != DAV2D_OBU_CLOSED_LOOP_KF) {
+            int max_poc = 0;
+            for (int n = 0; n < DAV2D_NUM_REF_FRAMES; n++) {
+                const Dav2dFrameHeader *const ref_hdr = c->refs[n].p.p.frame_hdr;
+                if (!ref_hdr ||
+                    !(ref_hdr->show_immediate || ref_hdr->show_implicit))
+                {
+                    continue;
+                }
+                max_poc = umax(max_poc, ref_hdr->frame_offset);
+            }
+            const int range = 1 << seqhdr->order_hint_n_bits;
+            const int hrange = range >> 1;
+            if (max_poc - this_poc >= hrange)
+                this_poc += (max_poc - this_poc + hrange) & ~(range - 1);
+        }
         hdr->frame_offset = this_poc;
         if (this_poc >= (1 << 30)) goto error; // limit copied from AVM
 
