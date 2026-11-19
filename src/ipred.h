@@ -105,13 +105,31 @@ typedef decl_cfl_pred_fn(*cfl_pred_fn);
 /* CFL - Multi-Hypothesis Cross Component Prediction (MHCCP) */
 
 /*
- * max luma size
- * = 2 * align64(max_needed_top) + max_bl_size + max_needed_left + convenience padding bytes
- * = 2 * align64(63) + 32 * 32 + 63 + 5
- * = 128 + 2^10 + 68 = 1220
+ * Layout of the (downsampled) luma buffer, in pixels:
+ *
+ *   [0, 64)      top row 0: the row above the block, or for CFL_DIR_TOP, the
+ *                row above that (only with CFL_HAS_TOP)
+ *   [64, 128)    top row 1: the row above the block, for CFL_DIR_TOP
+ *   [128, 1152)  the block, with a stride of its width (at most 32x32)
+ *   [1152, ...)  the left column, or for CFL_DIR_LEFT, the 2 left columns
+ *                (only with CFL_HAS_LEFT), packed, starting at the first row
+ *                of the block
+ *
+ * The top rows start at the leftmost needed column (the topleft, or for
+ * CFL_DIR_LEFT, the one left of it) and have at most 64 pixels, except for
+ * 4:4:4 with CFL_DIR_LEFT (which has only 1 top row), where a 32-wide block
+ * with 32 top-right pixels needs 65. The block is at a fixed offset, so that
+ * this fits.
+ *
+ * The left columns have at most 63 rows, so at most 2 * 63 = 126 pixels. The
+ * AVX2 4:2:0 gen_y writes 8 pixels per 4 rows, so it rounds that up to 64 rows,
+ * and also writes 4 pixels beyond the last 4 rows if there's only 1 left
+ * column (64 + 4 = 68). Max size = 1152 + 2 * 64 = 1280.
  */
-#define CFL_MH_MAX_LUMA_SIZE 1220
 #define CFL_MH_TOP_STRIDE 64
+#define CFL_MH_BLK_OFFSET (2 * CFL_MH_TOP_STRIDE)
+#define CFL_MH_LEFT_OFFSET (CFL_MH_BLK_OFFSET + 32 * 32)
+#define CFL_MH_MAX_LUMA_SIZE (CFL_MH_LEFT_OFFSET + 2 * 64)
 
 /*
  * - w/hpad is the edge of the width/height that extends outside the visible

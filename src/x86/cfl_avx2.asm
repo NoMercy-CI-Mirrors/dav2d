@@ -3385,6 +3385,7 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     sub                   srcq, t3
     movsxd                  t0, [tblq+t0*4]
     add                     t0, tblq
+    mov                   tseq, dstq            ; top rows pointer (dstt below)
     jmp                     t0
 
 .tse:
@@ -3404,11 +3405,9 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                    t0d, 32
     cmp                    t0d, needed_topd
     jl .tse.loop
-    mov                    t1d, 32
-    shlx                   t1d, t1d, ntopd
-    add                   dstq, t1
     jmp .left
 
+ DEFINE_ARGS dst, src, dstt, ss, needed_top, needed_left, w, h, flags, nleft, ntop, tbl
 .top.8:
     movu                   xm0, [srcq+ssq*0]
     movu                   xm1, [srcq+ssq*1]
@@ -3416,9 +3415,9 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     paddw                  xm0, xm1
     psrlw                  xm0, 3
     packuswb               xm0, xm0
-    movq                [dstq], xm0
+    movq               [dsttq], xm0
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.8
     jmp .left
@@ -3438,10 +3437,10 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     psrlw                   m0, 3
     packuswb                m0, m0
     vpermq                  m0, m0, q3220
-    mova             [dstq+ 0], xm0
-    movd             [dstq+16], xm2
+    mova            [dsttq+ 0], xm0
+    movd            [dsttq+16], xm2
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.17
     jmp .left
@@ -3464,10 +3463,10 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     psrlw                  xm4, 3
     packuswb                m0, m2
     vpermq                  m0, m0, q3120
-    mova                [dstq], m0
-    movd             [dstq+32], xm4
+    mova               [dsttq], m0
+    movd            [dsttq+32], xm4
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.33
     jmp .left
@@ -3489,10 +3488,10 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     packuswb                m0, m2
     packuswb                m4, m6
     REPX  {vpermq x, x, q3120}, m0, m4
-    mova             [dstq+ 0], m0
-    mova             [dstq+32], m4
+    mova            [dsttq+ 0], m0
+    mova            [dsttq+32], m4
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.63
 
@@ -3507,7 +3506,7 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     cmovz              ystartq, ssq             ; !has_t && dir_c
     lea                  srclq, [srcq+ystartq*2]
     movu                   xm8, [base+mh_lshuf1-4+nleftq*2]
-    lea                  dstlq, [dstq+32*32]
+    lea                  dstlq, [dstq+(2*64+32*32)] ; CFL_MH_LEFT_OFFSET
 .left.loop:
     movd                   xm0, [srclq+ssq*0]
     vpbroadcastd           xm2, [srclq+ssq*2]
@@ -3537,6 +3536,7 @@ cglobal cfl_mh_gen_y_420_uniform_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                   srcq, nleftq
 
 .blk:
+    add                   dstq, 2*64            ; CFL_MH_BLK_OFFSET
     tzcnt                   wd, wm
     movsxd                  t0, [tblq+20+wq*4]
     add                     t0, tblq
@@ -3709,6 +3709,7 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     sub                   srcq, t3
     movsxd                  t0, [tblq+t0*4]
     add                     t0, tblq
+    mov                   tseq, dstq            ; top rows pointer (dstt below)
     jmp                     t0
 
 .tse:
@@ -3737,11 +3738,9 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                    t0d, 16
     cmp                    t0d, needed_topd
     jl .tse.loop
-    mov                    t1d, 32
-    shlx                   t1d, t1d, ntopd
-    add                   dstq, t1
     jmp .left
 
+ DEFINE_ARGS dst, src, dstt, ss, needed_top, needed_left, w, h, flags, nleft, ntop, tbl
 .top.4:
     movq                   xm0, [srcq+ssq*0]
     movq                   xm1, [srcq+ssq*1]
@@ -3754,9 +3753,9 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     paddw                  xm0, xm2
     psrlw                  xm0, 3
     packuswb               xm0, xm0
-    movd                [dstq], xm0
+    movd               [dsttq], xm0
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.4
     jmp .left
@@ -3772,9 +3771,9 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     paddw                  xm0, xm2
     psrlw                  xm0, 3
     packuswb               xm0, xm0
-    movq                [dstq], xm0
+    movq               [dsttq], xm0
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.8
     jmp .left
@@ -3806,10 +3805,10 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     psrlw                   m0, 3
     vextracti128           xm1, m0, 1
     packuswb               xm0, xm1
-    mova             [dstq+ 0], xm0
-    movd             [dstq+16], xm4
+    mova            [dsttq+ 0], xm0
+    movd            [dsttq+16], xm4
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.17
     jmp .left
@@ -3850,10 +3849,10 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     REPX          {psrlw x, 3}, m0, m1
     packuswb                m0, m1
     vpermq                  m0, m0, q3120
-    mova             [dstq+ 0], m0
-    movd             [dstq+32], xm4
+    mova            [dsttq+ 0], m0
+    movd            [dsttq+32], xm4
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.33.loop
     jmp .left
@@ -3898,10 +3897,10 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     packuswb                m0, m2
     packuswb                m4, m6
     REPX  {vpermq x, x, q3120}, m0, m4
-    mova             [dstq+ 0], m0
-    mova             [dstq+32], m4
+    mova            [dsttq+ 0], m0
+    mova            [dsttq+32], m4
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.63.loop
 
@@ -3923,7 +3922,7 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     sub                  srclq, t0
     shl                    t0d, 3
     movd                   xm9, t0d
-    lea                  dstlq, [dstq+32*32]
+    lea                  dstlq, [dstq+(2*64+32*32)] ; CFL_MH_LEFT_OFFSET
 .left.loop:
     movd                   xm0, [srclq+ssq*0]
     vpbroadcastd           xm2, [srclq+ssq*2]
@@ -3958,6 +3957,7 @@ cglobal cfl_mh_gen_y_420_vstrip_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                   srcq, nleftq
 
 .blk:
+    add                   dstq, 2*64            ; CFL_MH_BLK_OFFSET
     test                nleftd, nleftd
     setz                   t0b
     movd                  xm15, t0d
@@ -4223,6 +4223,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     lea                   topq, [srcq+t2]
     movsxd                  t0, [tblq+t0*4]
     add                     t0, tblq
+    mov                   tseq, dstq            ; top rows pointer (dstt below)
     jmp                     t0
 
 .tse:
@@ -4250,10 +4251,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                    t0d, 16
     cmp                    t0d, needed_topd
     jl .tse.loop
-    mov                    t1d, 32
     xor                    t0d, t0d
-    shlx                   t1d, t1d, ntopd
-    add                   dstq, t1
     test                    hb, 0xb             ; flags
     setz                   t0b
     neg                     t0                  ; restore top ptr post top
@@ -4261,6 +4259,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     lea                   topq, [tseq+t0*2]     ; top -= (!has_l && dir_c) * 2
     jmp .left
 
+ DEFINE_ARGS dst, src, dstt, ss, needed_top, needed_left, w, h, top, nleft, ntop, tbl, ts
 .top.4:
     movq                   xm2, [topq]
     pand                   xm2, xm13
@@ -4276,9 +4275,9 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     paddw                  xm0, xm2
     psrlw                  xm0, 3
     packuswb               xm0, xm0
-    movd                [dstq], xm0
+    movd               [dsttq], xm0
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     mova                   xm2, xm3
     dec                  ntopd
     jg .top.4.loop
@@ -4297,9 +4296,9 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     paddw                  xm0, xm2
     psrlw                  xm0, 3
     packuswb               xm0, xm0
-    movq                [dstq], xm0
+    movq               [dsttq], xm0
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     mova                   xm2, xm3
     dec                  ntopd
     jg .top.8.loop
@@ -4332,11 +4331,11 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     psrlw                   m0, 3
     vextracti128           xm1, m0, 1
     packuswb               xm0, xm1
-    mova             [dstq+ 0], xm0
-    movd             [dstq+16], xm4
+    mova            [dsttq+ 0], xm0
+    movd            [dsttq+16], xm4
     lea                   topq, [srcq+ssq*1]
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     mova                    m2, m3
     dec                  ntopd
     jg .top.17.loop
@@ -4375,13 +4374,13 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     REPX          {psrlw x, 3}, m0, m1
     packuswb                m0, m1
     vpermq                  m0, m0, q3120
-    mova             [dstq+ 0], m0
-    movd             [dstq+32], xm6
+    mova            [dsttq+ 0], m0
+    movd            [dsttq+32], xm6
     mova                    m2, m4
     mova                    m3, m5
     lea                   topq, [srcq+ssq*1]
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.33.loop
     jmp .left
@@ -4421,10 +4420,10 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     packuswb                m0, m1
     packuswb                m2, m3
     REPX  {vpermq x, x, q3120}, m0, m2
-    mova             [dstq+ 0], m0
-    mova             [dstq+32], m2
+    mova            [dsttq+ 0], m0
+    mova            [dsttq+32], m2
     lea                   srcq, [srcq+ssq*2]
-    add                   dstq, 64
+    add                  dsttq, 64
     dec                  ntopd
     jg .top.63.loop
     lea                   topq, [srcq+tsq]
@@ -4448,7 +4447,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     sub                  srclq, t0
     shl                    t0d, 3
     movd                   xm9, t0d
-    lea                  dstlq, [dstq+32*32]
+    lea                  dstlq, [dstq+(2*64+32*32)] ; CFL_MH_LEFT_OFFSET
     vpbroadcastd           xm8, [topq]
     pand                   xm8, xm13
 .left.loop:
@@ -4489,6 +4488,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     add                   topq, nleftq
 
 .blk:
+    add                   dstq, 2*64            ; CFL_MH_BLK_OFFSET
     test                nleftd, nleftd
     setz                   t0b
     movd                  xm15, t0d
@@ -4686,7 +4686,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     RET
 
 cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
-                                        ntop, start, n, y1, left, dir_off
+                                        _, start, n, y1, left, dir_off
  DECLARE_REG_TMP 12, 13, 6, 7, 3
     movifnidn           flagsd, flagsm
     mov                  refhd, refhm
@@ -4695,14 +4695,7 @@ cglobal cfl_mh_gen_mat_8bpc, 4, 15, 15, mat, imat, y0, refw, refh, flags, \
 %define base r14-mh_smpl_msk
     pxor                   m10, m10
     pxor                   m11, m11
-    mov                  ntopd, flagsd
-    and                  ntopd, 0x5
-    mov                    t0d, ntopd
-    shr                  ntopd, 2
-    and                    t0d, ntopd
-    add                  ntopd, t0d
-    shl                  ntopd, 6
-    lea                  leftq, [y0q+ntopq+32*32]
+    lea                  leftq, [y0q+(2*64+32*32)] ; CFL_MH_LEFT_OFFSET
     lea                     nd, [refwq+refhq]
     xor                 startd, startd
     test                flagsb, 0x4             ; has_t

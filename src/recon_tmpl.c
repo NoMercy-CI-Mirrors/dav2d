@@ -3301,7 +3301,7 @@ static inline void cfl(Dav2dTaskContext *const t, const Av2Block *const b,
                 alpha[0] = alpha[1] = 0;
                 alpha[2] = 0x10000;
             }
-            const pixel *const src = luma + n_top_rows * CFL_MH_TOP_STRIDE;
+            const pixel *const src = luma + CFL_MH_BLK_OFFSET;
             dsp->ipred.cfl_mh_pred[b->cfl_mh_dir](chroma, cstride, src, ctw, cth,
                                                   alpha, flags HIGHBD_CALL_SUFFIX);
             if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS) {
