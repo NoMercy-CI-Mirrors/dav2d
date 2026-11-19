@@ -1,0 +1,26 @@
+From: Ewout ter Hoeven <15776622+EwoutH@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 20:41:15 +0000
+Subject: [PATCH] print zero for absent chroma grain fields
+
+Print zero for absent chroma grain multipliers and offsets instead of
+subtracting the signed bias from an unsigned default-zero value.
+
+---
+diff --git a/av2/decoder/obu_fgm.c b/av2/decoder/obu_fgm.c
+--- a/av2/decoder/obu_fgm.c
++++ b/av2/decoder/obu_fgm.c
+@@ -220,8 +220,12 @@
+   printf("FGM: post-data[id=%d,sh=%d|%d|%d,uvm=%d|%d|%d|%d|%d|%d,overlap=%d,"
+          "clip=%d,mcid=%d,bs=%d]: off=%u\n", idx,
+          fgm->scaling_shift, fgm->ar_coeff_shift, fgm->grain_scale_shift,
+-         fgm->cb_mult - 128, fgm->cb_luma_mult - 128, fgm->cb_offset - 256,
+-         fgm->cr_mult - 128, fgm->cr_luma_mult - 128, fgm->cr_offset - 256,
++         fgm->fgm_points[1] ? fgm->cb_mult - 128 : 0,
++         fgm->fgm_points[1] ? fgm->cb_luma_mult - 128 : 0,
++         fgm->fgm_points[1] ? fgm->cb_offset - 256 : 0,
++         fgm->fgm_points[2] ? fgm->cr_mult - 128 : 0,
++         fgm->fgm_points[2] ? fgm->cr_luma_mult - 128 : 0,
++         fgm->fgm_points[2] ? fgm->cr_offset - 256 : 0,
+          fgm->overlap_flag, fgm->clip_to_restricted_range,
+          fgm->mc_identity, fgm->block_size, rb->bit_offset);
+ #endif
