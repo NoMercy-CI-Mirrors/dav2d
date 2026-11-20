@@ -157,17 +157,17 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
 
  DEFINE_ARGS dst, src, dstt, ss, needed_top, needed_left, w, h, flags, nleft, ntop, tbl
 .top.9:
-    pmaddwd                 m0, m14, [srcq+ssq*0]
-    pmaddwd                 m1, m14, [srcq+ssq*1]
+    movu                    m0, [srcq+ssq*1]
+    paddw                   m0, [srcq+ssq*0]
     cmp            needed_topd, 9
     jne .top.9.skip_last
-    movd                   xm2, [srcq+ssq*0+32]
-    movd                   xm3, [srcq+ssq*1+32]
-    REPX     {pmaddwd x, xm14}, xm2, xm3
-    paddd                  xm2, xm3
+    movd                   xm2, [srcq+ssq*1+32]
+    movd                   xm3, [srcq+ssq*0+32]
+    paddw                  xm2, xm3
+    pmaddwd                xm2, xm14
     psrld                  xm2, 3
 .top.9.skip_last:
-    paddd                   m0, m1
+    pmaddwd                 m0, m14
     psrld                   m0, 3
     vextracti128           xm1, m0, 1
     packusdw               xm0, xm1
@@ -179,19 +179,18 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     jg .top.9
     jmp .left
 .top.17:
-    pmaddwd                 m0, m14, [srcq+ssq*0+ 0]
-    pmaddwd                 m1, m14, [srcq+ssq*1+ 0]
-    pmaddwd                 m2, m14, [srcq+ssq*0+32]
-    pmaddwd                 m3, m14, [srcq+ssq*1+32]
+    movu                    m0, [srcq+ssq*1+ 0]
+    movu                    m2, [srcq+ssq*1+32]
+    paddw                   m0, [srcq+ssq*0+ 0]
+    paddw                   m2, [srcq+ssq*0+32]
     cmp            needed_topd, 17
     jne .top.17.skip_last
-    movd                   xm4, [srcq+ssq*0+64]
-    movd                   xm5, [srcq+ssq*1+64]
-    REPX     {pmaddwd x, xm14}, xm4, xm5
+    movd                   xm4, [srcq+ssq*1+64]
+    movd                   xm5, [srcq+ssq*0+64]
+    paddw                  xm4, xm5
+    pmaddwd                xm4, xm14
 .top.17.skip_last:
-    paddd                   m0, m1
-    paddd                   m2, m3
-    paddd                  xm4, xm5
+    REPX      {pmaddwd x, m14}, m0, m2
     packusdw                m0, m2
     REPX          {psrlw x, 3}, m0, xm4
     vpermq                  m0, m0, q3120
@@ -203,26 +202,23 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     jg .top.17
     jmp .left
 .top.33:
-    pmaddwd                 m0, m14, [srcq+ssq*0+0x00]
-    pmaddwd                 m1, m14, [srcq+ssq*1+0x00]
-    pmaddwd                 m2, m14, [srcq+ssq*0+0x20]
-    pmaddwd                 m3, m14, [srcq+ssq*1+0x20]
-    pmaddwd                 m4, m14, [srcq+ssq*0+0x40]
-    pmaddwd                 m5, m14, [srcq+ssq*1+0x40]
-    pmaddwd                 m6, m14, [srcq+ssq*0+0x60]
-    pmaddwd                 m7, m14, [srcq+ssq*1+0x60]
+    movu                    m0, [srcq+ssq*1+0x00]
+    movu                    m2, [srcq+ssq*1+0x20]
+    movu                    m4, [srcq+ssq*1+0x40]
+    movu                    m6, [srcq+ssq*1+0x60]
+    paddw                   m0, [srcq+ssq*0+0x00]
+    paddw                   m2, [srcq+ssq*0+0x20]
+    paddw                   m4, [srcq+ssq*0+0x40]
+    paddw                   m6, [srcq+ssq*0+0x60]
     test           needed_topd, 33
     jz .top.33.skip_last
-    movd                   xm8, [srcq+ssq*0+0x80]
-    movd                   xm9, [srcq+ssq*1+0x80]
-    REPX     {pmaddwd x, xm14}, xm8, xm9
-    paddd                  xm8, xm9
+    movd                   xm8, [srcq+ssq*1+0x80]
+    movd                   xm9, [srcq+ssq*0+0x80]
+    paddw                  xm8, xm9
+    pmaddwd                xm8, xm14
     psrld                  xm8, 3
 .top.33.skip_last:
-    paddd                   m0, m1
-    paddd                   m2, m3
-    paddd                   m4, m5
-    paddd                   m6, m7
+    REPX      {pmaddwd x, m14}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
     REPX          {psrlw x, 3}, m0, m4
@@ -236,40 +232,33 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     jg .top.33
     jmp .left
 .top.63:
-    pmaddwd                 m0, m14, [srcq+ssq*0+0x00]
-    pmaddwd                 m1, m14, [srcq+ssq*1+0x00]
-    pmaddwd                 m2, m14, [srcq+ssq*0+0x20]
-    pmaddwd                 m3, m14, [srcq+ssq*1+0x20]
-    pmaddwd                 m4, m14, [srcq+ssq*0+0x40]
-    pmaddwd                 m5, m14, [srcq+ssq*1+0x40]
-    pmaddwd                 m6, m14, [srcq+ssq*0+0x60]
-    pmaddwd                 m7, m14, [srcq+ssq*1+0x60]
-    pmaddwd                 m8, m14, [srcq+ssq*0+0x80]
-    pmaddwd                 m9, m14, [srcq+ssq*1+0x80]
-    pmaddwd                m10, m14, [srcq+ssq*0+0xa0]
-    pmaddwd                m11, m14, [srcq+ssq*1+0xa0]
-    pmaddwd                m12, m14, [srcq+ssq*0+0xc0]
-    pmaddwd                m13, m14, [srcq+ssq*1+0xc0]
-    paddd                   m0, m1
-    paddd                   m2, m3
-    pmaddwd                 m1, m14, [srcq+ssq*0+0xe0]
-    pmaddwd                 m3, m14, [srcq+ssq*1+0xe0]
-    paddd                   m4, m5
-    paddd                   m6, m7
-    paddd                   m8, m9
-    paddd                  m10, m11
-    paddd                  m12, m13
-    paddd                   m1, m3
-    packusdw                m0, m2
-    packusdw                m4, m6
-    packusdw                m8, m10
-    packusdw               m12, m1
-    REPX          {psrlw x, 3}, m0, m4, m8, m12
-    REPX  {vpermq x, x, q3120}, m0, m4, m8, m12
+    movu                    m0, [srcq+ssq*1+0x00]
+    movu                    m1, [srcq+ssq*1+0x20]
+    movu                    m2, [srcq+ssq*1+0x40]
+    movu                    m3, [srcq+ssq*1+0x60]
+    movu                    m4, [srcq+ssq*1+0x80]
+    movu                    m5, [srcq+ssq*1+0xa0]
+    movu                    m6, [srcq+ssq*1+0xc0]
+    movu                    m7, [srcq+ssq*1+0xe0]
+    paddw                   m0, [srcq+ssq*0+0x00]
+    paddw                   m1, [srcq+ssq*0+0x20]
+    paddw                   m2, [srcq+ssq*0+0x40]
+    paddw                   m3, [srcq+ssq*0+0x60]
+    paddw                   m4, [srcq+ssq*0+0x80]
+    paddw                   m5, [srcq+ssq*0+0xa0]
+    paddw                   m6, [srcq+ssq*0+0xc0]
+    paddw                   m7, [srcq+ssq*0+0xe0]
+    REPX      {pmaddwd x, m14}, m0, m1, m2, m3, m4, m5, m6, m7
+    packusdw                m0, m1
+    packusdw                m2, m3
+    packusdw                m4, m5
+    packusdw                m6, m7
+    REPX          {psrlw x, 3}, m0, m2, m4, m6
+    REPX  {vpermq x, x, q3120}, m0, m2, m4, m6
     mova            [dsttq+ 0], m0
-    mova            [dsttq+32], m4
-    mova            [dsttq+64], m8
-    mova            [dsttq+96], m12
+    mova            [dsttq+32], m2
+    mova            [dsttq+64], m4
+    mova            [dsttq+96], m6
     lea                   srcq, [srcq+ssq*2]
     add                  dsttq, 128
     dec                  ntopd
@@ -304,8 +293,8 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     vpblendd                m5, m7, 0xc0
     vpblendd                m0, m4, 0xf0
     vpblendd                m1, m5, 0xf0
-    REPX      {pmaddwd x, m14}, m0, m1
-    paddd                   m0, m1
+    paddw                   m0, m1
+    pmaddwd                 m0, m14
     vextracti128           xm1, m0, 1
     packusdw               xm0, xm1
     psrlw                  xm0, 3
@@ -346,9 +335,9 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     vinserti128             m2, [srcq+ssq*2], 1
     vinserti128             m3, [srcq+ss3q ], 1
     lea                   srcq, [srcq+ssq*4]
-    REPX      {pmaddwd x, m14}, m0, m1, m2, m3
-    paddd                   m0, m1
-    paddd                   m2, m3
+    paddw                   m0, m1
+    paddw                   m2, m3
+    REPX      {pmaddwd x, m14}, m0, m2
     REPX          {psrld x, 3}, m0, m2
     packusdw                m0, m2
     mova                [dstq], m0
@@ -357,20 +346,17 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     jg .blk.w4
     jmp .ret
 .blk.w8:
-    pmaddwd                 m0, m14, [srcq+ssq*0]
-    pmaddwd                 m1, m14, [srcq+ssq*1]
-    pmaddwd                 m2, m14, [srcq+ssq*2]
-    pmaddwd                 m3, m14, [srcq+ss3q ]
+    movu                    m0, [srcq+ssq*1]
+    movu                    m2, [srcq+ss3q ]
+    paddw                   m0, [srcq+ssq*0]
+    paddw                   m2, [srcq+ssq*2]
     lea                   srcq, [srcq+ssq*4]
-    pmaddwd                 m4, m14, [srcq+ssq*0]
-    pmaddwd                 m5, m14, [srcq+ssq*1]
-    pmaddwd                 m6, m14, [srcq+ssq*2]
-    pmaddwd                 m7, m14, [srcq+ss3q ]
+    movu                    m4, [srcq+ssq*1]
+    movu                    m6, [srcq+ss3q ]
+    paddw                   m4, [srcq+ssq*0]
+    paddw                   m6, [srcq+ssq*2]
     lea                   srcq, [srcq+ssq*4]
-    paddd                   m0, m1
-    paddd                   m2, m3
-    paddd                   m4, m5
-    paddd                   m6, m7
+    REPX      {pmaddwd x, m14}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
     REPX          {psrlw x, 3}, m0, m4
@@ -382,19 +368,16 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     jg .blk.w8
     jmp .ret
 .blk.w16:
-    pmaddwd                 m0, m14, [srcq+ssq*0+ 0]
-    pmaddwd                 m1, m14, [srcq+ssq*1+ 0]
-    pmaddwd                 m2, m14, [srcq+ssq*0+32]
-    pmaddwd                 m3, m14, [srcq+ssq*1+32]
-    pmaddwd                 m4, m14, [srcq+ssq*2+ 0]
-    pmaddwd                 m5, m14, [srcq+ss3q + 0]
-    pmaddwd                 m6, m14, [srcq+ssq*2+32]
-    pmaddwd                 m7, m14, [srcq+ss3q +32]
+    movu                    m0, [srcq+ssq*1+ 0]
+    movu                    m2, [srcq+ssq*1+32]
+    movu                    m4, [srcq+ss3q + 0]
+    movu                    m6, [srcq+ss3q +32]
+    paddw                   m0, [srcq+ssq*0+ 0]
+    paddw                   m2, [srcq+ssq*0+32]
+    paddw                   m4, [srcq+ssq*2+ 0]
+    paddw                   m6, [srcq+ssq*2+32]
     lea                   srcq, [srcq+ssq*4]
-    paddd                   m0, m1
-    paddd                   m2, m3
-    paddd                   m4, m5
-    paddd                   m6, m7
+    REPX      {pmaddwd x, m14}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
     REPX          {psrlw x, 3}, m0, m4
@@ -406,19 +389,16 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     jg .blk.w16
     jmp .ret
 .blk.w32:
-    pmaddwd                 m0, m14, [srcq+ssq*0+ 0]
-    pmaddwd                 m1, m14, [srcq+ssq*1+ 0]
-    pmaddwd                 m2, m14, [srcq+ssq*0+32]
-    pmaddwd                 m3, m14, [srcq+ssq*1+32]
-    pmaddwd                 m4, m14, [srcq+ssq*0+64]
-    pmaddwd                 m5, m14, [srcq+ssq*1+64]
-    pmaddwd                 m6, m14, [srcq+ssq*0+96]
-    pmaddwd                 m7, m14, [srcq+ssq*1+96]
+    movu                    m0, [srcq+ssq*1+ 0]
+    movu                    m2, [srcq+ssq*1+32]
+    movu                    m4, [srcq+ssq*1+64]
+    movu                    m6, [srcq+ssq*1+96]
+    paddw                   m0, [srcq+ssq*0+ 0]
+    paddw                   m2, [srcq+ssq*0+32]
+    paddw                   m4, [srcq+ssq*0+64]
+    paddw                   m6, [srcq+ssq*0+96]
     lea                   srcq, [srcq+ssq*2]
-    paddd                   m0, m1
-    paddd                   m2, m3
-    paddd                   m4, m5
-    paddd                   m6, m7
+    REPX      {pmaddwd x, m14}, m0, m2, m4, m6
     packusdw                m0, m2
     packusdw                m4, m6
     REPX          {psrlw x, 3}, m0, m4
@@ -525,14 +505,12 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
 
  DEFINE_ARGS dst, src, dstt, ss, needed_top, needed_left, w, h, flags, nleft, ntop, tbl
 .top.4:
-    movu                   xm2, [srcq+ssq*0-2]
-    movu                   xm3, [srcq+ssq*1-2]
-    pmaddwd                xm0, xm14, [srcq+ssq*0]
-    pmaddwd                xm1, xm14, [srcq+ssq*1]
+    movu                   xm0, [srcq+ssq*1]
+    movu                   xm2, [srcq+ssq*1-2]
+    paddw                  xm0, [srcq+ssq*0]
+    paddw                  xm2, [srcq+ssq*0-2]
+    pmaddwd                xm0, xm14
     pshufb                 xm2, xm15
-    pshufb                 xm3, xm15
-    paddd                  xm0, xm1
-    paddd                  xm2, xm3
     paddd                  xm0, xm2
     psrld                  xm0, 3
     packusdw               xm0, xm0
@@ -543,13 +521,12 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     jg .top.4
     jmp .left
 .top.8:
-    movu                    m2, [srcq+ssq*0-2]
-    movu                    m3, [srcq+ssq*1-2]
-    pmaddwd                 m0, m14, [srcq+ssq*0]
-    pmaddwd                 m1, m14, [srcq+ssq*1]
-    REPX       {pshufb x, m15}, m2, m3
-    paddd                   m0, m1
-    paddd                   m2, m3
+    movu                    m0, [srcq+ssq*1]
+    movu                    m2, [srcq+ssq*1-2]
+    paddw                   m0, [srcq+ssq*0]
+    paddw                   m2, [srcq+ssq*0-2]
+    pmaddwd                 m0, m14
+    pshufb                  m2, m15
     paddd                   m0, m2
     vextracti128           xm1, m0, 1
     packusdw               xm0, xm1
@@ -564,32 +541,28 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pcmpeqd                m13, m13
     psrld                  m13, 16
 .top.17.loop:
-    movu                    m8, [srcq+ssq*0-2]
-    movu                    m9, [srcq+ssq*1-2]
-    pmaddwd                 m0, m14, [srcq+ssq*0+ 0]
-    pmaddwd                 m2, m14, [srcq+ssq*1+ 0]
-    pand                   m10, m13, [srcq+ssq*0+30]
-    pand                   m11, m13, [srcq+ssq*1+30]
-    pmaddwd                 m1, m14, [srcq+ssq*0+32]
-    pmaddwd                 m3, m14, [srcq+ssq*1+32]
+    movu                    m0, [srcq+ssq*1+ 0]
+    movu                    m1, [srcq+ssq*1+32]
+    movu                    m8, [srcq+ssq*1-2]
+    movu                   m10, [srcq+ssq*1+30]
+    paddw                   m0, [srcq+ssq*0+ 0]
+    paddw                   m1, [srcq+ssq*0+32]
+    paddw                   m8, [srcq+ssq*0-2]
+    paddw                  m10, [srcq+ssq*0+30]
     cmp            needed_topd, 17
     jne .top.17.skip_last
-    movq                   xm4, [srcq+ssq*0+62]
-    movq                   xm5, [srcq+ssq*1+62]
+    movq                   xm4, [srcq+ssq*1+62]
+    movq                   xm5, [srcq+ssq*0+62]
+    paddw                  xm4, xm5
     psrlq                  xm6, xm4, 16
-    psrlq                  xm7, xm5, 16
-    REPX     {pmaddwd x, xm14}, xm6, xm7
-    REPX        {pand x, xm13}, xm4, xm5
-    paddd                  xm4, xm5
-    paddd                  xm6, xm7
+    pmaddwd                xm6, xm14
+    pand                   xm4, xm13
     paddd                  xm4, xm6
     psrld                  xm4, 3
 .top.17.skip_last:
-    REPX       {pshufb x, m15}, m8, m9
-    paddd                   m0, m2
-    paddd                   m8, m9
-    paddd                  m10, m11
-    paddd                   m1, m3
+    REPX      {pmaddwd x, m14}, m0, m1
+    pshufb                  m8, m15
+    pand                   m10, m13
     paddd                   m0, m8
     paddd                   m1, m10
     packusdw                m0, m1
@@ -606,55 +579,54 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pcmpeqd                m13, m13
     psrld                  m13, 16
 .top.33.loop:
-    pmaddwd                 m0, m14, [srcq+ssq*0+0x00]
-    pmaddwd                 m1, m14, [srcq+ssq*1+0x00]
-    movu                    m8, [srcq+ssq*0-2]
-    movu                    m9, [srcq+ssq*1-2]
-    pmaddwd                 m2, m14, [srcq+ssq*0+0x20]
-    pmaddwd                 m3, m14, [srcq+ssq*1+0x20]
-    pand                   m10, m13, [srcq+ssq*0+0x1e]
-    pand                   m11, m13, [srcq+ssq*1+0x1e]
-    pmaddwd                 m4, m14, [srcq+ssq*0+0x40]
-    pmaddwd                 m5, m14, [srcq+ssq*1+0x40]
-    pand                   m12, m13, [srcq+ssq*0+0x3e]
-    pmaddwd                 m6, m14, [srcq+ssq*0+0x60]
-    pmaddwd                 m7, m14, [srcq+ssq*1+0x60]
-    REPX       {pshufb x, m15}, m8, m9
-    paddd                   m0, m1
-    paddd                   m8, m9
-    paddd                   m2, m3
-    paddd                  m10, m11
-    pand                    m1, m13, [srcq+ssq*1+0x3e]
-    pand                    m3, m13, [srcq+ssq*0+0x5e]
-    pand                    m9, m13, [srcq+ssq*1+0x5e]
-    paddd                   m0, m8
-    paddd                   m2, m10
-    paddd                   m4, m5
-    paddd                   m6, m7
     cmp            needed_topd, 33
     jne .top.33.skip_last
-    movq                   xm8, [srcq+ssq*0+0x7e]
-    movq                  xm10, [srcq+ssq*1+0x7e]
-    psrlq                  xm5, xm8, 16
-    psrlq                  xm7, xm10, 16
-    REPX     {pmaddwd x, xm14}, xm5, xm7
-    REPX        {pand x, xm13}, xm8, xm10
-    paddd                  xm8, xm10
-    paddd                  xm5, xm7
-    paddd                  xm5, xm8
-    psrld                  xm5, 3
+    movq                   xm8, [srcq+ssq*1+0x7e]
+    movq                   xm9, [srcq+ssq*0+0x7e]
+    paddw                  xm8, xm9
+    psrlq                  xm9, xm8, 16
+    pmaddwd                xm9, xm14
+    pand                   xm8, xm13
+    paddd                  xm8, xm9
+    psrld                  xm8, 3
 .top.33.skip_last:
-    paddd                   m1, m12
-    paddd                   m3, m9
-    paddd                   m4, m1
-    paddd                   m6, m3
-    packusdw                m0, m2
-    packusdw                m4, m6
-    REPX          {psrlw x, 3}, m0, m4
-    REPX  {vpermq x, x, q3120}, m0, m4
-    mova            [dsttq+ 0], m0
-    mova            [dsttq+32], m4
-    movd            [dsttq+64], xm5
+%macro VSTRIP_TOP32 1 ; src offset
+    movu                    m0, [srcq+ssq*1+%1+0x00]
+    movu                    m1, [srcq+ssq*1+%1+0x20]
+    movu                    m2, [srcq+ssq*1+%1+0x40]
+    movu                    m3, [srcq+ssq*1+%1+0x60]
+    movu                    m4, [srcq+ssq*1+%1-0x02]
+    movu                    m5, [srcq+ssq*1+%1+0x1e]
+    movu                    m6, [srcq+ssq*1+%1+0x3e]
+    movu                    m7, [srcq+ssq*1+%1+0x5e]
+    paddw                   m0, [srcq+ssq*0+%1+0x00]
+    paddw                   m1, [srcq+ssq*0+%1+0x20]
+    paddw                   m2, [srcq+ssq*0+%1+0x40]
+    paddw                   m3, [srcq+ssq*0+%1+0x60]
+    paddw                   m4, [srcq+ssq*0+%1-0x02]
+    paddw                   m5, [srcq+ssq*0+%1+0x1e]
+    paddw                   m6, [srcq+ssq*0+%1+0x3e]
+    paddw                   m7, [srcq+ssq*0+%1+0x5e]
+    REPX      {pmaddwd x, m14}, m0, m1, m2, m3
+%if %1 == 0
+    pshufb                  m4, m15
+%else
+    pand                    m4, m13
+%endif
+    REPX         {pand x, m13}, m5, m6, m7
+    paddd                   m0, m4
+    paddd                   m1, m5
+    paddd                   m2, m6
+    paddd                   m3, m7
+    packusdw                m0, m1
+    packusdw                m2, m3
+    REPX          {psrlw x, 3}, m0, m2
+    REPX  {vpermq x, x, q3120}, m0, m2
+    mova       [dsttq+%1/2+ 0], m0
+    mova       [dsttq+%1/2+32], m2
+%endmacro
+    VSTRIP_TOP32 0
+    movd            [dsttq+64], xm8
     lea                   srcq, [srcq+ssq*2]
     add                  dsttq, 128
     dec                  ntopd
@@ -664,75 +636,8 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pcmpeqd                m13, m13
     psrld                  m13, 16
 .top.63.loop:
-    pmaddwd                 m0, m14, [srcq+ssq*0+0x00]
-    pmaddwd                 m1, m14, [srcq+ssq*1+0x00]
-    movu                    m8, [srcq+ssq*0-2]
-    movu                    m9, [srcq+ssq*1-2]
-    pmaddwd                 m2, m14, [srcq+ssq*0+0x20]
-    pmaddwd                 m3, m14, [srcq+ssq*1+0x20]
-    pand                   m10, m13, [srcq+ssq*0+0x1e]
-    pand                   m11, m13, [srcq+ssq*1+0x1e]
-    pmaddwd                 m4, m14, [srcq+ssq*0+0x40]
-    pmaddwd                 m5, m14, [srcq+ssq*1+0x40]
-    pand                   m12, m13, [srcq+ssq*0+0x3e]
-    pand                    m7, m13, [srcq+ssq*1+0x3e]
-    pmaddwd                 m6, m14, [srcq+ssq*0+0x60]
-    REPX       {pshufb x, m15}, m8, m9
-    paddd                   m0, m1
-    paddd                   m8, m9
-    paddd                   m2, m3
-    paddd                  m10, m11
-    pmaddwd                 m1, m14, [srcq+ssq*1+0x60]
-    pand                    m9, m13, [srcq+ssq*0+0x5e]
-    pand                    m3, m13, [srcq+ssq*1+0x5e]
-    pmaddwd                m11, m14, [srcq+ssq*0+0x80]
-    paddd                   m4, m5
-    paddd                  m12, m7
-    paddd                   m0, m8
-    paddd                   m2, m10
-    pmaddwd                 m5, m14, [srcq+ssq*1+0x80]
-    pand                    m7, m13, [srcq+ssq*0+0x7e]
-    pand                    m8, m13, [srcq+ssq*1+0x7e]
-    pmaddwd                m10, m14, [srcq+ssq*0+0xa0]
-    paddd                   m6, m1
-    paddd                   m9, m3
-    paddd                   m4, m12
-    paddd                   m6, m9
-    pmaddwd                 m1, m14, [srcq+ssq*1+0xa0]
-    pand                    m3, m13, [srcq+ssq*0+0x9e]
-    pand                   m12, m13, [srcq+ssq*1+0x9e]
-    pmaddwd                 m9, m14, [srcq+ssq*0+0xc0]
-    packusdw                m0, m2
-    packusdw                m4, m6
-    REPX          {psrlw x, 3}, m0, m4
-    REPX  {vpermq x, x, q3120}, m0, m4
-    paddd                  m11, m5
-    paddd                   m7, m8
-    pmaddwd                 m2, m14, [srcq+ssq*1+0xc0]
-    pand                    m6, m13, [srcq+ssq*0+0xbe]
-    pand                    m5, m13, [srcq+ssq*1+0xbe]
-    pmaddwd                 m8, m14, [srcq+ssq*0+0xe0]
-    paddd                  m10, m1
-    paddd                   m3, m12
-    mova            [dsttq+ 0], m0
-    mova            [dsttq+32], m4
-    pmaddwd                 m1, m14, [srcq+ssq*1+0xe0]
-    pand                   m12, m13, [srcq+ssq*0+0xde]
-    pand                    m0, m13, [srcq+ssq*1+0xde]
-    paddd                   m9, m2
-    paddd                   m6, m5
-    paddd                  m11, m7
-    paddd                  m10, m3
-    paddd                   m8, m1
-    paddd                  m12, m0
-    paddd                   m9, m6
-    paddd                   m8, m12
-    packusdw               m11, m10
-    packusdw                m9, m8
-    REPX          {psrlw x, 3}, m11, m9
-    REPX  {vpermq x, x, q3120}, m11, m9
-    mova            [dsttq+64], m11
-    mova            [dsttq+96], m9
+    VSTRIP_TOP32 0
+    VSTRIP_TOP32 128
     lea                   srcq, [srcq+ssq*2]
     add                  dsttq, 128
     dec                  ntopd
@@ -776,12 +681,10 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     vpblendd                m5, m7, 0xc0
     vpblendd                m0, m4, 0xf0
     vpblendd                m1, m5, 0xf0
+    paddw                   m0, m1
     pshufb                  m2, m0, m8
-    pshufb                  m3, m1, m8
-    REPX        {psrlq x, xm9}, m0, m1
-    REPX      {pmaddwd x, m14}, m0, m1
-    paddd                   m2, m3
-    paddd                   m0, m1
+    psrlq                   m0, xm9
+    pmaddwd                 m0, m14
     paddd                   m0, m2
     vextracti128           xm1, m0, 1
     packusdw               xm0, xm1
@@ -841,12 +744,12 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     vinserti128             m6, [srcq+ssq*2-2], 1
     vinserti128             m7, [srcq+ss3q -2], 1
     lea                   srcq, [srcq+ssq*4]
-    REPX      {pmaddwd x, m14}, m0, m1, m2, m3
-    REPX       {pshufb x, m15}, m4, m5, m6, m7
-    paddd                   m4, m5
-    paddd                   m6, m7
-    paddd                   m0, m1
-    paddd                   m2, m3
+    paddw                   m0, m1
+    paddw                   m2, m3
+    paddw                   m4, m5
+    paddw                   m6, m7
+    REPX      {pmaddwd x, m14}, m0, m2
+    REPX       {pshufb x, m15}, m4, m6
     paddd                   m0, m4
     paddd                   m2, m6
     packusdw                m0, m2
@@ -860,41 +763,30 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     vbroadcasti128         m12, [base+Llshuf]
     por                    m15, m12
 .blk.w8.loop:
-    movu                    m0, [srcq+ssq*0]
-    movu                    m2, [srcq+ssq*1]
-    movu                    m1, [srcq+ssq*2]
-    movu                    m3, [srcq+ss3q ]
-    movu                    m8, [srcq+ssq*0+-2]
-    movu                    m9, [srcq+ssq*1+-2]
-    movu                   m12, [srcq+ssq*2+-2]
-    movu                   m13, [srcq+ss3q +-2]
+    movu                    m0, [srcq+ssq*1]
+    movu                    m1, [srcq+ss3q ]
+    movu                    m8, [srcq+ssq*1-2]
+    movu                    m9, [srcq+ss3q -2]
+    paddw                   m0, [srcq+ssq*0]
+    paddw                   m1, [srcq+ssq*2]
+    paddw                   m8, [srcq+ssq*0-2]
+    paddw                   m9, [srcq+ssq*2-2]
     lea                   srcq, [srcq+ssq*4]
-    movu                    m4, [srcq+ssq*0]
-    movu                    m6, [srcq+ssq*1]
-    movu                    m5, [srcq+ssq*2]
-    movu                    m7, [srcq+ss3q ]
-    movu                   m10, [srcq+ssq*0+-2]
-    movu                   m11, [srcq+ssq*1+-2]
-    REPX      {pmaddwd x, m14}, m0, m2, m1, m3
-    REPX       {pshufb x, m15}, m8, m9
-    paddd                   m8, m9
-    REPX       {pshufb x, m15}, m12, m13
-    paddd                  m12, m13
-    paddd                   m0, m2
-    paddd                   m1, m3
+    movu                    m4, [srcq+ssq*1]
+    movu                    m5, [srcq+ss3q ]
+    movu                   m10, [srcq+ssq*1-2]
+    movu                   m11, [srcq+ss3q -2]
+    paddw                   m4, [srcq+ssq*0]
+    paddw                   m5, [srcq+ssq*2]
+    paddw                  m10, [srcq+ssq*0-2]
+    paddw                  m11, [srcq+ssq*2-2]
+    lea                   srcq, [srcq+ssq*4]
+    REPX      {pmaddwd x, m14}, m0, m1, m4, m5
+    REPX       {pshufb x, m15}, m8, m9, m10, m11
     paddd                   m0, m8
-    paddd                   m1, m12
-    movu                   m12, [srcq+ssq*2+-2]
-    movu                   m13, [srcq+ss3q +-2]
-    lea                   srcq, [srcq+ssq*4]
-    REPX      {pmaddwd x, m14}, m4, m6, m5, m7
-    REPX       {pshufb x, m15}, m10, m11, m12, m13
-    paddd                  m10, m11
-    paddd                  m12, m13
-    paddd                   m4, m6
-    paddd                   m5, m7
+    paddd                   m1, m9
     paddd                   m4, m10
-    paddd                   m5, m12
+    paddd                   m5, m11
     packusdw                m0, m1
     packusdw                m4, m5
     REPX          {psrlw x, 3}, m0, m4
@@ -911,47 +803,36 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pcmpeqd                m13, m13
     psrld                  m13, 16
 .blk.w16.loop:
-    movu                    m0, [srcq+ssq*0+ 0]
-    movu                    m2, [srcq+ssq*1+ 0]
-    movu                    m1, [srcq+ssq*0+32]
-    movu                    m3, [srcq+ssq*1+32]
-    movu                    m8, [srcq+ssq*0+-2]
-    movu                    m9, [srcq+ssq*1+-2]
-    movu                   m10, [srcq+ssq*0+30]
-    movu                   m11, [srcq+ssq*1+30]
-    movu                    m4, [srcq+ssq*2+ 0]
-    movu                    m6, [srcq+ss3q + 0]
-    movu                    m5, [srcq+ssq*2+32]
-    movu                    m7, [srcq+ss3q +32]
-    REPX      {pmaddwd x, m14}, m0, m2, m1, m3
-    REPX       {pshufb x, m15}, m8, m9
-    REPX         {pand x, m13}, m10, m11
-    paddd                   m0, m2
-    paddd                   m1, m3
-    paddd                   m8, m9
-    paddd                  m10, m11
-    paddd                   m0, m8
-    paddd                   m1, m10
-    movu                   m10, [srcq+ssq*2+-2]
-    movu                   m11, [srcq+ss3q +-2]
-    movu                    m2, [srcq+ssq*2+30]
-    movu                    m3, [srcq+ss3q +30]
+    movu                    m0, [srcq+ssq*1+ 0]
+    movu                    m1, [srcq+ssq*1+32]
+    movu                    m2, [srcq+ss3q + 0]
+    movu                    m3, [srcq+ss3q +32]
+    movu                    m8, [srcq+ssq*1-2]
+    movu                    m9, [srcq+ssq*1+30]
+    movu                   m10, [srcq+ss3q -2]
+    movu                   m11, [srcq+ss3q +30]
+    paddw                   m0, [srcq+ssq*0+ 0]
+    paddw                   m1, [srcq+ssq*0+32]
+    paddw                   m2, [srcq+ssq*2+ 0]
+    paddw                   m3, [srcq+ssq*2+32]
+    paddw                   m8, [srcq+ssq*0-2]
+    paddw                   m9, [srcq+ssq*0+30]
+    paddw                  m10, [srcq+ssq*2-2]
+    paddw                  m11, [srcq+ssq*2+30]
     lea                   srcq, [srcq+ssq*4]
-    REPX      {pmaddwd x, m14}, m4, m6, m5, m7
-    REPX       {pshufb x, m15}, m10, m11
-    REPX         {pand x, m13}, m2, m3
-    paddd                   m4, m6
-    paddd                   m5, m7
-    paddd                  m10, m11
-    paddd                   m2, m3
-    paddd                   m4, m10
-    paddd                   m5, m2
+    REPX      {pmaddwd x, m14}, m0, m1, m2, m3
+    REPX       {pshufb x, m15}, m8, m10
+    REPX         {pand x, m13}, m9, m11
+    paddd                   m0, m8
+    paddd                   m1, m9
+    paddd                   m2, m10
+    paddd                   m3, m11
     packusdw                m0, m1
-    packusdw                m4, m5
-    REPX          {psrlw x, 3}, m0, m4
-    REPX  {vpermq x, x, q3120}, m0, m4
+    packusdw                m2, m3
+    REPX          {psrlw x, 3}, m0, m2
+    REPX  {vpermq x, x, q3120}, m0, m2
     mova             [dstq+ 0], m0
-    mova             [dstq+32], m4
+    mova             [dstq+32], m2
     add                   dstq, 64
     sub                     hd, 2
     jg .blk.w16.loop
@@ -962,46 +843,36 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pcmpeqd                m13, m13
     psrld                  m13, 16
 .blk.w32.loop:
-    movu                    m0, [srcq+ssq*0+ 0]
-    movu                    m2, [srcq+ssq*1+ 0]
-    movu                    m1, [srcq+ssq*0+32]
-    movu                    m3, [srcq+ssq*1+32]
-    movu                    m8, [srcq+ssq*0+-2]
-    movu                    m9, [srcq+ssq*1+-2]
-    movu                   m10, [srcq+ssq*0+30]
-    movu                   m11, [srcq+ssq*1+30]
-    movu                    m4, [srcq+ssq*0+64]
-    movu                    m6, [srcq+ssq*1+64]
-    movu                    m5, [srcq+ssq*0+96]
-    movu                    m7, [srcq+ssq*1+96]
-    REPX      {pmaddwd x, m14}, m0, m2, m1, m3
-    REPX       {pshufb x, m15}, m8, m9
-    REPX         {pand x, m13}, m10, m11
-    paddd                   m0, m2
-    paddd                   m1, m3
-    paddd                   m8, m9
-    paddd                  m10, m11
-    paddd                   m0, m8
-    paddd                   m1, m10
-    movu                   m10, [srcq+ssq*0+62]
-    movu                   m11, [srcq+ssq*1+62]
-    movu                    m2, [srcq+ssq*0+94]
-    movu                    m3, [srcq+ssq*1+94]
+    movu                    m0, [srcq+ssq*1+ 0]
+    movu                    m1, [srcq+ssq*1+32]
+    movu                    m2, [srcq+ssq*1+64]
+    movu                    m3, [srcq+ssq*1+96]
+    movu                    m8, [srcq+ssq*1-2]
+    movu                    m9, [srcq+ssq*1+30]
+    movu                   m10, [srcq+ssq*1+62]
+    movu                   m11, [srcq+ssq*1+94]
+    paddw                   m0, [srcq+ssq*0+ 0]
+    paddw                   m1, [srcq+ssq*0+32]
+    paddw                   m2, [srcq+ssq*0+64]
+    paddw                   m3, [srcq+ssq*0+96]
+    paddw                   m8, [srcq+ssq*0-2]
+    paddw                   m9, [srcq+ssq*0+30]
+    paddw                  m10, [srcq+ssq*0+62]
+    paddw                  m11, [srcq+ssq*0+94]
     lea                   srcq, [srcq+ssq*2]
-    REPX      {pmaddwd x, m14}, m4, m6, m5, m7
-    REPX         {pand x, m13}, m10, m11, m2, m3
-    paddd                   m4, m6
-    paddd                   m5, m7
-    paddd                  m10, m11
-    paddd                   m2, m3
-    paddd                   m4, m10
-    paddd                   m5, m2
+    REPX      {pmaddwd x, m14}, m0, m1, m2, m3
+    pshufb                  m8, m15
+    REPX         {pand x, m13}, m9, m10, m11
+    paddd                   m0, m8
+    paddd                   m1, m9
+    paddd                   m2, m10
+    paddd                   m3, m11
     packusdw                m0, m1
-    packusdw                m4, m5
-    REPX          {psrlw x, 3}, m0, m4
-    REPX  {vpermq x, x, q3120}, m0, m4
+    packusdw                m2, m3
+    REPX          {psrlw x, 3}, m0, m2
+    REPX  {vpermq x, x, q3120}, m0, m2
     mova             [dstq+ 0], m0
-    mova             [dstq+32], m4
+    mova             [dstq+32], m2
     add                   dstq, 64
     dec                     hd
     jg .blk.w32.loop
