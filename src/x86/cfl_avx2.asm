@@ -4523,7 +4523,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     pshufb                 xm2, xm0, [base+Llshuf_edgel]
     REPX        {psrld x, xm9}, xm0, xm1
     pmaddubsw              xm0, xm14
-    REPX        {pand x, xm13}, xm2, xm1
+    pand                   xm1, xm13
     palignr                xm8, xm1, xm8, 12
     paddw                  xm0, xm2
     paddw                  xm8, xm1
@@ -4608,7 +4608,8 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
 .blk.w8:
     por                   xm15, [base+Llshuf]
     vinserti128            m15, xm15, 1
-    movu                   xm8, [topq]
+    vbroadcasti128          m8, [topq]
+    pand                    m8, m13
 .blk.w8.loop:
     movu                   xm0, [srcq+ssq*0]
     movu                   xm2, [srcq+ssq*2]
@@ -4630,10 +4631,10 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     vpblendd                m6, m12, 0xf0
     REPX    {pmaddubsw x, m14}, m0, m2
     REPX       {pshufb x, m15}, m4, m6
-    vpblendd                m8, m3, 0xf0            ; t0 t2
     vpblendd                m1, m5, 0xf0            ; b0/t1 b2/t3
     vpblendd                m3, m7, 0xf0            ; b1/t2 b3/t4
-    REPX         {pand x, m13}, m8, m1, m3
+    REPX         {pand x, m13}, m1, m3
+    vperm2i128              m8, m8, m3, 0x21        ; t0 t2
     paddw                   m0, m4
     paddw                   m2, m6
     paddw                   m0, m8
@@ -4643,7 +4644,7 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     REPX          {psrlw x, 3}, m0, m2
     packuswb                m0, m2
     mova                [dstq], m0
-    mova                   xm8, xm7
+    mova                    m8, m3
     add                   dstq, 32
     sub                     hd, 4 << 5
     jge .blk.w8.loop
