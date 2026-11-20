@@ -524,6 +524,7 @@ test-debian-asan:
         - time meson test -v --setup=sanitizer --suite testdata --test-args "--cpumask 0"    || exit_code=$((exit_code + $?))
         - time meson test -v --setup=sanitizer --suite testdata --test-args "--cpumask 0xff" || exit_code=$((exit_code + $?))
         - time meson test -v --setup=sanitizer --suite testdata --test-args "--threads 4 --framedelay 4" || exit_code=$((exit_code + $?))
+        - time meson test -v --setup=sanitizer --suite oss-fuzz-asan                                     || exit_code=$((exit_code + $?))
         - if [ $exit_code -ne 0 ]; then exit $exit_code; fi
 
 test-debian-msan:
@@ -594,6 +595,7 @@ test-debian-tsan:
         - time meson test -v --setup=sanitizer --suite testdata --test-args "--threads 2 --framedelay 2"             || exit_code=$((exit_code + $?))
         - time meson test -v --setup=sanitizer --suite testdata --test-args "--threads 2 --framedelay 2 --negstride" || exit_code=$((exit_code + $?))
         - time meson test -v --setup=sanitizer --suite testdata --test-args "--threads 4 --framedelay 4"             || exit_code=$((exit_code + $?))
+        - time meson test -v --setup=sanitizer --suite oss-fuzz-asan --suite oss-fuzz-msan --suite oss-fuzz-ubsan    || exit_code=$((exit_code + $?))
         - if [ $exit_code -ne 0 ]; then exit $exit_code; fi
 
 test-win64:
