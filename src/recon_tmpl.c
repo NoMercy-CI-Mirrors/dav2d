@@ -2816,6 +2816,12 @@ static int recon_b_luma_tx(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         }
     }
 
+    if (b->intra && !b->intrabc && b->pal_sz &&
+        BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+    {
+        hex_dump(dst, f->cur.p.stride[0], tw, th, "y-pal-pred");
+    }
+
     if (eob != -1) {
         const int mask_idx = bx4 >> 4;
         const int mask = ((1 << t_dim->w) - 1) << (bx4 & 0xf);
@@ -3536,7 +3542,7 @@ int bytefn(dav2d_recon_b)(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         }
         f->dsp->ipred.pal_pred(dst, f->cur.p.stride[0], pal,
                                pal_idx, bw4 * 4, bh4 * 4);
-        if (BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
+        if (0 && BLOCK_TO_DEBUG && DEBUG_B_PIXELS)
             hex_dump(dst, f->cur.p.stride[0], imin(f->bw - t->bx, bw4) * 4,
                      imin(f->bh - t->by, bh4) * 4, "y-pal-pred");
     }
