@@ -1244,19 +1244,18 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     vpbroadcastq            m7, [srclq+ss3q ]
     lea                  srclq, [srclq+ssq*4]
     vpblendd               xm0, xm2, 0xc
-    vpblendd              xm11, xm1, 0xc
     vpblendd               xm1, xm3, 0xc
     vpblendd                m4, m6, 0xc0
-    vpblendd                m3, m5, 0xc0
     vpblendd                m5, m7, 0xc0
-    vpblendd                m0, m4, 0xf0
-    vpblendd               m11, m3, 0xf0
-    vpblendd                m1, m5, 0xf0
+    vpblendd                m0, m4, 0xf0        ; c: 0 2 4 6
+    vpblendd                m1, m5, 0xf0        ; b: 1 3 5 7
+    vpermq                  m3, m1, q2103       ;    7 1 3 5
+    vpblendd               m11, m3, m11, 0x03   ; t: T 1 3 5
     pshufb                  m2, m0, m8
     psrlq                   m0, xm9
     pmaddwd                 m0, m14
-    REPX         {pand x, m13}, m11, m1, m2
-    paddd                   m1, m11
+    paddw                   m1, m11
+    pand                    m1, m13
     paddd                   m0, m2
     paddd                   m0, m1
     vextracti128           xm1, m0, 1
@@ -1264,7 +1263,7 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     psrlw                  xm0, 3
     pshufb                 xm0, xm10
     movu               [dstlq], xm0
-    mova                  xm11, xm7
+    mova                   m11, m3
     lea                  dstlq, [dstlq+nleftq*2]
     sub           needed_leftd, 4
     jg .left.loop
@@ -1304,7 +1303,8 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
 .blk.w4:
     por                   xm15, [base+Llshuf]
     vinserti128            m15, xm15, 1
-    movu                   xm8, [topq]
+    vbroadcasti128          m8, [topq]
+    pand                    m8, m13
 .blk.w4.loop:
     movu                   xm0, [srcq+ssq*0]
     movu                   xm2, [srcq+ssq*2]
@@ -1326,10 +1326,10 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     vpblendd                m6, m12, 0xf0
     REPX      {pmaddwd x, m14}, m0, m2
     REPX       {pshufb x, m15}, m4, m6
-    vpblendd                m8, m3, 0xf0            ; t0 t2
     vpblendd                m1, m5, 0xf0            ; b0/t1 b2/t3
     vpblendd                m3, m7, 0xf0            ; b1/t2 b3/t4
-    REPX         {pand x, m13}, m8, m1, m3
+    REPX         {pand x, m13}, m1, m3
+    vperm2i128              m8, m8, m3, 0x21        ; t0 t2
     paddd                   m0, m4
     paddd                   m2, m6
     paddd                   m0, m8
@@ -1339,7 +1339,7 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     packusdw                m0, m2
     psrlw                   m0, 3
     mova                [dstq], m0
-    mova                   xm8, xm7
+    mova                    m8, m3
     add                   dstq, 32
     sub                     hd, 4
     jg .blk.w4.loop
@@ -1349,20 +1349,19 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     por                    m15, m8
     pand                   m12, m13, [topq]
 .blk.w8.loop:
-    movu                    m0, [srcq+ssq*0]
-    movu                    m1, [srcq+ssq*2]
+    pmaddwd                 m0, m14, [srcq+ssq*0]
+    pmaddwd                 m1, m14, [srcq+ssq*2]
     pand                    m2, m13, [srcq+ssq*1]
     pand                    m3, m13, [srcq+ss3q ]
     movu                    m8, [srcq+ssq*0+-2]
     movu                    m9, [srcq+ssq*2+-2]
     lea                   srcq, [srcq+ssq*4]
-    movu                    m4, [srcq+ssq*0]
-    movu                    m5, [srcq+ssq*2]
+    pmaddwd                 m4, m14, [srcq+ssq*0]
+    pmaddwd                 m5, m14, [srcq+ssq*2]
     pand                    m6, m13, [srcq+ssq*1]
     pand                    m7, m13, [srcq+ss3q ]
     movu                   m10, [srcq+ssq*0+-2]
     movu                   m11, [srcq+ssq*2+-2]
-    REPX      {pmaddwd x, m14}, m0, m1, m4, m5
     REPX       {pshufb x, m15}, m8, m9, m10, m11
     paddd                   m0, m12
     paddd                   m1, m2
@@ -1394,10 +1393,10 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pand                    m2, m13, [topq+ 0]
     pand                    m3, m13, [topq+32]
 .blk.w16.loop:
-    movu                    m0, [srcq+ssq*0+ 0]
-    movu                    m1, [srcq+ssq*0+32]
-    movu                    m4, [srcq+ssq*2+ 0]
-    movu                    m5, [srcq+ssq*2+32]
+    pmaddwd                 m0, m14, [srcq+ssq*0+ 0]
+    pmaddwd                 m1, m14, [srcq+ssq*0+32]
+    pmaddwd                 m4, m14, [srcq+ssq*2+ 0]
+    pmaddwd                 m5, m14, [srcq+ssq*2+32]
     movu                    m8,      [srcq+ssq*0+-2]
     pand                    m9, m13, [srcq+ssq*0+30]
     movu                   m10,      [srcq+ssq*2+-2]
@@ -1405,7 +1404,6 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pand                    m6, m13, [srcq+ssq*1+ 0]
     pand                    m7, m13, [srcq+ssq*1+32]
     pand                   m12, m13, [srcq+ss3q + 0]
-    REPX      {pmaddwd x, m14}, m0, m1, m4, m5
     REPX       {pshufb x, m15}, m8, m10
     paddd                   m0, m2
     paddd                   m1, m3
@@ -1440,16 +1438,15 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pand                    m7, m13, [topq+96]
     por                    m15, m8
 .blk.w32.loop:
-    movu                    m0, [srcq+ssq*0+ 0]
-    movu                    m1, [srcq+ssq*0+32]
-    movu                    m2, [srcq+ssq*0+64]
-    movu                    m3, [srcq+ssq*0+96]
+    pmaddwd                 m0, m14, [srcq+ssq*0+ 0]
+    pmaddwd                 m1, m14, [srcq+ssq*0+32]
+    pmaddwd                 m2, m14, [srcq+ssq*0+64]
+    pmaddwd                 m3, m14, [srcq+ssq*0+96]
     movu                    m8,      [srcq+ssq*0- 2]
     pand                    m9, m13, [srcq+ssq*0+30]
     pand                   m10, m13, [srcq+ssq*0+62]
     pand                   m11, m13, [srcq+ssq*0+94]
     pand                   m12, m13, [srcq+ssq*1+ 0]
-    REPX      {pmaddwd x, m14}, m0, m1, m2, m3
     pshufb                  m8, m15
     paddd                   m0, m4
     paddd                   m1, m5
