@@ -145,7 +145,8 @@ if (get_option('enable_tools') and get_option('enable_seek_stress'))
         seek_stress_sources, rev_target,
         objects: [
             dav2d.extract_objects('dav2d_cli_parse.c'),
-            dav2d_input_objs.extract_objects('input/input.c', 'input/ivf.c'),
+            dav2d_input_objs.extract_objects('input/input.c', 'input/ivf.c',
+                                              'input/section5.c'),
         ],
         include_directories: [dav2d_inc_dirs, include_directories('../tools')],
         link_with: libdav2d,

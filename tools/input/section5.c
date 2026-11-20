@@ -96,6 +96,8 @@ static int section5_probe(const uint8_t *data, int size) {
 
 typedef struct DemuxerPriv {
     FILE *f;
+    off_t *tu_off;
+    unsigned num_tu, cur_tu;
 } Section5InputContext;
 
 static int section5_open(Section5InputContext *const c, const char *const file,
@@ -112,9 +114,11 @@ static int section5_open(Section5InputContext *const c, const char *const file,
     timebase[0] = 25;
     timebase[1] = 1;
     *num_frames = 0;
+    unsigned alloc_tu = 0;
     for (;;) {
         uint8_t byte[2];
 
+        const off_t off = ftello(c->f);
         size_t len;
         const int res = leb128(c->f, &len);
         if (res < 0)
@@ -124,7 +128,14 @@ static int section5_open(Section5InputContext *const c, const char *const file,
         const enum Dav2dObuType obu_type = (byte[0] >> 2) & 0x1f;
         switch (obu_type) {
         case DAV2D_OBU_TD:
-            (*num_frames)++;
+            if (*num_frames == alloc_tu) {
+                alloc_tu = alloc_tu ? alloc_tu * 2 : 64;
+                off_t *const tu_off =
+                    realloc(c->tu_off, alloc_tu * sizeof(*tu_off));
+                if (!tu_off) goto error;
+                c->tu_off = tu_off;
+            }
+            c->tu_off[(*num_frames)++] = off;
             break;
         default: break;
         }
@@ -137,10 +148,12 @@ static int section5_open(Section5InputContext *const c, const char *const file,
         fseeko(c->f, len, SEEK_CUR); // skip packet
     }
     fseeko(c->f, 0, SEEK_SET);
+    c->num_tu = *num_frames;
 
     return 0;
 
 error:
+    free(c->tu_off);
     fclose(c->f);
     return -1;
 }
@@ -188,11 +201,21 @@ static int section5_read(Section5InputContext *const c, Dav2dData *const data) {
         dav2d_data_unref(data);
         return -1;
     }
+    data->m.timestamp = c->cur_tu++;
 
     return 0;
 }
 
+static int section5_seek(Section5InputContext *const c, const uint64_t pts) {
+    const uint64_t tu = (pts * 25 + 500000000) / 1000000000;
+    if (tu >= c->num_tu || fseeko(c->f, c->tu_off[tu], SEEK_SET))
+        return -1;
+    c->cur_tu = (unsigned) tu;
+    return 0;
+}
+
 static void section5_close(Section5InputContext *const c) {
+    free(c->tu_off);
     fclose(c->f);
 }
 
@@ -203,6 +226,6 @@ const Demuxer section5_demuxer = {
     .probe_sz = PROBE_SIZE,
     .open = section5_open,
     .read = section5_read,
-    .seek = NULL,
+    .seek = section5_seek,
     .close = section5_close,
 };

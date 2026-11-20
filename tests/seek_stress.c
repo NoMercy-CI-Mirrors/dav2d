@@ -43,9 +43,6 @@
 #define NUM_REL_SEEK  4
 #define NUM_END_SEEK  2
 
-const Demuxer annexb_demuxer = { .name = "" };
-const Demuxer section5_demuxer = { .name = "" };
-
 #ifdef _WIN32
 #include <windows.h>
 static unsigned get_seed(void) {
@@ -176,7 +173,7 @@ int main(const int argc, char *const *const argv) {
     xor128_srand(get_seed());
     parse(argc, argv, &cli_settings, &lib_settings);
 
-    if (input_open(&in, "ivf", cli_settings.inputfile,
+    if (input_open(&in, NULL, cli_settings.inputfile,
                    i_fps, &total, i_timebase) < 0)
     {
         return EXIT_SUCCESS;
