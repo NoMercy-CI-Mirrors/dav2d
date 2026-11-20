@@ -101,11 +101,7 @@ pd_511:          dd 511
 JMP_TABLE cfl_implicit_420_8bpc_avx2, \
     top.f0.w4,      top.f0.w8,      top.f0.w16,      top.f0.w32,       top.f0.w64,      \
     top.f1.w4,      top.f1.w8,      top.f1.w16,      top.f1.w32,       top.f1.w64,      \
-    top.f2.w4,      top.f2.w8,      top.f2.w16,      top.f2.w32,       top.f2.w64,      \
-    blk.f0.w4,      blk.f0.w8,      blk.f0.w16,      blk.f0.w32.prep,  blk.f0.w32.prep, \
-    blk.f1.w4.prep, blk.f1.w8.prep, blk.f1.w16,      blk.f1.w32.prep0, blk.f1.w32.prep0,\
-    blk.f2.w4.prep, blk.f2.w8.prep, blk.f2.w16.prep, blk.f2.w32.prep,  blk.f2.w64.prep, \
-    pred_uv.w4,     pred_uv.w8,     pred_uv.w16,     pred_uv.w32,      pred_uv.w32
+    top.f2.w4,      top.f2.w8,      top.f2.w16,      top.f2.w32,       top.f2.w64
 
 JMP_TABLE cfl_explicit_420_8bpc_avx2, \
     top.f0.w4,      top.f0.w8,      top.f0.w16,      top.f0.w32,       top.f0.w64,      \
@@ -2660,7 +2656,9 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %else
     vpbroadcastw           m12, xm12
     vpbroadcastw           m13, xm13
-    jmp .pred_uv
+    lea                   tblq, [base+cfl_explicit_420_8bpc_avx2_table]
+    lea                   fltq, [fltq+cfl_explicit_420_8bpc_avx2_table-cfl_implicit_420_8bpc_avx2_table]
+    jmp mangle(dav2d_cfl_explicit_420_8bpc_avx2).pred_uv
 %endif
  INIT_XMM avx2
 .no_top:
@@ -2859,7 +2857,13 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
  INIT_YMM avx2
     vpbroadcastw           m12, xm12
     vpbroadcastw           m13, xm13
+%ifidn %1, implicit
+    lea                   tblq, [base+cfl_explicit_420_8bpc_avx2_table]
+    lea                   fltq, [fltq+cfl_explicit_420_8bpc_avx2_table-cfl_implicit_420_8bpc_avx2_table]
+    jmp mangle(dav2d_cfl_explicit_420_8bpc_avx2).pred_uv
+%endif
 
+%ifidn %1, explicit
 .pred_uv:
  DEFINE_ARGS ystride3, ystride, wpad, hpad, w, h, cstride3, tbl, flt, cstride, \
              ysrc, udst, vdst, _, _
@@ -3383,6 +3387,7 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     paddw                   m3, m10
     packuswb                m2, m3
     ret
+%endif
 %endmacro
 
 CFL_420 explicit
