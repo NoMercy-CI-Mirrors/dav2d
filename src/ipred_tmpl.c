@@ -897,7 +897,7 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
                 edge[2][i] = vleft[0];
                 i++;
             }
-            yleft += ystride * (1 << ss_ver);
+            yleft += ystride * ((ptrdiff_t) 1 << ss_ver);
             uleft += cstride;
             vleft += cstride;
         }
@@ -1062,7 +1062,7 @@ cfl_pred(pixel *const ptrs[6], const ptrdiff_t *stride,
                     dst[pl][xpad] = dst[pl][x - 1];
                 dst[pl] += cstride;
             }
-        ypx += ystride * (1 << ss_ver);
+        ypx += ystride * ((ptrdiff_t) 1 << ss_ver);
     }
     for (int pl = 0; pl < 2; pl++)
         if (alpha[pl])
