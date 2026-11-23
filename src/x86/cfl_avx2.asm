@@ -37,7 +37,6 @@ t64f0smplCshuf:db  0, -1,  1, -1,  4, -1,  5, -1,  8, -1,  9, -1, 12, -1, 13, -1
 t64f1smplCshuf:db  0, -1,  8, -1,  4, -1, 12, -1,  1, -1,  9, -1,  5, -1, 13, -1
 dcCshuf: times 4 db 0, -1
          times 4 db 8, -1
-l_smpl_msk0: times 4 dd 0
 l_smpl_msk1:   dd -1, -1, -1, -1
 l_smpl_msk2:   dd  0, -1,  0, -1
 l_smpl_msk4:   dd  0,  0, -1,  0
@@ -2879,10 +2878,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     add                     t2, tblq
     add                     t3, tblq
     SWAP                   m11, m8
-    pcmpgtw                 m8, m15, m12
-    pcmpgtw                 m9, m15, m13
-    pabsw                  m12, m12
-    pabsw                  m13, m13
+    pabsw                   m8, m12
+    pabsw                   m9, m13
     vpermq                 m10, m1, q1111
     vpermq                  m1, m1, q0000
     jmp                     t2
@@ -3008,8 +3005,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     cmp                  wpadd, 15
     jb .pred_uv.w32.next_row
     psrldq                  m2, 15
-    pxor                    m7, m7
-    pshufb                  m2, m7
+    pxor                    m3, m3
+    pshufb                  m2, m3
     movu            [udstq+t0], xm2
     vextracti128    [vdstq+t0], m2, 1
     jmp .pred_uv.w32.next_row
@@ -3186,6 +3183,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 
 .blk.f2.w4.prep:
     vbroadcasti128         m11, [base+w4Llshuf]
+    pcmpeqw                 m7, m7
+    psrlw                   m7, 8
     lea                     t3, [.blk.f2.w4.start]
     xor                    t4d, t4d
 .blk.f2.w4.h32:
@@ -3206,8 +3205,6 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     mov                  ysrcq, t2
     vpblendd                m6, m15, 0x3      ;-1 3 3 3
     vpbroadcastq           m15, [t2   +ystride3q ]
-    pcmpeqw                 m7, m7
-    psrlw                   m7, 8
     vpblendd                m4, m2, m6, 0xc   ; 1 3 5 5
     punpcklqdq              m6, m2            ;-1 1 3 5 ; t
     vpblendd                m3, m5, 0xc0                ; c/r
@@ -3216,6 +3213,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 .blk.f2.w8.prep:
     jnz .blk.f2.w8_pad.prep
     vbroadcasti128         m11, [base+w8Llshuf]
+    pcmpeqw                 m7, m7
+    psrlw                   m7, 8
     lea                     t3, [.blk.f2.w8.start]
     xor                    t4d, t4d
 .blk.f2.w8.h32:
@@ -3230,14 +3229,14 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     vbroadcasti128          m4, [ysrcq+ystrideq*1]
     vbroadcasti128         m15, [ysrcq+ystride3q ]
     vinserti128             m3, [ysrcq+ystrideq*2], 1
-    pcmpeqw                 m7, m7
-    psrlw                   m7, 8
     vpblendd                m6, m4, 0xf0    ; t
     vpblendd                m4, m15, 0xf0   ; b
     F2
 .blk.f2.w8_pad.prep:
  DECLARE_REG_TMP 0, 14, 13, 8, 2
     movu               [rsp+8], m11
+    pcmpeqw                 m7, m7
+    psrlw                   m7, 8
     lea                     t3, [.blk.f2.w8_pad.start]
     xor                    t4d, t4d
 .blk.f2.w8_pad.h32:
@@ -3253,8 +3252,6 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     vbroadcasti128         m15, [ysrcq+ystride3q ]
     vinserti128             m3, [ysrcq+ystrideq*2], 1
     vbroadcasti128         m11, [base+w8Llshuf]
-    pcmpeqw                 m7, m7
-    psrlw                   m7, 8
     vpblendd                m6, m4, 0xf0    ; t
     vpblendd                m4, m15, 0xf0   ; b
     F2 1
@@ -3262,11 +3259,10 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 .blk.f2.w16.prep:
     lea                     t3, [.blk.f2.w16.start]
     xor                    t4d, t4d
-.blk.f2.w16.h32:
-    movu                   m15, [ysrcq+ystrideq*0]
     pcmpeqw                 m7, m7
     psrlw                   m7, 8
-    pand                   m15, m7
+.blk.f2.w16.h32:
+    pand                   m15, m7, [ysrcq+ystrideq*0]
     jmp .blk.f2.w16
 .blk.f2.w16.start:
     add                    t4d, 0x08000000
@@ -3281,8 +3277,6 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     vpblendd                m3, m2, 0xf0                ; c/r
     vpblendd                m5, m4, 0xf0                ; l
     pmaddubsw               m3, m14
-    pcmpeqw                 m7, m7
-    psrlw                   m7, 8
     REPX          {pand x, m7}, m6, m5
     paddw                  m15, m6
     paddw                   m5, m15
@@ -3305,6 +3299,8 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
 %endif
     movd                  xm15, [ysrcq+ystrideq*0]
     pslldq                xm15, 15
+    pcmpeqw                 m7, m7
+    psrlw                   m7, 8
     xor                    t2d, t2d
     jmp .blk.f2.w32
 .blk.f2.w32.left:
@@ -3358,34 +3354,24 @@ cglobal cfl_%1_420_8bpc, 4, 15, 16, ptrs, strides, wpad, hpad, w, h, flags, \
     vpblendd                m5, m4, 0xf0                ; l
     movu                    m2, [ysrcq+t2]              ; t
     pmaddubsw               m3, m14
-    pcmpeqw                 m7, m7
-    psrlw                   m7, 8
     REPX          {pand x, m7}, m6, m5, m2
     paddw                   m6, m5
     paddw                   m6, m2
     paddw                   m3, m6
 
 .pred:
-    pxor                    m7, m7
     psubw                   m3, m0
-    pcmpgtw                 m5, m7, m3
-    pabsw                   m3, m3
-    psllw                   m3, 4
-    pmulhrsw                m2, m3, m12
-    pmulhrsw                m3, m13
-    pxor                    m4, m5, m8
-    pxor                    m5, m9
-    psubw                   m6, m7, m2
-    psubw                   m7, m3
-    pand                    m6, m4
-    pand                    m7, m5
-    pandn                   m2, m4, m2
-    pandn                   m3, m5, m3
-    por                     m2, m6
-    por                     m3, m7
+    pabsw                   m4, m3
+    psignw                  m5, m3, m12
+    psignw                  m3, m13
+    psllw                   m4, 4
+    pmulhrsw                m2, m4, m8
+    pmulhrsw                m4, m9
+    psignw                  m2, m5
+    psignw                  m4, m3
     paddw                   m2, m1
-    paddw                   m3, m10
-    packuswb                m2, m3
+    paddw                   m4, m10
+    packuswb                m2, m4
     ret
 %endif
 %endmacro
