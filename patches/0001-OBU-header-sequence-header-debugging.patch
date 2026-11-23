@@ -1,4 +1,4 @@
-From 0fbef058e6c740a4b8ddb7da1488f8ba483be743 Mon Sep 17 00:00:00 2001
+From f002941b3cb8e2c7a33b65afb2cb4c1c353c7517 Mon Sep 17 00:00:00 2001
 From: "Ronald S. Bultje" <rsbultje@gmail.com>
 Date: Fri, 23 Jan 2026 07:46:22 -0500
 Subject: [PATCH 1/5] OBU header & sequence header debugging.
@@ -6,13 +6,13 @@ Subject: [PATCH 1/5] OBU header & sequence header debugging.
 ---
  av2/decoder/decodeframe.c | 172 ++++++++++++++++++++++++++++++++++++++
  av2/decoder/decoder.h     |   2 +
- av2/decoder/obu.c         |  48 ++++++++++-
+ av2/decoder/obu.c         |  52 +++++++++++-
  avm/debug.h               |  34 ++++++++
- 4 files changed, 255 insertions(+), 1 deletion(-)
+ 4 files changed, 259 insertions(+), 1 deletion(-)
  create mode 100644 avm/debug.h
 
 diff --git a/av2/decoder/decodeframe.c b/av2/decoder/decodeframe.c
-index 404d59fb6e..559a95dc74 100644
+index 4aa97028f..50ed4cd08 100644
 --- a/av2/decoder/decodeframe.c
 +++ b/av2/decoder/decodeframe.c
 @@ -5801,6 +5801,10 @@ static AVM_INLINE void read_bitdepth(
@@ -314,7 +314,7 @@ index 404d59fb6e..559a95dc74 100644
  
  static AVM_INLINE void read_multi_frame_header_seg_info(
 diff --git a/av2/decoder/decoder.h b/av2/decoder/decoder.h
-index 5303a2bbf2..278ecf797e 100644
+index 5672354c1..fe7874e97 100644
 --- a/av2/decoder/decoder.h
 +++ b/av2/decoder/decoder.h
 @@ -33,6 +33,8 @@
@@ -327,10 +327,10 @@ index 5303a2bbf2..278ecf797e 100644
  extern "C" {
  #endif
 diff --git a/av2/decoder/obu.c b/av2/decoder/obu.c
-index 97d67401dc..195dd3f671 100644
+index 66ed285e9..09ecbf94c 100644
 --- a/av2/decoder/obu.c
 +++ b/av2/decoder/obu.c
-@@ -561,6 +561,12 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
+@@ -565,6 +565,12 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
      seq_params->seq_tier = avm_rb_read_bit(rb);
    else
      seq_params->seq_tier = 0;
@@ -343,7 +343,7 @@ index 97d67401dc..195dd3f671 100644
    av2_read_chroma_format_bitdepth(rb, seq_params, &cm->error);
    if (seq_params->single_picture_header_flag) {
      seq_params->seq_lcr_id = LCR_ID_UNSPECIFIED;
-@@ -594,12 +600,26 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
+@@ -598,12 +604,26 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
      }
      seq_params->monotonic_output_order_flag = avm_rb_read_bit(rb);
    }
@@ -370,7 +370,7 @@ index 97d67401dc..195dd3f671 100644
    seq_params->num_bits_width = num_bits_width;
    seq_params->num_bits_height = num_bits_height;
    seq_params->max_frame_width = max_frame_width;
-@@ -638,6 +658,12 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
+@@ -642,6 +662,12 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
        seq_params->seq_max_encoder_buffer_delay = 20000;
        seq_params->seq_max_low_delay_mode_flag = 0;
      }
@@ -383,7 +383,7 @@ index 97d67401dc..195dd3f671 100644
      // Configurable profile does not define bitrate and buffer size constraints
      if (seq_params->seq_profile_idc != CONFIGURABLE) {
        int64_t seq_bitrate = av2_max_level_bitrate(
-@@ -670,6 +696,11 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
+@@ -674,6 +700,11 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
        av2_read_mlayer_dependency_info(seq_params, rb);
      }
    }
@@ -395,7 +395,7 @@ index 97d67401dc..195dd3f671 100644
  
    // tlayer dependency description
    seq_params->tlayer_dependency_present_flag = 0;
-@@ -694,13 +725,19 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
+@@ -698,13 +729,19 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
    av2_read_sequence_header(rb, seq_params);
  
    seq_params->film_grain_params_present = avm_rb_read_bit(rb);
@@ -416,7 +416,7 @@ index 97d67401dc..195dd3f671 100644
          rb->bit_buffer, rb->bit_buffer_end - rb->bit_buffer, bits_before_ext,
          &cm->error);
      if (extension_bits > 0) {
-@@ -710,6 +747,11 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
+@@ -714,6 +751,11 @@ static uint32_t read_sequence_header_obu(AV2Decoder *pbi, int xlayer_id,
        // No extension data is present
      }
    }
@@ -428,7 +428,7 @@ index 97d67401dc..195dd3f671 100644
  
    if (av2_check_trailing_bits(pbi, rb) != 0) {
      // cm->error.error_code is already set.
-@@ -2639,6 +2681,10 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
+@@ -2643,6 +2685,10 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
      } else {
        cm->bridge_frame_info.is_bridge_frame = 0;
      }
@@ -439,9 +439,20 @@ index 97d67401dc..195dd3f671 100644
  
      if (is_single_tile_vcl_obu(obu_header.type) ||
          is_multi_tile_vcl_obu(obu_header.type)) {
+@@ -3105,6 +3151,10 @@ int avm_decode_frame_from_obus(struct AV2Decoder *pbi, const uint8_t *data,
+       return -1;
+     }
+ 
++#if DEBUG_OBU_HDR
++    printf("OBU type=%d size=%ld\n", obu_header.type, payload_size);
++#endif
++
+     if (obu_header.type == OBU_PADDING) {
+       decoded_payload_size = read_padding(cm, data, payload_size);
+       obu_info *const curr_obu_info = &obu_list[count_obus_with_frame_unit];
 diff --git a/avm/debug.h b/avm/debug.h
 new file mode 100644
-index 0000000000..36030e147d
+index 000000000..36030e147
 --- /dev/null
 +++ b/avm/debug.h
 @@ -0,0 +1,34 @@
