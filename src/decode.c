@@ -4169,8 +4169,10 @@ static int decode_sb(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                                depth, "", ctx, !t->intra_region, ts->msac.rng);
             if (t->intra_region) cbs = BS_INVALID;
         }
-        if (f->c->task_thread.n_passes > 1)
+        if (f->c->task_thread.n_passes > 1 && bs != BS_4x4)
             *ts->frame_thread[0].partition[0]++ = bp | (unmix_bit << 7);
+    } else if (bs == BS_4x4) {
+        bp = PARTITION_NONE;
     } else {
         bp = *ts->frame_thread[1].partition[t->task_thread.pass == PASS_MVRES]++;
         if (bp & 0x80) {
