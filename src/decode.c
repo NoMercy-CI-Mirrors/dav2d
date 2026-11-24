@@ -1986,7 +1986,8 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                           5 + (1 << n_bits);
             }
             if (delta_q) {
-                if (dav2d_msac_decode_bool_bypass(&ts->msac)) delta_q = -delta_q;
+                const int sign = dav2d_msac_decode_bool_bypass(&ts->msac);
+                delta_q = apply_sign_bool(delta_q, sign);
                 delta_q *= 1 << f->frame_hdr->delta.q.res_log2;
             }
 
@@ -2286,15 +2287,15 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                             assert(sign_u == sign / 3);
                             if (sign_u) {
                                 const int ctx = (sign_u == 2) * 3 + sign_v;
-                                b->cfl_alpha[0] = dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                        ts->cdf.m.cfl_alpha[ctx], 7) + 1;
-                                if (sign_u == 1) b->cfl_alpha[0] = -b->cfl_alpha[0];
+                                const int alpha = dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                                                      ts->cdf.m.cfl_alpha[ctx], 7) + 1;
+                                b->cfl_alpha[0] = apply_sign_bool(alpha, sign_u & 1);
                             }
                             if (sign_v) {
                                 const int ctx = (sign_v == 2) * 3 + sign_u;
-                                b->cfl_alpha[1] = dav2d_msac_decode_symbol_adapt8(&ts->msac,
-                                        ts->cdf.m.cfl_alpha[ctx], 7) + 1;
-                                if (sign_v == 1) b->cfl_alpha[1] = -b->cfl_alpha[1];
+                                const int alpha = dav2d_msac_decode_symbol_adapt8(&ts->msac,
+                                                      ts->cdf.m.cfl_alpha[ctx], 7) + 1;
+                                b->cfl_alpha[1] = apply_sign_bool(alpha, sign_v & 1);
                             }
                         }
                     }
@@ -2432,11 +2433,11 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
             read_mv_residual(ts, &ts->cdf.dmv, &b->mv[0], 3 + 2 * b->is_qpel);
             if (b->mv[0].y) {
                 const int s = dav2d_msac_decode_bool_bypass(&ts->msac);
-                if (s) b->mv[0].y = -b->mv[0].y;
+                b->mv[0].y = apply_sign_bool(b->mv[0].y, s);
             }
             if (b->mv[0].x) {
                 const int s = dav2d_msac_decode_bool_bypass(&ts->msac);
-                if (s) b->mv[0].x = -b->mv[0].x;
+                b->mv[0].x = apply_sign_bool(b->mv[0].x, s);
             }
             DEBUG_BLOCK_printf("%*sPost-mvdiff[y:%d,x:%d]: r=%d\n",
                                depth, "", b->mv[0].y, b->mv[0].x, ts->msac.rng);
@@ -2810,8 +2811,9 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     refdist[0] = f->absrefdist[b->ref.ref[0]];
                     refdist[1] = f->absrefdist[b->ref.ref[1]];
                     start = refdist[0] < refdist[1];
-                    if (f->refdir[b->ref.ref[0]] ^ f->refdir[b->ref.ref[1]])
-                        refdist[!start] = -refdist[!start];
+                    refdist[!start] = apply_sign_bool(refdist[!start],
+                                                      f->refdir[b->ref.ref[0]] ^
+                                                      f->refdir[b->ref.ref[1]]);
                     end = start + 1;
                 }
                 enum InterPredMode m[2];
@@ -2858,12 +2860,12 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                         if (b->mv[n].y) {
                             const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
                                           dav2d_msac_decode_bool_bypass(&ts->msac);
-                            if (s) b->mv[n].y = -b->mv[n].y;
+                            b->mv[n].y = apply_sign_bool(b->mv[n].y, s);
                         }
                         if (b->mv[n].x) {
                             const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
                                           dav2d_msac_decode_bool_bypass(&ts->msac);
-                            if (s) b->mv[n].x = -b->mv[n].x;
+                            b->mv[n].x = apply_sign_bool(b->mv[n].x, s);
                         }
                         DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
                                            depth, "", n, b->mv[n].y, b->mv[n].x,
@@ -3294,12 +3296,12 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 if (b->mv[0].y) {
                     const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
                                   dav2d_msac_decode_bool_bypass(&ts->msac);
-                    if (s) b->mv[0].y = -b->mv[0].y;
+                    b->mv[0].y = apply_sign_bool(b->mv[0].y, s);
                 }
                 if (b->mv[0].x) {
                     const int s = ++nnzc2 == nnzc ? sum_mvd & 1 :
                                   dav2d_msac_decode_bool_bypass(&ts->msac);
-                    if (s) b->mv[0].x = -b->mv[0].x;
+                    b->mv[0].x = apply_sign_bool(b->mv[0].x, s);
                 }
                 DEBUG_BLOCK_printf("%*sPost-mvdiff[%d,y:%d,x:%d]: r=%d\n",
                                    depth, "", 0, b->mv[0].y, b->mv[0].x,
@@ -3329,8 +3331,7 @@ static int decode_b(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                     if (b->matrix[n]) {
                         const int sign = dav2d_msac_decode_bool_adapt(&ts->msac,
                                               ts->cdf.m.warp_delta_sign);
-                        if (sign) b->matrix[n] = -b->matrix[n];
-                        b->matrix[n] *= step;
+                        b->matrix[n] = apply_sign_bool(b->matrix[n], sign) * step;
                     }
                 }
                 if (np == 2) b->matrix[2] = -0x80; // "invalid"

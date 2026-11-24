@@ -854,7 +854,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 val = (tok * dq + 4) >> dq_shift;
             }
             cul_level += tok;
-            cf[rc] = sign ? -val : val;
+            cf[rc] = apply_sign_bool(val, sign);
         }
 
         goto end;
@@ -1044,7 +1044,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
                 ac_val = (ac_val * ac_dq + 4) >> dq_shift; \
             } \
             cul_level += tok; \
-            cf[rc] = sign ? -ac_val : ac_val; \
+            cf[rc] = apply_sign_bool(ac_val, sign); \
         } \
         break
 
@@ -1145,7 +1145,7 @@ static int decode_coefs(Dav2dTaskContext *const t, DB_ONLY(const int depth)
         dc_val = (dc_val * dc_dq + 4) >> dq_shift;
     }
     cul_level += dc_tok;
-    cf[0] = dc_sign ? -dc_val : dc_val;
+    cf[0] = apply_sign_bool(dc_val, dc_sign);
 
 end:
     *txtp_stx_cctx = txtp | (stx_cctx << 8);

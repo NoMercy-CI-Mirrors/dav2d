@@ -68,6 +68,10 @@ static inline int apply_sign64(const int64_t v, const int64_t s) {
     return s < 0 ? -(int)v : (int)v;
 }
 
+static inline int apply_sign_bool(const int v, const int s) {
+    return (v - s) ^ -s;
+}
+
 static inline int ulog2(const unsigned v) {
     return 31 ^ clz(v);
 }
