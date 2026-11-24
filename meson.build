@@ -111,12 +111,18 @@ if host_machine.system() == 'windows'
     cdata.set('UNICODE',                1) # Define to 1 for Unicode (Wide Chars) APIs
     cdata.set('_UNICODE',               1) # Define to 1 for Unicode (Wide Chars) APIs
     cdata.set('__USE_MINGW_ANSI_STDIO', 1) # Define to force use of MinGW printf
-    cdata.set('_CRT_DECLARE_NONSTDC_NAMES', 1) # Define to get off_t from sys/types.h on MSVC
     if cc.has_function('fseeko', prefix : '#include <stdio.h>', args : test_args)
         cdata.set('_FILE_OFFSET_BITS', 64) # Not set by default by Meson on Windows
     else
         cdata.set('fseeko', '_fseeki64')
         cdata.set('ftello', '_ftelli64')
+        # Prevent system headers from defining off_t - it is "long" (which is
+        # 32 bit on Windows) by default, but we want to use int64_t instead.
+        cdata.set('_OFF_T_DEFINED', 1)
+        cdata.set('off_t', 'int64_t')
+        # Keeping this type as it normally is defined; this type is used in
+        # some C runtime structs.
+        cdata.set('_off_t', 'long')
     endif
 
     if host_machine.cpu_family() == 'x86_64'
