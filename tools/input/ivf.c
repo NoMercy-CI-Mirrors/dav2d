@@ -140,10 +140,10 @@ static int ivf_open(IvfInputContext *const c, const char *const file,
 }
 
 static inline int ivf_read_header(IvfInputContext *const c, ptrdiff_t *const sz,
-                                  int64_t *const off_, uint64_t *const ts)
+                                  off_t *const off_, uint64_t *const ts)
 {
     uint8_t data[8];
-    int64_t const off = ftello(c->f);
+    const off_t off = ftello(c->f);
     if (off_) *off_ = off;
     if (fread(data, 4, 1, c->f) != 1) return -1; // EOF
     *sz = rl32(data);
@@ -160,7 +160,7 @@ static inline int ivf_read_header(IvfInputContext *const c, ptrdiff_t *const sz,
 static int ivf_read(IvfInputContext *const c, Dav2dData *const buf) {
     uint8_t *ptr;
     ptrdiff_t sz;
-    int64_t off;
+    off_t off;
     uint64_t ts;
     if (ivf_read_header(c, &sz, &off, &ts)) return -1;
     if (!(ptr = dav2d_data_create(buf, sz))) return -1;
