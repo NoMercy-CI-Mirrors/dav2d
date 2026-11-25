@@ -124,8 +124,7 @@ static void check_mct(Dav2dMCDSPContext *const c) {
             for (int mxy = 0; mxy < 4; mxy++)
                 if (check_func(c->mct[filter], "mct_%s_w%d_%s_%dbpc",
                     filter_names[filter], w, mxy_names[mxy], BITDEPTH))
-                    for (int h = 4; h <= 64; h <<= 1)
-                    {
+                    for (int h = 4; h <= 64; h <<= 1) {
                         const int mx = (mxy & 1) ? rnd() % 15 + 1 : 0;
                         const int my = (mxy & 2) ? rnd() % 15 + 1 : 0;
 #if BITDEPTH == 16
@@ -133,18 +132,24 @@ static void check_mct(Dav2dMCDSPContext *const c) {
 #else
                         const int bitdepth_max = 0xff;
 #endif
-                        generate_mct_input(src_buf, bitdepth_max);
+                        for (int worstcase = 0; worstcase <= 1; worstcase++) {
+                            if (worstcase)
+                                generate_mct_input(src_buf, bitdepth_max);
+                            else
+                                for (unsigned i = 0; i < ARRAY_SIZE(src_buf); i++)
+                                    src_buf[i] = rnd() & bitdepth_max;
 
-                        CLEAR_BUF_RECT(c_tmp);
-                        CLEAR_BUF_RECT(a_tmp);
+                            CLEAR_BUF_RECT(c_tmp);
+                            CLEAR_BUF_RECT(a_tmp);
 
-                        call_ref(c_tmp, tmp_stride, src, src_stride, w, h,
-                                 mx, my HIGHBD_TAIL_SUFFIX);
-                        call_new(a_tmp, tmp_stride, src, src_stride, w, h,
-                                 mx, my HIGHBD_TAIL_SUFFIX);
-                        checkasm_check_rect_padded(c_tmp, c_tmp_stride,
-                                                   a_tmp, a_tmp_stride,
-                                                   w, h, "tmp");
+                            call_ref(c_tmp, tmp_stride, src, src_stride, w, h,
+                                     mx, my HIGHBD_TAIL_SUFFIX);
+                            call_new(a_tmp, tmp_stride, src, src_stride, w, h,
+                                     mx, my HIGHBD_TAIL_SUFFIX);
+                            checkasm_check_rect_padded(c_tmp, c_tmp_stride,
+                                                       a_tmp, a_tmp_stride,
+                                                       w, h, "tmp");
+                        }
 
                         if (filter == DAV2D_FILTER_8TAP_REGULAR ||
                             filter == DAV2D_FILTER_8TAP_SHARP ||
