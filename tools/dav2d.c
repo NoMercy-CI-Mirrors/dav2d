@@ -415,7 +415,7 @@ nested_break:
             output_close(out);
         }
     } else {
-        fprintf(stderr, "No data decoded\n");
+        if (!res) fprintf(stderr, "No data decoded\n");
         res = 1;
     }
     dav2d_close(&c);
