@@ -4398,7 +4398,6 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     pand                    m5, m13, [srcq+ssq*1+32]
     movu                    m8, [srcq+ssq*0+-1]
     pand                    m9, m13, [srcq+ssq*0+31]
-    cmp            needed_topd, 33
     movd                  xm10, [srcq+ssq*0+63]
     pand                  xm11, xm13, [srcq+ssq*1+64]
     pand                  xm12, xm13, [topq+64]
@@ -4409,8 +4408,6 @@ cglobal cfl_mh_gen_y_420_gauss_8bpc, 4, 15, 16, dst, src, tse, ss, \
     paddw                 xm11, xm12
     paddw                  xm6, xm11
     psrlw                  xm6, 3
-    jne .top.33.skip_last
-.top.33.skip_last:
     REPX    {pmaddubsw x, m14}, m0, m1
     pshufb                  m8, m15
     paddw                   m2, m4
