@@ -367,53 +367,32 @@ static unsigned parse_enum(char *optarg, const EnumParseTable *const tbl,
     return (unsigned) res;
 }
 
-static int parse_enum_mask(const char *const optargs, unsigned const start_mask,
-                           const EnumParseTable *const tbl, const int tbl_sz,
-                           const int option, const char *app)
+static unsigned parse_enum_mask(const char *const optarg, const unsigned start_mask,
+                                const EnumParseTable *const tbl, const int tbl_sz,
+                                const int option, const char *const app)
 {
-    const int start_with_sign = optargs[0] == '+' || optargs[0] == '-';
-    unsigned res = start_with_sign ? start_mask : 0;
-    int sub_instead_of_add = optargs[0] == '-';
-    const char *end = optargs + start_with_sign;
-    for (;;) {
-        const char *start = end;
-        const char *plus = strchr(start, '+');
-        const char *min = strchr(start, '-');
-        if (plus && min) {
-            assert(plus != min);
-            end = plus < min ? plus : min;
-        } else {
-            end = plus ? plus : min;
-        }
-        const ptrdiff_t len = end ? end - start : (ptrdiff_t) strlen(start);
-        int n;
-        for (n = 0; n < tbl_sz; n++)
-            if (!strncmp(tbl[n].str, start, len) && !tbl[n].str[len])
-                break;
+    // a leading sign modifies start_mask instead of replacing it
+    unsigned res = *optarg == '+' || *optarg == '-' ? start_mask : 0;
+    for (const char *p = optarg;;) {
+        const int sub = *p == '-';
+        p += sub || *p == '+';
+        const size_t len = strcspn(p, "+-");
+        int n = 0;
+        while (n < tbl_sz && (strncmp(tbl[n].str, p, len) || tbl[n].str[len]))
+            n++;
         if (n == tbl_sz) break;
-        if (sub_instead_of_add) {
-            res &= ~tbl[n].val;
-        } else {
-            res |= tbl[n].val;
-        }
-        if (end) {
-            sub_instead_of_add = *end == '-';
-            end++;
-        } else {
-            return res;
-        }
+        res = sub ? res & ~tbl[n].val : res | tbl[n].val;
+        p += len;
+        if (!*p) return res;
     }
 
-    char err_msg[1024];
-    size_t len = snprintf(err_msg, sizeof(err_msg), "plus/minus-separated values from ");
-    for (int n = 0; n < tbl_sz; n++) {
-        len += snprintf(err_msg + len, sizeof(err_msg) - len, "%s%s",
-                        n ? n + 1 < tbl_sz ? ", " : ", or " : "",
-                        tbl[n].str);
-    }
-
-    error(app, optarg, option, err_msg);
-    return -1;
+    char str[1024];
+    int len = snprintf(str, sizeof(str), "plus/minus-separated values from ");
+    for (int n = 0; n < tbl_sz && len < (int) sizeof(str); n++)
+        len += snprintf(str + len, sizeof(str) - len, "%s%s",
+                        n ? n < tbl_sz - 1 ? ", " : ", or " : "", tbl[n].str);
+    error(app, optarg, option, str);
+    return res;
 }
 
 void parse(const int argc, char *const *const argv,
