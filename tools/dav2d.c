@@ -269,6 +269,7 @@ int main(const int argc, char *const *const argv) {
         total = cli_settings.limit;
 
     if ((res = dav2d_open(&c, &lib_settings))) {
+        fprintf(stderr, "Failed to open decoder: %s\n", strerror(DAV2D_ERR(res)));
         dav2d_data_unref(&data);
         input_close(in);
         return EXIT_FAILURE;
