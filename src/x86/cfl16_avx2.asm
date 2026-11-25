@@ -283,14 +283,17 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     vpbroadcastq           xm3, [srclq+ss3q ]
     lea                  srclq, [srclq+ssq*4]
     vpbroadcastq            m4, [srclq+ssq*0]
-    vpbroadcastq            m6, [srclq+ssq*2]
     vpbroadcastq            m5, [srclq+ssq*1]
+    sub           needed_leftd, 4
+    jl .left.tail
+    vpbroadcastq            m6, [srclq+ssq*2]
     vpbroadcastq            m7, [srclq+ss3q ]
     lea                  srclq, [srclq+ssq*4]
-    vpblendd               xm0, xm2, 0xc
-    vpblendd               xm1, xm3, 0xc
     vpblendd                m4, m6, 0xc0
     vpblendd                m5, m7, 0xc0
+.left.tail:
+    vpblendd               xm0, xm2, 0xc
+    vpblendd               xm1, xm3, 0xc
     vpblendd                m0, m4, 0xf0
     vpblendd                m1, m5, 0xf0
     paddw                   m0, m1
@@ -301,7 +304,6 @@ cglobal cfl_mh_gen_y_420_uniform_16bpc, 4, 14, 16, dst, src, tse, ss, \
     pshufb                 xm0, xm8
     movu               [dstlq], xm0
     lea                  dstlq, [dstlq+nleftq*2]
-    sub           needed_leftd, 4
     jg .left.loop
     add                   srcq, nleftq
 
@@ -671,14 +673,17 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     vpbroadcastq           xm3, [srclq+ss3q ]
     lea                  srclq, [srclq+ssq*4]
     vpbroadcastq            m4, [srclq+ssq*0]
-    vpbroadcastq            m6, [srclq+ssq*2]
     vpbroadcastq            m5, [srclq+ssq*1]
+    sub           needed_leftd, 4
+    jl .left.tail
+    vpbroadcastq            m6, [srclq+ssq*2]
     vpbroadcastq            m7, [srclq+ss3q ]
     lea                  srclq, [srclq+ssq*4]
-    vpblendd               xm0, xm2, 0xc
-    vpblendd               xm1, xm3, 0xc
     vpblendd                m4, m6, 0xc0
     vpblendd                m5, m7, 0xc0
+.left.tail:
+    vpblendd               xm0, xm2, 0xc
+    vpblendd               xm1, xm3, 0xc
     vpblendd                m0, m4, 0xf0
     vpblendd                m1, m5, 0xf0
     paddw                   m0, m1
@@ -692,7 +697,6 @@ cglobal cfl_mh_gen_y_420_vstrip_16bpc, 4, 15, 16, dst, src, tse, ss, \
     pshufb                 xm0, xm10
     movu               [dstlq], xm0
     lea                  dstlq, [dstlq+nleftq*2]
-    sub           needed_leftd, 4
     jg .left.loop
     add                   srcq, nleftq
 
@@ -1238,15 +1242,18 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     vpbroadcastq            m3, [srclq+ss3q ]
     lea                  srclq, [srclq+ssq*4]
     vpbroadcastq            m4, [t1   +ssq*0]
-    vpbroadcastq            m6, [t1   +ssq*2]
-    lea                     t1, [t1   +ssq*4]
     vpbroadcastq            m5, [srclq+ssq*1]
+    sub           needed_leftd, 4
+    jl .left.tail
+    vpbroadcastq            m6, [t1   +ssq*2]
     vpbroadcastq            m7, [srclq+ss3q ]
+    lea                     t1, [t1   +ssq*4]
     lea                  srclq, [srclq+ssq*4]
-    vpblendd               xm0, xm2, 0xc
-    vpblendd               xm1, xm3, 0xc
     vpblendd                m4, m6, 0xc0
     vpblendd                m5, m7, 0xc0
+.left.tail:
+    vpblendd               xm0, xm2, 0xc
+    vpblendd               xm1, xm3, 0xc
     vpblendd                m0, m4, 0xf0        ; c: 0 2 4 6
     vpblendd                m1, m5, 0xf0        ; b: 1 3 5 7
     vpermq                  m3, m1, q2103       ;    7 1 3 5
@@ -1265,7 +1272,6 @@ cglobal cfl_mh_gen_y_420_gauss_16bpc, 4, 15, 16, dst, src, tse, ss, \
     movu               [dstlq], xm0
     mova                   m11, m3
     lea                  dstlq, [dstlq+nleftq*2]
-    sub           needed_leftd, 4
     jg .left.loop
     sub                   topq, ystartq
     add                   srcq, nleftq
